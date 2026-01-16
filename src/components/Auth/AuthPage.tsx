@@ -1,10 +1,55 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
-import { Input } from '@funnelists/ui'
 import { Mail, Lock, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react'
 
 type AuthMode = 'signin' | 'signup' | 'reset'
+
+// Inline Input component
+function InputField({
+  type,
+  value,
+  onChange,
+  placeholder,
+  required,
+  leftIcon,
+  error
+}: {
+  type: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  placeholder?: string
+  required?: boolean
+  leftIcon?: React.ReactNode
+  error?: string
+}) {
+  return (
+    <div>
+      <div
+        className="flex items-center gap-3 rounded-lg"
+        style={{
+          background: 'var(--fl-color-bg-base)',
+          border: error ? '1px solid var(--fl-color-error)' : '1px solid var(--fl-color-border)',
+          padding: '12px 16px'
+        }}
+      >
+        {leftIcon && <span style={{ color: 'var(--fl-color-text-muted)' }}>{leftIcon}</span>}
+        <input
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          required={required}
+          className="flex-1 bg-transparent outline-none text-sm"
+          style={{ color: 'var(--fl-color-text-primary)' }}
+        />
+      </div>
+      {error && (
+        <p className="text-xs mt-1" style={{ color: 'var(--fl-color-error)' }}>{error}</p>
+      )}
+    </div>
+  )
+}
 
 export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('signin')
@@ -61,7 +106,7 @@ export function AuthPage() {
       className="min-h-screen flex items-center justify-center"
       style={{
         background: 'var(--fl-color-bg-base)',
-        padding: 'var(--fl-spacing-md)'
+        padding: '16px'
       }}
     >
       <motion.div
@@ -78,10 +123,10 @@ export function AuthPage() {
           }}
         >
           {/* Header */}
-          <div className="text-center" style={{ marginBottom: 'var(--fl-spacing-xl)' }}>
+          <div className="text-center" style={{ marginBottom: '32px' }}>
             <div
               className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center"
-              style={{ background: 'var(--fl-color-primary)', marginBottom: 'var(--fl-spacing-md)' }}
+              style={{ background: 'var(--fl-color-primary)', marginBottom: '16px' }}
             >
               <span className="text-2xl text-white font-bold">N</span>
             </div>
@@ -93,7 +138,7 @@ export function AuthPage() {
               {mode === 'signup' && 'Create Account'}
               {mode === 'reset' && 'Reset Password'}
             </h1>
-            <p style={{ color: 'var(--fl-color-text-secondary)', marginTop: 'var(--fl-spacing-sm)' }}>
+            <p style={{ color: 'var(--fl-color-text-secondary)', marginTop: '8px' }}>
               {mode === 'signin' && 'Sign in to sync your notes across devices'}
               {mode === 'signup' && 'Start taking smarter notes today'}
               {mode === 'reset' && "We'll send you a reset link"}
@@ -105,7 +150,8 @@ export function AuthPage() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 p-3 mb-6 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600 dark:text-green-400"
+              className="flex items-center gap-2 p-3 mb-6 rounded-lg"
+              style={{ background: 'rgba(34, 197, 94, 0.1)', color: 'var(--fl-color-success)' }}
             >
               <CheckCircle size={18} />
               <p className="text-sm">{successMessage}</p>
@@ -117,7 +163,8 @@ export function AuthPage() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 p-3 mb-6 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400"
+              className="flex items-center gap-2 p-3 mb-6 rounded-lg"
+              style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--fl-color-error)' }}
             >
               <AlertCircle size={18} />
               <p className="text-sm">{error}</p>
@@ -127,37 +174,37 @@ export function AuthPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Input */}
-            <Input
+            <InputField
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Email address"
               required
-              leftElement={<Mail size={18} />}
+              leftIcon={<Mail size={18} />}
             />
 
             {/* Password Input */}
             {mode !== 'reset' && (
-              <Input
+              <InputField
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 required
-                leftElement={<Lock size={18} />}
+                leftIcon={<Lock size={18} />}
                 error={mode === 'signup' && password.length > 0 && !passwordValid ? 'Password must be at least 6 characters' : undefined}
               />
             )}
 
             {/* Confirm Password (Sign Up only) */}
             {mode === 'signup' && (
-              <Input
+              <InputField
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm password"
                 required
-                leftElement={<Lock size={18} />}
+                leftIcon={<Lock size={18} />}
                 error={confirmPassword && !passwordsMatch ? 'Passwords do not match' : undefined}
               />
             )}
@@ -193,7 +240,7 @@ export function AuthPage() {
           </form>
 
           {/* Mode Toggle */}
-          <div className="text-center" style={{ marginTop: 'var(--fl-spacing-lg)' }}>
+          <div className="text-center" style={{ marginTop: '24px' }}>
             {mode === 'reset' ? (
               <button
                 onClick={() => switchMode('signin')}
@@ -221,7 +268,7 @@ export function AuthPage() {
         {/* Footer */}
         <p
           className="text-center text-sm"
-          style={{ color: 'var(--fl-color-text-muted)', marginTop: 'var(--fl-spacing-lg)' }}
+          style={{ color: 'var(--fl-color-text-muted)', marginTop: '24px' }}
         >
           NoteTaker - Your intelligent note-taking companion
         </p>

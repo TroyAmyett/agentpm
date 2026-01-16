@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared variables */
+:root {
+  --fl-color-primary: #0ea5e9;
+  --fl-color-primary-hover: #0284c7;
+  --fl-color-success: #22c55e;
+  --fl-color-error: #ef4444;
+  --fl-color-warning: #f59e0b;
+  --fl-spacing-xs: 4px;
+  --fl-spacing-sm: 8px;
+  --fl-spacing-md: 12px;
+  --fl-spacing-lg: 16px;
+  --fl-spacing-xl: 24px;
+  --fl-transition-fast: 150ms ease;
+  --fl-transition-normal: 200ms ease;
+  --fl-z-dropdown: 100;
+  --fl-z-modal: 200;
+  --fl-z-tooltip: 300;
+}
+
 /* Dark mode theme */
 .dark {
   --fl-color-bg-base: #0a0a0f;

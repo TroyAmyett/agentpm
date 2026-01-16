@@ -14,7 +14,6 @@ import { AuthPage } from '@/components/Auth/AuthPage'
 import { UserMenu } from '@/components/Auth/UserMenu'
 import { SyncStatusIndicator } from '@/components/Sync/SyncStatusIndicator'
 import { AgentPMPage } from '@/components/AgentPM'
-import { AppHeader, ToolSwitcher, Button, Panel, type Tool } from '@funnelists/ui'
 import { Loader2 } from 'lucide-react'
 import {
   PanelLeftClose,
@@ -24,14 +23,66 @@ import {
   MessageSquare,
   StickyNote,
   Bot,
+  ChevronDown,
 } from 'lucide-react'
 
 type AppView = 'notes' | 'agentpm'
+
+interface Tool {
+  id: string
+  name: string
+  icon: React.ReactNode
+  description?: string
+}
 
 const tools: Tool[] = [
   { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'AI-powered note taking' },
   { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'Project management with AI agents' },
 ]
+
+// Inline ToolSwitcher component
+function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; activeTool: string; onToolChange: (id: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const active = tools.find(t => t.id === activeTool) || tools[0]
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+        style={{ color: 'var(--fl-color-text-primary)' }}
+      >
+        {active.icon}
+        <span className="font-medium">{active.name}</span>
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div
+            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[200px] z-50"
+            style={{ background: 'var(--fl-color-bg-surface)', border: '1px solid var(--fl-color-border)' }}
+          >
+            {tools.map(tool => (
+              <button
+                key={tool.id}
+                onClick={() => { onToolChange(tool.id); setIsOpen(false) }}
+                className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--fl-color-bg-elevated)] ${tool.id === activeTool ? 'bg-[var(--fl-color-bg-elevated)]' : ''}`}
+                style={{ color: 'var(--fl-color-text-primary)' }}
+              >
+                {tool.icon}
+                <div>
+                  <div className="font-medium">{tool.name}</div>
+                  {tool.description && <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>{tool.description}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 function App() {
   const { initialized, isAuthenticated } = useAuth()
@@ -162,10 +213,10 @@ function App() {
   // Show loading screen while initializing
   if (!initialized) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white dark:bg-surface-950">
+      <div className="h-screen flex items-center justify-center" style={{ background: 'var(--fl-color-bg-base)' }}>
         <div className="flex flex-col items-center gap-4">
-          <Loader2 size={32} className="animate-spin text-primary-500" />
-          <p className="text-surface-500">Loading...</p>
+          <Loader2 size={32} className="animate-spin" style={{ color: 'var(--fl-color-primary)' }} />
+          <p style={{ color: 'var(--fl-color-text-muted)' }}>Loading...</p>
         </div>
       </div>
     )
@@ -177,7 +228,6 @@ function App() {
   }
 
   const handleToolChange = (toolId: string) => {
-    // Map tool IDs to view names
     const viewMap: Record<string, AppView> = {
       'notetaker': 'notes',
       'agentpm': 'agentpm'
@@ -185,67 +235,64 @@ function App() {
     setCurrentView(viewMap[toolId] || 'notes')
   }
 
-  const handleSettingsClick = () => {
-    toggleDarkMode()
-  }
-
   return (
-    <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)', paddingTop: '56px' }}>
-      {/* AppHeader - Standard Funnelists design */}
-      <AppHeader
-        logo={
+    <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)' }}>
+      {/* Header */}
+      <header
+        className="flex items-center justify-between px-4 h-14 flex-shrink-0"
+        style={{ background: 'var(--fl-color-bg-surface)', borderBottom: '1px solid var(--fl-color-border)' }}
+      >
+        {/* Left: Logo and Tool Switcher */}
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
               <StickyNote size={18} className="text-white" />
             </div>
             <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>NoteTaker</span>
           </div>
-        }
-        toolSwitcher={
           <ToolSwitcher
             tools={tools}
             activeTool={currentView === 'notes' ? 'notetaker' : 'agentpm'}
             onToolChange={handleToolChange}
           />
-        }
-        settingsButton={
-          <div className="flex items-center" style={{ gap: 'var(--fl-spacing-sm)' }}>
-            {currentView === 'notes' && (
-              <>
-                <Button
-                  variant="icon"
-                  size="sm"
-                  onClick={toggleSidebar}
-                  title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-                >
-                  {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-                </Button>
-                <TemplateMenu />
-                <ExportMenu />
-                <Button
-                  variant="icon"
-                  size="sm"
-                  onClick={toggleChatPanel}
-                  title="Chat with notes"
-                  className={chatPanelOpen ? 'fl-button--active' : ''}
-                >
-                  <MessageSquare size={18} />
-                </Button>
-              </>
-            )}
-            <SyncStatusIndicator />
-            <Button
-              variant="icon"
-              size="sm"
-              onClick={handleSettingsClick}
-              title={darkMode ? 'Light mode' : 'Dark mode'}
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </Button>
-          </div>
-        }
-        userMenu={<UserMenu />}
-      />
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1">
+          {currentView === 'notes' && (
+            <>
+              <button
+                onClick={toggleSidebar}
+                title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+                className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+                style={{ color: 'var(--fl-color-text-secondary)' }}
+              >
+                {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+              </button>
+              <TemplateMenu />
+              <ExportMenu />
+              <button
+                onClick={toggleChatPanel}
+                title="Chat with notes"
+                className={`p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)] ${chatPanelOpen ? 'bg-[var(--fl-color-bg-elevated)]' : ''}`}
+                style={{ color: 'var(--fl-color-text-secondary)' }}
+              >
+                <MessageSquare size={18} />
+              </button>
+            </>
+          )}
+          <SyncStatusIndicator />
+          <button
+            onClick={toggleDarkMode}
+            title={darkMode ? 'Light mode' : 'Dark mode'}
+            className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+            style={{ color: 'var(--fl-color-text-secondary)' }}
+          >
+            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <UserMenu />
+        </div>
+      </header>
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
@@ -269,9 +316,9 @@ function App() {
         {/* Main Content */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {currentView === 'notes' ? (
-            <Panel noPadding className="flex-1 overflow-hidden" style={{ borderRadius: 0 }}>
+            <div className="flex-1 overflow-hidden">
               <BlockEditor />
-            </Panel>
+            </div>
           ) : (
             <AgentPMPage />
           )}

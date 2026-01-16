@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button } from '@funnelists/ui'
 import { User, LogOut, Loader2 } from 'lucide-react'
 
 export function UserMenu() {
@@ -21,14 +20,14 @@ export function UserMenu() {
 
   return (
     <div className="relative">
-      <Button
-        variant="icon"
-        size="sm"
+      <button
         onClick={() => setMenuOpen(!menuOpen)}
         title={user.email || 'Account'}
+        className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+        style={{ color: 'var(--fl-color-text-secondary)' }}
       >
         <User size={18} />
-      </Button>
+      </button>
 
       <AnimatePresence>
         {menuOpen && (

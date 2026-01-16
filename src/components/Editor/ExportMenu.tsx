@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNotesStore } from '@/stores/notesStore'
 import { toMarkdown, toMarkdownWithFrontmatter, downloadMarkdown, copyMarkdown } from '@/utils/markdown'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button } from '@funnelists/ui'
 import {
   Download,
   Copy,
@@ -51,15 +50,15 @@ export function ExportMenu() {
 
   return (
     <div className="relative">
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
         onClick={() => setIsOpen(!isOpen)}
-        rightIcon={<ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+        style={{ color: 'var(--fl-color-text-secondary)' }}
       >
         <Download size={16} />
         Export
-      </Button>
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
 
       <AnimatePresence>
         {isOpen && (

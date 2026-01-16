@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNotesStore } from '@/stores/notesStore'
 import { projectTemplates } from '@/utils/templates'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button } from '@funnelists/ui'
 import {
   FileText,
   ClipboardList,
@@ -43,15 +42,15 @@ export function TemplateMenu() {
 
   return (
     <div className="relative">
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
         onClick={() => setIsOpen(!isOpen)}
-        rightIcon={<ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+        style={{ color: 'var(--fl-color-text-secondary)' }}
       >
         <Layout size={16} />
         Templates
-      </Button>
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
 
       <AnimatePresence>
         {isOpen && (
@@ -139,19 +138,17 @@ export function TemplateMenu() {
                   borderTop: '1px solid var(--fl-color-border)'
                 }}
               >
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   onClick={() => {
                     addNote({ title: 'Untitled' })
                     setIsOpen(false)
                   }}
-                  leftIcon={<Plus size={16} />}
-                  className="w-full justify-start"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
                   style={{ color: 'var(--fl-color-primary)' }}
                 >
+                  <Plus size={16} />
                   Blank Note
-                </Button>
+                </button>
               </div>
             </motion.div>
           </>
