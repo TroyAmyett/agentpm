@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark mode theme */
+.dark {
+  --fl-color-bg-base: #0a0a0f;
+  --fl-color-bg-elevated: #111118;
+  --fl-color-bg-surface: #1a1a24;
+  --fl-color-bg-overlay: #1a1a24;
+  --fl-color-border: #2a2a3a;
+  --fl-color-border-hover: #3a3a4a;
+  --fl-color-text-primary: #ffffff;
+  --fl-color-text-secondary: #a1a1aa;
+  --fl-color-text-muted: #71717a;
+  --fl-color-text-inverse: #0a0a0f;
+  --fl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --fl-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --fl-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+}
+
+/* Light mode theme */
+.light {
+  --fl-color-bg-base: #ffffff;
+  --fl-color-bg-elevated: #ffffff;
+  --fl-color-bg-surface: #f8fafc;
+  --fl-color-bg-overlay: #f1f5f9;
+  --fl-color-border: #e2e8f0;
+  --fl-color-border-hover: #cbd5e1;
+  --fl-color-text-primary: #0f172a;
+  --fl-color-text-secondary: #475569;
+  --fl-color-text-muted: #94a3b8;
+  --fl-color-text-inverse: #ffffff;
+  --fl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --fl-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --fl-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Fix AppHeader spacing */
+.fl-app-header__settings {
+  gap: var(--fl-spacing-md);
+}
+
+.fl-app-header__left {
+  gap: var(--fl-spacing-lg);
+}
+
+/* Fix sidebar z-index so dropdowns appear above it */
+aside {
+  z-index: 50 !important;
+}
+
+/* Ensure dropdowns in header appear above sidebar */
+.fl-app-header {
+  z-index: 300 !important;
+}
+
+.fl-tool-switcher__dropdown {
+  z-index: 400 !important;
+}
+
+/* Template and Export menu dropdowns */
+.fl-app-header [class*="absolute"],
+.fl-app-header .relative > div[class*="motion"] {
+  z-index: 400 !important;
+}
+
+/* Tiptap Editor Styles */
+.tiptap {
+  @apply outline-none min-h-[200px];
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  @apply text-surface-400 float-left h-0 pointer-events-none;
+  content: attr(data-placeholder);
+}
+
+.tiptap h1 {
+  @apply text-3xl font-bold mb-4 mt-6;
+}
+
+.tiptap h2 {
+  @apply text-2xl font-semibold mb-3 mt-5;
+}
+
+.tiptap h3 {
+  @apply text-xl font-semibold mb-2 mt-4;
+}
+
+.tiptap p {
+  @apply mb-3 leading-relaxed;
+}
+
+.tiptap ul {
+  @apply list-disc ml-6 mb-3;
+}
+
+.tiptap ol {
+  @apply list-decimal ml-6 mb-3;
+}
+
+.tiptap li {
+  @apply mb-1;
+}
+
+.tiptap blockquote {
+  @apply border-l-4 border-primary-500 pl-4 italic text-surface-600 my-4;
+}
+
+.tiptap code {
+  @apply bg-surface-100 dark:bg-surface-800 px-1.5 py-0.5 rounded font-mono text-sm;
+}
+
+.tiptap pre {
+  @apply bg-surface-900 text-surface-100 p-4 rounded-lg my-4 overflow-x-auto;
+}
+
+.tiptap pre code {
+  @apply bg-transparent p-0;
+}
+
+.tiptap hr {
+  @apply border-surface-200 dark:border-surface-700 my-6;
+}
+
+.tiptap a {
+  @apply text-primary-600 hover:text-primary-700 underline;
+}
+
+.tiptap strong {
+  @apply font-semibold;
+}
+
+.tiptap em {
+  @apply italic;
+}
+
+.tiptap u {
+  @apply underline;
+}
+
+.tiptap s {
+  @apply line-through;
+}
+
+/* Selection styles */
+.tiptap ::selection {
+  @apply bg-primary-200 dark:bg-primary-800;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-300 dark:bg-surface-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-surface-400 dark:bg-surface-600;
+}
+
+/* Custom focus styles */
+*:focus-visible {
+  @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+}
+
+/* Smooth transitions */
+* {
+  @apply transition-colors duration-150;
+}

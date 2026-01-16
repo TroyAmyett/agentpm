@@ -1,0 +1,239 @@
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useUIStore } from '@/stores/uiStore'
+import { getAllNotesText } from '@/stores/notesStore'
+import { chatWithNotes, isAnthropicConfigured } from '@/services/ai/anthropic'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ResizeHandle } from '@/components/ResizeHandle'
+import {
+  X,
+  Send,
+  Sparkles,
+  Loader2,
+  User,
+  Bot,
+  AlertCircle,
+} from 'lucide-react'
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
+export function ChatPanel() {
+  const { chatPanelOpen, setChatPanelOpen, chatPanelWidth, setChatPanelWidth } = useUIStore()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleResize = useCallback((delta: number) => {
+    setChatPanelWidth(chatPanelWidth + delta)
+  }, [chatPanelWidth, setChatPanelWidth])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  useEffect(() => {
+    if (chatPanelOpen && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [chatPanelOpen])
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return
+
+    if (!isAnthropicConfigured()) {
+      setError('Please configure your Anthropic API key to use the chat feature.')
+      return
+    }
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: input.trim(),
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput('')
+    setError(null)
+    setLoading(true)
+
+    try {
+      const notesContext = getAllNotesText()
+      const chatHistory = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+
+      const response = await chatWithNotes(userMessage.content, notesContext, chatHistory)
+
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response,
+        timestamp: new Date(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to get response')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      {chatPanelOpen && (
+        <motion.div
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: chatPanelWidth, opacity: 1 }}
+          exit={{ width: 0, opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="flex-shrink-0 border-l border-surface-200 dark:border-surface-700 flex flex-col overflow-hidden h-full"
+          style={{ background: 'var(--fl-color-bg-elevated)', width: chatPanelWidth }}
+        >
+          <ResizeHandle side="right" onResize={handleResize} />
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary-100 dark:bg-primary-900/40">
+                <Sparkles size={18} className="text-primary-600 dark:text-primary-400" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-surface-900 dark:text-surface-100">
+                  Chat with Notes
+                </h2>
+                <p className="text-xs text-surface-500">
+                  Ask questions about your notes
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setChatPanelOpen(false)}
+              className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+            {messages.length === 0 && (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-100 to-purple-100 dark:from-primary-900/30 dark:to-purple-900/30 flex items-center justify-center">
+                  <Bot size={32} className="text-primary-500" />
+                </div>
+                <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Start a conversation
+                </h3>
+                <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
+                  Ask questions about your notes and I'll help you find answers.
+                </p>
+              </div>
+            )}
+
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-3 ${
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                {message.role === 'assistant' && (
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center">
+                    <Bot size={16} className="text-white" />
+                  </div>
+                )}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    message.role === 'user'
+                      ? 'bg-primary-500 text-white rounded-tr-sm'
+                      : 'bg-surface-100 dark:bg-surface-800 text-surface-900 dark:text-surface-100 rounded-tl-sm'
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                </div>
+                {message.role === 'user' && (
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center">
+                    <User size={16} className="text-surface-600 dark:text-surface-400" />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center">
+                  <Bot size={16} className="text-white" />
+                </div>
+                <div className="bg-surface-100 dark:bg-surface-800 rounded-2xl rounded-tl-sm px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin text-primary-500" />
+                    <span className="text-sm text-surface-500">Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
+                <AlertCircle size={16} />
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+
+            {/* Spacer to push input up when few messages */}
+            <div className="flex-1 min-h-0" />
+
+            {/* Input - inside scrollable area */}
+            <div className="sticky bottom-0 pt-4 -mx-4 px-4 pb-0" style={{ background: 'var(--fl-color-bg-elevated)' }}>
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about your notes..."
+                  rows={1}
+                  className="flex-1 px-4 py-2.5 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                  style={{ maxHeight: '120px' }}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || loading}
+                  className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-300 dark:disabled:bg-surface-600 text-white rounded-xl transition-colors disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
