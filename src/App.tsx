@@ -58,10 +58,10 @@ function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; acti
       </button>
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="fixed inset-0" style={{ zIndex: 350 }} onClick={() => setIsOpen(false)} />
           <div
-            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[200px] z-50"
-            style={{ background: 'var(--fl-color-bg-surface)', border: '1px solid var(--fl-color-border)' }}
+            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[200px]"
+            style={{ zIndex: 400, background: 'var(--fl-color-bg-surface)', border: '1px solid var(--fl-color-border)' }}
           >
             {tools.map(tool => (
               <button
