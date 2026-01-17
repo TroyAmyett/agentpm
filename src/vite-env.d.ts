@@ -9,9 +9,3 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
-
-// Funnelists UI styles module declaration
-declare module '@funnelists/ui/styles' {
-  const styles: string
-  export default styles
-}
