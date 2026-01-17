@@ -1,7 +1,7 @@
 // API Keys Manager Component
 // Allows users to manage their LLM provider API keys
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Key,
@@ -13,6 +13,7 @@ import {
   AlertCircle,
   RefreshCw,
   Shield,
+  ChevronDown,
 } from 'lucide-react'
 import { useApiKeysStore, type ApiKey } from '@/stores/apiKeysStore'
 import {
@@ -35,6 +36,19 @@ export function ApiKeysManager({ userId }: ApiKeysManagerProps) {
   const [newKeyProvider, setNewKeyProvider] = useState<Provider>('openai')
   const [showNewKey, setShowNewKey] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [showProviderDropdown, setShowProviderDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProviderDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     fetchKeys(userId)
@@ -145,37 +159,82 @@ export function ApiKeysManager({ userId }: ApiKeysManagerProps) {
               </h3>
 
               <div className="space-y-4">
-                {/* Provider Select */}
-                <div>
+                {/* Provider Select - Custom Dropdown */}
+                <div ref={dropdownRef} className="relative">
                   <label
                     className="block text-xs mb-1"
                     style={{ color: 'var(--fl-color-text-muted)' }}
                   >
                     Provider
                   </label>
-                  <select
-                    value={newKeyProvider}
-                    onChange={(e) => setNewKeyProvider(e.target.value as Provider)}
-                    className="w-full px-3 py-2 rounded-lg text-sm"
+                  <button
+                    type="button"
+                    onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                    className="w-full px-3 py-2 rounded-lg text-sm flex items-center justify-between"
                     style={{
                       background: 'var(--fl-color-bg-elevated, #1a1a24)',
                       border: '1px solid var(--fl-color-border)',
                       color: 'var(--fl-color-text-primary)',
                     }}
                   >
-                    {Object.entries(PROVIDERS).map(([key, { name, icon }]) => (
-                      <option
-                        key={key}
-                        value={key}
+                    <span className="flex items-center gap-2">
+                      <span>{PROVIDERS[newKeyProvider].icon}</span>
+                      <span>{PROVIDERS[newKeyProvider].name}</span>
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`}
+                      style={{ color: 'var(--fl-color-text-muted)' }}
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {showProviderDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-50 w-full mt-1 rounded-lg overflow-hidden"
                         style={{
                           background: 'var(--fl-color-bg-elevated, #1a1a24)',
-                          color: 'var(--fl-color-text-primary, #e5e5e5)',
+                          border: '1px solid var(--fl-color-border)',
+                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
                         }}
                       >
-                        {icon} {name}
-                      </option>
-                    ))}
-                  </select>
+                        <div className="max-h-64 overflow-y-auto">
+                          {Object.entries(PROVIDERS).map(([key, { name, icon }]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                setNewKeyProvider(key as Provider)
+                                setShowProviderDropdown(false)
+                              }}
+                              className="w-full px-3 py-2 text-sm flex items-center gap-2 transition-colors"
+                              style={{
+                                background: key === newKeyProvider ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
+                                color: 'var(--fl-color-text-primary)',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (key !== newKeyProvider) {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = key === newKeyProvider ? 'rgba(14, 165, 233, 0.15)' : 'transparent'
+                              }}
+                            >
+                              <span>{icon}</span>
+                              <span>{name}</span>
+                              {key === newKeyProvider && (
+                                <Check size={14} className="ml-auto" style={{ color: 'var(--fl-color-primary)' }} />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* API Key Input */}
