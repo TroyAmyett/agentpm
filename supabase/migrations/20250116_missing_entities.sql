@@ -69,10 +69,10 @@ CREATE TABLE IF NOT EXISTS contacts (
   CONSTRAINT unique_email_per_account UNIQUE (account_id, email)
 );
 
-CREATE INDEX idx_contacts_account_id ON contacts(account_id);
-CREATE INDEX idx_contacts_email ON contacts(email);
-CREATE INDEX idx_contacts_is_user ON contacts(is_user);
-CREATE INDEX idx_contacts_deleted_at ON contacts(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_contacts_account_id ON contacts(account_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);
+CREATE INDEX IF NOT EXISTS idx_contacts_is_user ON contacts(is_user);
+CREATE INDEX IF NOT EXISTS idx_contacts_deleted_at ON contacts(deleted_at);
 
 -- =============================================================================
 -- PROJECT CONTACTS TABLE (Roles/Assignments)
@@ -109,10 +109,10 @@ CREATE TABLE IF NOT EXISTS project_contacts (
   CONSTRAINT unique_project_contact UNIQUE (project_id, contact_id)
 );
 
-CREATE INDEX idx_project_contacts_account_id ON project_contacts(account_id);
-CREATE INDEX idx_project_contacts_project_id ON project_contacts(project_id);
-CREATE INDEX idx_project_contacts_contact_id ON project_contacts(contact_id);
-CREATE INDEX idx_project_contacts_role ON project_contacts(role);
+CREATE INDEX IF NOT EXISTS idx_project_contacts_account_id ON project_contacts(account_id);
+CREATE INDEX IF NOT EXISTS idx_project_contacts_project_id ON project_contacts(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_contacts_contact_id ON project_contacts(contact_id);
+CREATE INDEX IF NOT EXISTS idx_project_contacts_role ON project_contacts(role);
 
 -- =============================================================================
 -- MILESTONES TABLE (Optional Grouping)
@@ -164,10 +164,10 @@ CREATE TABLE IF NOT EXISTS milestones (
   signature_hash TEXT
 );
 
-CREATE INDEX idx_milestones_account_id ON milestones(account_id);
-CREATE INDEX idx_milestones_project_id ON milestones(project_id);
-CREATE INDEX idx_milestones_status ON milestones(status);
-CREATE INDEX idx_milestones_deleted_at ON milestones(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_milestones_account_id ON milestones(account_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_project_id ON milestones(project_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_status ON milestones(status);
+CREATE INDEX IF NOT EXISTS idx_milestones_deleted_at ON milestones(deleted_at);
 
 -- Add milestone_id FK to tasks table
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS milestone_id UUID REFERENCES milestones(id) ON DELETE SET NULL;
@@ -225,10 +225,10 @@ CREATE TABLE IF NOT EXISTS agent_api_keys (
   tags TEXT[] DEFAULT '{}'
 );
 
-CREATE INDEX idx_agent_api_keys_account_id ON agent_api_keys(account_id);
-CREATE INDEX idx_agent_api_keys_key_prefix ON agent_api_keys(key_prefix);
-CREATE INDEX idx_agent_api_keys_agent_type ON agent_api_keys(agent_type);
-CREATE INDEX idx_agent_api_keys_is_active ON agent_api_keys(is_active);
+CREATE INDEX IF NOT EXISTS idx_agent_api_keys_account_id ON agent_api_keys(account_id);
+CREATE INDEX IF NOT EXISTS idx_agent_api_keys_key_prefix ON agent_api_keys(key_prefix);
+CREATE INDEX IF NOT EXISTS idx_agent_api_keys_agent_type ON agent_api_keys(agent_type);
+CREATE INDEX IF NOT EXISTS idx_agent_api_keys_is_active ON agent_api_keys(is_active);
 
 -- =============================================================================
 -- TRIGGERS: Auto-update updated_at for new tables

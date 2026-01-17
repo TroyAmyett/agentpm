@@ -2,6 +2,20 @@
 -- Date: 2025-01-16
 
 -- =============================================================================
+-- ADD MISSING COLUMNS TO TASKS TABLE
+-- =============================================================================
+
+-- Add assigned_agent column for agent type assignment
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_agent TEXT;
+
+-- Add queued_at timestamp for queue tracking
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS queued_at TIMESTAMPTZ;
+
+-- Add index for queue queries
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_agent ON tasks(assigned_agent);
+CREATE INDEX IF NOT EXISTS idx_tasks_queued_at ON tasks(queued_at);
+
+-- =============================================================================
 -- FUNCTION: Increment API key request count
 -- =============================================================================
 

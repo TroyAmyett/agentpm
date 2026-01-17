@@ -765,10 +765,39 @@ CREATE TRIGGER update_agent_stats_on_action
   FOR EACH ROW EXECUTE FUNCTION update_agent_stats();
 
 -- =============================================================================
+-- USER ACCOUNTS TABLE (Links auth.users to accounts)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+
+  -- Status
+  is_primary BOOLEAN DEFAULT FALSE, -- User's primary account
+
+  -- Audit
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- Constraints
+  UNIQUE(user_id, account_id)
+);
+
+CREATE INDEX idx_user_accounts_user_id ON user_accounts(user_id);
+CREATE INDEX idx_user_accounts_account_id ON user_accounts(account_id);
+
+-- Trigger to update updated_at
+CREATE TRIGGER update_user_accounts_updated_at
+  BEFORE UPDATE ON user_accounts FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================================
 -- ROW LEVEL SECURITY
 -- =============================================================================
 
 -- Enable RLS on all tables
+ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_personas ENABLE ROW LEVEL SECURITY;
@@ -789,6 +818,15 @@ RETURNS UUID AS $$
     (SELECT account_id FROM user_accounts WHERE user_id = auth.uid() LIMIT 1)
   );
 $$ LANGUAGE SQL SECURITY DEFINER;
+
+-- User Accounts: Users can see their own account memberships
+CREATE POLICY "Users can view their account memberships"
+  ON user_accounts FOR SELECT
+  USING (user_id = auth.uid());
+
+CREATE POLICY "Users can insert their account memberships"
+  ON user_accounts FOR INSERT
+  WITH CHECK (user_id = auth.uid());
 
 -- Accounts: Users can only see their own account
 CREATE POLICY "Users can view their account"
