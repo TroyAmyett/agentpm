@@ -14,6 +14,7 @@ import { AuthPage } from '@/components/Auth/AuthPage'
 import { UserMenu } from '@/components/Auth/UserMenu'
 import { SyncStatusIndicator } from '@/components/Sync/SyncStatusIndicator'
 import { AgentPMPage } from '@/components/AgentPM'
+import { SettingsPage } from '@/components/Settings/SettingsPage'
 import { Loader2 } from 'lucide-react'
 import {
   PanelLeftClose,
@@ -24,20 +25,26 @@ import {
   StickyNote,
   Bot,
   ChevronDown,
+  Palette,
+  Users,
+  Settings,
 } from 'lucide-react'
 
-type AppView = 'notes' | 'agentpm'
+type AppView = 'notes' | 'agentpm' | 'canvas' | 'leadgen' | 'settings'
 
 interface Tool {
   id: string
   name: string
   icon: React.ReactNode
   description?: string
+  comingSoon?: boolean
 }
 
 const tools: Tool[] = [
-  { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'AI-powered note taking' },
-  { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'Project management with AI agents' },
+  { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'AI project management' },
+  { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'Brainstorming & ideation' },
+  { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, description: 'AI design & visuals', comingSoon: true },
+  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', comingSoon: true },
 ]
 
 // Inline ToolSwitcher component
@@ -60,26 +67,119 @@ function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; acti
         <>
           <div className="fixed inset-0" style={{ zIndex: 350 }} onClick={() => setIsOpen(false)} />
           <div
-            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[200px]"
+            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[220px]"
             style={{ zIndex: 400, background: 'var(--fl-color-bg-surface)', border: '1px solid var(--fl-color-border)' }}
           >
             {tools.map(tool => (
               <button
                 key={tool.id}
-                onClick={() => { onToolChange(tool.id); setIsOpen(false) }}
-                className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[var(--fl-color-bg-elevated)] ${tool.id === activeTool ? 'bg-[var(--fl-color-bg-elevated)]' : ''}`}
+                onClick={() => {
+                  if (!tool.comingSoon) {
+                    onToolChange(tool.id)
+                    setIsOpen(false)
+                  }
+                }}
+                disabled={tool.comingSoon}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                  tool.comingSoon
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:bg-[var(--fl-color-bg-elevated)]'
+                } ${tool.id === activeTool ? 'bg-[var(--fl-color-bg-elevated)]' : ''}`}
                 style={{ color: 'var(--fl-color-text-primary)' }}
               >
                 {tool.icon}
-                <div>
-                  <div className="font-medium">{tool.name}</div>
-                  {tool.description && <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>{tool.description}</div>}
+                <div className="flex-1">
+                  <div className="font-medium flex items-center gap-2">
+                    {tool.name}
+                    {tool.comingSoon && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(14, 165, 233, 0.2)', color: '#0ea5e9' }}
+                      >
+                        Soon
+                      </span>
+                    )}
+                  </div>
+                  {tool.description && (
+                    <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+                      {tool.description}
+                    </div>
+                  )}
                 </div>
               </button>
             ))}
+            {/* Settings Divider */}
+            <div className="border-t my-1" style={{ borderColor: 'var(--fl-color-border)' }} />
+            <button
+              onClick={() => { onToolChange('settings'); setIsOpen(false) }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+              style={{ color: 'var(--fl-color-text-primary)' }}
+            >
+              <Settings size={18} />
+              <div>
+                <div className="font-medium">Settings</div>
+                <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>API keys & preferences</div>
+              </div>
+            </button>
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// Coming Soon Placeholder Component
+function ComingSoonPlaceholder({
+  name,
+  description,
+  onBack,
+}: {
+  name: string
+  description: string
+  onBack: () => void
+}) {
+  return (
+    <div
+      className="flex-1 flex flex-col items-center justify-center p-8"
+      style={{ background: 'var(--fl-color-bg-base)' }}
+    >
+      <div
+        className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6"
+        style={{
+          background: 'rgba(14, 165, 233, 0.15)',
+          border: '1px solid rgba(14, 165, 233, 0.3)',
+        }}
+      >
+        {name === 'Canvas' ? <Palette size={40} color="#0ea5e9" /> : <Users size={40} color="#0ea5e9" />}
+      </div>
+      <h2
+        className="text-2xl font-medium mb-2"
+        style={{ color: 'var(--fl-color-text-primary)' }}
+      >
+        {name}
+      </h2>
+      <p
+        className="text-center max-w-md mb-6"
+        style={{ color: 'var(--fl-color-text-muted)' }}
+      >
+        {description}
+      </p>
+      <span
+        className="px-4 py-2 rounded-full text-sm font-medium mb-6"
+        style={{
+          background: 'rgba(14, 165, 233, 0.15)',
+          color: '#0ea5e9',
+        }}
+      >
+        Coming Soon
+      </span>
+      <button
+        onClick={onBack}
+        className="px-4 py-2 rounded-lg text-sm transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+        style={{ color: 'var(--fl-color-text-secondary)' }}
+      >
+        ← Back to AgentPM
+      </button>
     </div>
   )
 }
@@ -88,7 +188,7 @@ function App() {
   const { initialized, isAuthenticated } = useAuth()
   useSyncQueue()
 
-  const [currentView, setCurrentView] = useState<AppView>('notes')
+  const [currentView, setCurrentView] = useState<AppView>('agentpm')
 
   const {
     sidebarOpen,
@@ -230,7 +330,10 @@ function App() {
   const handleToolChange = (toolId: string) => {
     const viewMap: Record<string, AppView> = {
       'notetaker': 'notes',
-      'agentpm': 'agentpm'
+      'agentpm': 'agentpm',
+      'canvas': 'canvas',
+      'leadgen': 'leadgen',
+      'settings': 'settings',
     }
     setCurrentView(viewMap[toolId] || 'notes')
   }
@@ -246,13 +349,13 @@ function App() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
-              <StickyNote size={18} className="text-white" />
+              <Bot size={18} className="text-white" />
             </div>
-            <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>NoteTaker</span>
+            <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>AgentPM</span>
           </div>
           <ToolSwitcher
             tools={tools}
-            activeTool={currentView === 'notes' ? 'notetaker' : 'agentpm'}
+            activeTool={currentView === 'notes' ? 'notetaker' : currentView === 'settings' ? 'agentpm' : currentView}
             onToolChange={handleToolChange}
           />
         </div>
@@ -315,12 +418,25 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {currentView === 'notes' ? (
+          {currentView === 'notes' && (
             <div className="flex-1 overflow-hidden">
               <BlockEditor />
             </div>
-          ) : (
-            <AgentPMPage />
+          )}
+          {currentView === 'agentpm' && <AgentPMPage />}
+          {currentView === 'settings' && (
+            <SettingsPage onBack={() => setCurrentView('notes')} />
+          )}
+          {(currentView === 'canvas' || currentView === 'leadgen') && (
+            <ComingSoonPlaceholder
+              name={currentView === 'canvas' ? 'Canvas' : 'LeadGen'}
+              description={
+                currentView === 'canvas'
+                  ? 'AI-powered design and visual creation tools'
+                  : 'AI lead generation and outreach automation'
+              }
+              onBack={() => setCurrentView('notes')}
+            />
           )}
         </main>
 
