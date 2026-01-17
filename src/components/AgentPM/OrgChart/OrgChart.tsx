@@ -1,4 +1,5 @@
 // Org Chart - Visual hierarchy of agents
+// Hierarchy is determined by the reportsTo field on each agent
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
@@ -31,7 +32,7 @@ export function OrgChart({
   onAgentClick,
   onAssignTask,
 }: OrgChartProps) {
-  // Build org tree from agents
+  // Build org tree from agents based on reportsTo hierarchy
   const orgTree = useMemo(() => {
     // Root is the current user
     const root: OrgNode = {
@@ -44,81 +45,40 @@ export function OrgChart({
 
     const visibleAgents = agents.filter((a) => a.showInOrgChart)
 
-    // Find orchestrator agents - they should be at the top tier
-    const orchestrators = visibleAgents.filter(
-      (a) => a.agentType.toLowerCase() === 'orchestrator'
-    )
-    const nonOrchestrators = visibleAgents.filter(
-      (a) => a.agentType.toLowerCase() !== 'orchestrator'
-    )
+    // Map agents by their reportsTo ID
+    // Agents with no reportsTo or reportsTo.type === 'user' report to root
+    const agentsByReportsTo = new Map<string, AgentPersona[]>()
 
-    // If there are orchestrators, they report to user, and other agents report to orchestrator
-    if (orchestrators.length > 0) {
-      // Orchestrators report directly to user
-      root.children = orchestrators
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-        .map((orchestrator) => {
-          // Find agents that explicitly report to this orchestrator, or default all non-orchestrators to it
-          const directReports = nonOrchestrators.filter((a) => {
-            // If agent has explicit reportsTo, use it
-            if (a.reportsTo?.id) {
-              return a.reportsTo.id === orchestrator.id
-            }
-            // Otherwise, default to first orchestrator
-            return orchestrators[0].id === orchestrator.id
-          })
+    visibleAgents.forEach((agent) => {
+      // If reportsTo is a user or not set, they report to root
+      // If reportsTo is an agent, they report to that agent
+      const reportsToId = agent.reportsTo?.type === 'agent'
+        ? agent.reportsTo.id
+        : root.id
 
-          return {
-            id: orchestrator.id,
-            type: 'agent' as const,
-            name: orchestrator.alias,
-            title: orchestrator.agentType,
-            avatar: orchestrator.avatar,
-            agent: orchestrator,
-            children: directReports
-              .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-              .map((agent) => ({
-                id: agent.id,
-                type: 'agent' as const,
-                name: agent.alias,
-                title: agent.agentType,
-                avatar: agent.avatar,
-                agent,
-                children: [], // For now, only 2 levels below orchestrator
-              })),
-          }
-        })
-    } else {
-      // No orchestrators - all agents report directly to user (original behavior)
-      // Map agents by their reportsTo
-      const agentsByReportsTo = new Map<string, AgentPersona[]>()
-
-      visibleAgents.forEach((agent) => {
-        const reportsToId = agent.reportsTo?.id || root.id
-        if (!agentsByReportsTo.has(reportsToId)) {
-          agentsByReportsTo.set(reportsToId, [])
-        }
-        agentsByReportsTo.get(reportsToId)!.push(agent)
-      })
-
-      // Build tree recursively
-      const buildChildren = (parentId: string): OrgNode[] => {
-        const childAgents = agentsByReportsTo.get(parentId) || []
-        return childAgents
-          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-          .map((agent) => ({
-            id: agent.id,
-            type: 'agent' as const,
-            name: agent.alias,
-            title: agent.agentType,
-            avatar: agent.avatar,
-            agent,
-            children: buildChildren(agent.id),
-          }))
+      if (!agentsByReportsTo.has(reportsToId)) {
+        agentsByReportsTo.set(reportsToId, [])
       }
+      agentsByReportsTo.get(reportsToId)!.push(agent)
+    })
 
-      root.children = buildChildren(root.id)
+    // Build tree recursively
+    const buildChildren = (parentId: string): OrgNode[] => {
+      const childAgents = agentsByReportsTo.get(parentId) || []
+      return childAgents
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+        .map((agent) => ({
+          id: agent.id,
+          type: 'agent' as const,
+          name: agent.alias,
+          title: agent.agentType,
+          avatar: agent.avatar,
+          agent,
+          children: buildChildren(agent.id),
+        }))
     }
+
+    root.children = buildChildren(root.id)
 
     return root
   }, [agents, currentUserId, currentUserName])

@@ -135,7 +135,9 @@ export interface AgentPersona extends BaseEntity {
   avatar?: string
   description?: string
 
-  // Hierarchy
+  // Hierarchy - determines org chart structure
+  // reportsTo.type = 'user' means reports to human owner
+  // reportsTo.type = 'agent' means reports to another agent (e.g., orchestrator)
   reportsTo?: {
     id: string
     type: 'agent' | 'user'
