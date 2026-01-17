@@ -15,6 +15,8 @@ import { UserMenu } from '@/components/Auth/UserMenu'
 import { SyncStatusIndicator } from '@/components/Sync/SyncStatusIndicator'
 import { AgentPMPage } from '@/components/AgentPM'
 import { SettingsPage } from '@/components/Settings/SettingsPage'
+import { AccountSwitcher } from '@/components/AccountSwitcher/AccountSwitcher'
+// AcceptInvitation component available at: @/components/Auth/AcceptInvitation
 import { Loader2 } from 'lucide-react'
 import {
   PanelLeftClose,
@@ -345,7 +347,7 @@ function App() {
         className="flex items-center justify-between px-4 h-14 flex-shrink-0"
         style={{ background: 'var(--fl-color-bg-surface)', borderBottom: '1px solid var(--fl-color-border)' }}
       >
-        {/* Left: Logo and Tool Switcher */}
+        {/* Left: Logo, Account Switcher, and Tool Switcher */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
@@ -353,6 +355,7 @@ function App() {
             </div>
             <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>AgentPM</span>
           </div>
+          <AccountSwitcher compact />
           <ToolSwitcher
             tools={tools}
             activeTool={currentView === 'notes' ? 'notetaker' : currentView === 'settings' ? 'agentpm' : currentView}

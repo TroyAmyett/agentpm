@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AccountWithConfig, AccountType, AccountConfig } from '@/types/agentpm'
 import { supabase } from '@/services/supabase/client'
+import {
+  fetchUserAccounts,
+  createAccount as createAccountService,
+  updateAccount as updateAccountService,
+  deleteAccount as deleteAccountService,
+  ensureUserHasAccount,
+} from '@/services/identity/accounts'
 
 // Default accounts as per PRD
 const DEFAULT_ACCOUNTS: Partial<AccountWithConfig>[] = [
@@ -29,19 +36,26 @@ const DEFAULT_ACCOUNTS: Partial<AccountWithConfig>[] = [
   },
 ]
 
+interface AccountWithRole extends AccountWithConfig {
+  role?: string
+  isPrimary?: boolean
+}
+
 interface AccountState {
   // State
-  accounts: AccountWithConfig[]
+  accounts: AccountWithRole[]
   currentAccountId: string | null
   isLoading: boolean
   error: string | null
 
   // Getters
-  currentAccount: () => AccountWithConfig | null
-  getAccountsByType: (type: AccountType) => AccountWithConfig[]
+  currentAccount: () => AccountWithRole | null
+  getAccountsByType: (type: AccountType) => AccountWithRole[]
+  getUserRole: () => string | null
 
   // Actions
   fetchAccounts: () => Promise<void>
+  initializeUserAccounts: () => Promise<void>
   selectAccount: (accountId: string) => void
   createAccount: (
     account: Omit<AccountWithConfig, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy' | 'createdByType' | 'updatedByType' | 'accountId'>
@@ -55,7 +69,7 @@ interface AccountState {
 export const useAccountStore = create<AccountState>()(
   persist(
     (set, get) => ({
-      accounts: DEFAULT_ACCOUNTS as AccountWithConfig[],
+      accounts: DEFAULT_ACCOUNTS as AccountWithRole[],
       currentAccountId: 'default-funnelists',
       isLoading: false,
       error: null,
@@ -69,6 +83,11 @@ export const useAccountStore = create<AccountState>()(
         return get().accounts.filter((a) => a.type === type)
       },
 
+      getUserRole: () => {
+        const account = get().currentAccount()
+        return account?.role || null
+      },
+
       fetchAccounts: async () => {
         if (!supabase) {
           // Use default accounts if Supabase not configured
@@ -78,53 +97,54 @@ export const useAccountStore = create<AccountState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const { data, error } = await supabase
-            .from('accounts')
-            .select('*')
-            .is('deleted_at', null)
-            .order('name')
-
-          if (error) throw error
-
-          // Convert snake_case to camelCase and merge with defaults
-          const fetchedAccounts = (data || []).map((acc) => ({
-            id: acc.id,
-            accountId: acc.account_id,
-            name: acc.name,
-            slug: acc.slug,
-            status: acc.status,
-            type: acc.type || 'internal',
-            config: acc.config || {},
-            settings: acc.settings,
-            currency: acc.currency,
-            billingEmail: acc.billing_email,
-            stripeCustomerId: acc.stripe_customer_id,
-            plan: acc.plan,
-            planExpiresAt: acc.plan_expires_at,
-            branding: acc.branding,
-            createdAt: acc.created_at,
-            createdBy: acc.created_by,
-            createdByType: acc.created_by_type,
-            updatedAt: acc.updated_at,
-            updatedBy: acc.updated_by,
-            updatedByType: acc.updated_by_type,
-          })) as AccountWithConfig[]
+          // Use the new identity service to fetch user's accounts
+          const userAccounts = await fetchUserAccounts()
 
           // If no accounts fetched, keep defaults
-          const accounts = fetchedAccounts.length > 0 ? fetchedAccounts : DEFAULT_ACCOUNTS as AccountWithConfig[]
+          const accounts = userAccounts.length > 0
+            ? userAccounts as AccountWithRole[]
+            : DEFAULT_ACCOUNTS as AccountWithRole[]
+
+          // Find primary account or first account
+          const primaryAccount = userAccounts.find((a) => (a as AccountWithRole).isPrimary) || userAccounts[0]
+          const currentId = get().currentAccountId
 
           set({
             accounts,
             isLoading: false,
-            // Select first account if current one doesn't exist
-            currentAccountId: get().currentAccountId && accounts.some((a) => a.id === get().currentAccountId)
-              ? get().currentAccountId
-              : accounts[0]?.id || null,
+            // Select primary account if current one doesn't exist
+            currentAccountId: currentId && accounts.some((a) => a.id === currentId)
+              ? currentId
+              : primaryAccount?.id || accounts[0]?.id || null,
           })
+        } catch (error) {
+          // Fallback to default accounts on error
+          set({
+            accounts: DEFAULT_ACCOUNTS as AccountWithRole[],
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Failed to fetch accounts',
+          })
+        }
+      },
+
+      initializeUserAccounts: async () => {
+        if (!supabase) return
+
+        set({ isLoading: true, error: null })
+
+        try {
+          // Ensure user has at least one account
+          const account = await ensureUserHasAccount()
+
+          // Refresh the accounts list
+          await get().fetchAccounts()
+
+          // Select the account
+          set({ currentAccountId: account.id })
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to fetch accounts',
+            error: error instanceof Error ? error.message : 'Failed to initialize accounts',
           })
         }
       },
@@ -139,7 +159,7 @@ export const useAccountStore = create<AccountState>()(
       createAccount: async (accountData) => {
         if (!supabase) {
           // Create locally if Supabase not configured
-          const newAccount: AccountWithConfig = {
+          const newAccount: AccountWithRole = {
             ...accountData,
             id: `local-${Date.now()}`,
             accountId: `local-${Date.now()}`,
@@ -149,6 +169,7 @@ export const useAccountStore = create<AccountState>()(
             updatedAt: new Date().toISOString(),
             updatedBy: 'local-user',
             updatedByType: 'user',
+            role: 'owner',
           }
           set((state) => ({
             accounts: [...state.accounts, newAccount],
@@ -159,45 +180,20 @@ export const useAccountStore = create<AccountState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const { data: userData } = await supabase.auth.getUser()
-          const userId = userData.user?.id
+          const newAccount = await createAccountService({
+            name: accountData.name,
+            slug: accountData.slug,
+            type: accountData.type,
+            config: accountData.config,
+          })
 
-          const { data, error } = await supabase
-            .from('accounts')
-            .insert({
-              name: accountData.name,
-              slug: accountData.slug,
-              status: accountData.status || 'active',
-              type: accountData.type,
-              config: accountData.config || {},
-              created_by: userId,
-              created_by_type: 'user',
-              updated_by: userId,
-              updated_by_type: 'user',
-            })
-            .select()
-            .single()
-
-          if (error) throw error
-
-          const newAccount: AccountWithConfig = {
-            id: data.id,
-            accountId: data.account_id,
-            name: data.name,
-            slug: data.slug,
-            status: data.status,
-            type: data.type,
-            config: data.config,
-            createdAt: data.created_at,
-            createdBy: data.created_by,
-            createdByType: data.created_by_type,
-            updatedAt: data.updated_at,
-            updatedBy: data.updated_by,
-            updatedByType: data.updated_by_type,
+          const accountWithRole: AccountWithRole = {
+            ...newAccount,
+            role: 'owner',
           }
 
           set((state) => ({
-            accounts: [...state.accounts, newAccount],
+            accounts: [...state.accounts, accountWithRole],
             isLoading: false,
           }))
 
@@ -225,23 +221,14 @@ export const useAccountStore = create<AccountState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const { data: userData } = await supabase.auth.getUser()
-          const userId = userData.user?.id
-
-          const { error } = await supabase
-            .from('accounts')
-            .update({
-              name: updates.name,
-              slug: updates.slug,
-              status: updates.status,
-              type: updates.type,
-              config: updates.config,
-              updated_by: userId,
-              updated_by_type: 'user',
-            })
-            .eq('id', accountId)
-
-          if (error) throw error
+          await updateAccountService(accountId, {
+            name: updates.name,
+            slug: updates.slug,
+            status: updates.status,
+            type: updates.type,
+            config: updates.config,
+            billingEmail: updates.billingEmail,
+          })
 
           set((state) => ({
             accounts: state.accounts.map((a) =>
@@ -289,20 +276,7 @@ export const useAccountStore = create<AccountState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const { data: userData } = await supabase.auth.getUser()
-          const userId = userData.user?.id
-
-          // Soft delete
-          const { error } = await supabase
-            .from('accounts')
-            .update({
-              deleted_at: new Date().toISOString(),
-              deleted_by: userId,
-              deleted_by_type: 'user',
-            })
-            .eq('id', accountId)
-
-          if (error) throw error
+          await deleteAccountService(accountId)
 
           set((state) => ({
             accounts: state.accounts.filter((a) => a.id !== accountId),

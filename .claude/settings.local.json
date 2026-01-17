@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(dir \"C:\\\\Users\\\\troy\\\\Box\\\\Funnelists\\\\Development\\\\claude vs code\\\\Notetaker\")",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(dir /s /b *.ts *.tsx *.js *.jsx)",
+      "Bash(findstr:*)",
+      "Bash(tree:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Bash(dir /s \"c:\\\\Users\\\\troy\\\\Box\\\\Funnelists\\\\Development\\\\claude vs code\\\\Notetaker\\\\src\")",
+      "Bash(dir \"C:\\\\Users\\\\troy\\\\Downloads\\\\Mds\")",
+      "Bash(dir \"C:\\\\Users\\\\troy\\\\Downloads\" /b)",
+      "Bash(awk:*)",
+      "Read(//c/dev/notetaker/**)",
+      "Bash(dir /b C:dev)",
+      "Bash(npx tsc:*)",
+      "Bash(dir \"c:\\\\dev\\\\funnelists\\\\notetaker\")",
+      "Bash(dir \"c:\\\\dev\\\\funnelists\\\\notetaker\\\\src\")",
+      "Bash(dir \"c:\\\\dev\\\\funnelists\\\\notetaker\\\\supabase\")",
+      "Bash(dir:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(timeout:*)",
+      "Read(//c/**)",
+      "Bash(npx supabase:*)",
+      "Bash(supabase db push:*)",
+      "Bash(openssl rand:*)"
+    ]
+  }
+}

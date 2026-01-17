@@ -158,13 +158,20 @@ export function ApiKeysManager({ userId }: ApiKeysManagerProps) {
                     onChange={(e) => setNewKeyProvider(e.target.value as Provider)}
                     className="w-full px-3 py-2 rounded-lg text-sm"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      background: 'var(--fl-color-bg-elevated, #1a1a24)',
                       border: '1px solid var(--fl-color-border)',
                       color: 'var(--fl-color-text-primary)',
                     }}
                   >
                     {Object.entries(PROVIDERS).map(([key, { name, icon }]) => (
-                      <option key={key} value={key}>
+                      <option
+                        key={key}
+                        value={key}
+                        style={{
+                          background: 'var(--fl-color-bg-elevated, #1a1a24)',
+                          color: 'var(--fl-color-text-primary, #e5e5e5)',
+                        }}
+                      >
                         {icon} {name}
                       </option>
                     ))}

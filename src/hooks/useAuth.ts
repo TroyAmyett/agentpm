@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotesStore } from '@/stores/notesStore'
 import { useSyncStore } from '@/stores/syncStore'
+import { useAccountStore } from '@/stores/accountStore'
 import * as db from '@/services/supabase/database'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
@@ -17,6 +18,7 @@ export function useAuth() {
     handleRemoteFolderDelete,
   } = useNotesStore()
   const { setOnline, clearQueue } = useSyncStore()
+  const { initializeUserAccounts } = useAccountStore()
 
   const channelsRef = useRef<RealtimeChannel[]>([])
   const hasLoadedRef = useRef(false)
@@ -61,6 +63,11 @@ export function useAuth() {
       hasLoadedRef.current = true
 
       setAuthState(user.id)
+
+      // Initialize user accounts (creates default account if needed)
+      initializeUserAccounts().catch((err) => {
+        console.error('Failed to initialize accounts:', err)
+      })
 
       // Load data from Supabase, then check for local data to migrate
       loadFromSupabase(user.id).then(() => {

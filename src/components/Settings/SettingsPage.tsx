@@ -3,11 +3,13 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Key, User, Bell, Shield, ArrowLeft } from 'lucide-react'
+import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench } from 'lucide-react'
 import { ApiKeysManager } from './ApiKeysManager'
+import { AccountSettings } from './AccountSettings'
+import { ToolsManager } from '@/components/Admin/ToolsManager'
 import { useAuthStore } from '@/stores/authStore'
 
-type SettingsTab = 'api-keys' | 'profile' | 'notifications' | 'security'
+type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'notifications' | 'security' | 'admin-tools'
 
 interface SettingsPageProps {
   onBack?: () => void
@@ -19,9 +21,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   const tabs = [
     { id: 'api-keys' as const, label: 'API Keys', icon: Key },
+    { id: 'accounts' as const, label: 'Accounts', icon: Building2 },
     { id: 'profile' as const, label: 'Profile', icon: User },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'security' as const, label: 'Security', icon: Shield },
+    { id: 'admin-tools' as const, label: 'Tools (Admin)', icon: Wrench, admin: true },
   ]
 
   return (
@@ -92,6 +96,10 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               <ApiKeysManager userId={user.id} />
             )}
 
+            {activeTab === 'accounts' && (
+              <AccountSettings />
+            )}
+
             {activeTab === 'profile' && (
               <ProfileSettings />
             )}
@@ -102,6 +110,10 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
             {activeTab === 'security' && (
               <SecuritySettings />
+            )}
+
+            {activeTab === 'admin-tools' && (
+              <ToolsManager />
             )}
           </motion.div>
         </div>
