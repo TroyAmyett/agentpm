@@ -173,7 +173,12 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-6 z-50 bg-white dark:bg-surface-800 rounded-lg shadow-lg border border-surface-200 dark:border-surface-700 py-1 min-w-[160px]"
+                  className="absolute right-0 top-6 z-50 rounded-lg shadow-lg py-1 min-w-[160px]"
+                  style={{
+                    background: 'var(--fl-color-bg-elevated, #1a1a24)',
+                    border: '1px solid var(--fl-color-border, rgba(255,255,255,0.1))',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+                  }}
                 >
                   <button
                     onClick={(e) => {
@@ -182,7 +187,7 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                       if (!isExpanded) toggleFolderExpanded(folder.id)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50 dark:hover:bg-surface-700"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                   >
                     <FolderPlus size={14} />
                     New Subfolder
@@ -194,19 +199,19 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                       if (!isExpanded) toggleFolderExpanded(folder.id)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50 dark:hover:bg-surface-700"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                   >
                     <Plus size={14} />
                     New Note
                   </button>
-                  <div className="h-px bg-surface-200 dark:bg-surface-700 my-1" />
+                  <div className="h-px bg-white/10 my-1" />
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       setIsRenaming(true)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50 dark:hover:bg-surface-700"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                   >
                     <Pencil size={14} />
                     Rename
@@ -217,12 +222,12 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                       onExportFolder(folder.id)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50 dark:hover:bg-surface-700"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                   >
                     <Download size={14} />
                     Export Folder
                   </button>
-                  <div className="h-px bg-surface-200 dark:bg-surface-700 my-1" />
+                  <div className="h-px bg-white/10 my-1" />
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -231,7 +236,7 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                       }
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-900/20"
                   >
                     <Trash2 size={14} />
                     Delete
@@ -323,7 +328,12 @@ function NoteItem({ note, depth }: NoteItemProps) {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="absolute right-0 top-6 z-50 bg-white dark:bg-surface-800 rounded-lg shadow-lg border border-surface-200 dark:border-surface-700 py-1 min-w-[140px]"
+                className="absolute right-0 top-6 z-50 rounded-lg shadow-lg py-1 min-w-[140px]"
+                style={{
+                  background: 'var(--fl-color-bg-elevated, #1a1a24)',
+                  border: '1px solid var(--fl-color-border, rgba(255,255,255,0.1))',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+                }}
               >
                 <button
                   onClick={(e) => {
@@ -331,7 +341,7 @@ function NoteItem({ note, depth }: NoteItemProps) {
                     moveNoteToFolder(note.id, null)
                     setMenuOpen(false)
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50 dark:hover:bg-surface-700"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                 >
                   <Folder size={14} />
                   Move to Root
@@ -342,7 +352,7 @@ function NoteItem({ note, depth }: NoteItemProps) {
                     deleteNote(note.id)
                     setMenuOpen(false)
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-900/20"
                 >
                   <Trash2 size={14} />
                   Delete
