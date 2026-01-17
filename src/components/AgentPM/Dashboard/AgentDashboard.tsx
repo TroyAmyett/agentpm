@@ -10,10 +10,6 @@ import {
   RefreshCw,
   Search,
   Bot,
-  ListTodo,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   TrendingUp,
   TrendingDown,
   Play,
@@ -26,7 +22,7 @@ import {
 } from 'lucide-react'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore, selectTaskCounts } from '@/stores/taskStore'
-import { AgentCard, AgentCardCompact } from '../Agents'
+import { AgentCard } from '../Agents'
 
 type ViewMode = 'grid' | 'list'
 
@@ -37,7 +33,9 @@ interface AgentDashboardProps {
 }
 
 // Color mapping for KPI states
-const kpiColors = {
+type KpiStatus = 'good' | 'warning' | 'critical' | 'neutral'
+
+const kpiColors: Record<KpiStatus, { bg: string; border: string; text: string }> = {
   good: { bg: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.3)', text: '#22c55e' },
   warning: { bg: 'rgba(250, 204, 21, 0.15)', border: 'rgba(250, 204, 21, 0.3)', text: '#facc15' },
   critical: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444' },
@@ -91,10 +89,6 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         taskDate.toDateString() === today.toDateString()
     }).length
 
-    const errorRate = taskCounts.failed > 0
-      ? ((taskCounts.failed / (taskCounts.completed + taskCounts.failed)) * 100).toFixed(1)
-      : '0'
-
     return [
       {
         label: 'Active Agents',
@@ -102,7 +96,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         change: `/${totalAgents}`,
         trend: 'up' as const,
         color: 'cyan',
-        kpiStatus: activeAgents > 0 ? 'good' : 'warning' as const
+        kpiStatus: (activeAgents > 0 ? 'good' : 'warning') as KpiStatus
       },
       {
         label: 'Tasks Completed',
@@ -110,7 +104,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         change: `+${completedToday} today`,
         trend: 'up' as const,
         color: 'green',
-        kpiStatus: 'good' as const
+        kpiStatus: 'good' as KpiStatus
       },
       {
         label: 'In Progress',
@@ -118,7 +112,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         change: `${taskCounts.queued} queued`,
         trend: 'up' as const,
         color: 'yellow',
-        kpiStatus: taskCounts.inProgress > 5 ? 'warning' : 'good' as const
+        kpiStatus: (taskCounts.inProgress > 5 ? 'warning' : 'good') as KpiStatus
       },
       {
         label: 'Pending Review',
@@ -126,7 +120,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         change: 'needs attention',
         trend: taskCounts.review > 0 ? 'down' : 'up' as const,
         color: 'orange',
-        kpiStatus: taskCounts.review > 3 ? 'critical' : taskCounts.review > 0 ? 'warning' : 'good' as const
+        kpiStatus: (taskCounts.review > 3 ? 'critical' : taskCounts.review > 0 ? 'warning' : 'good') as KpiStatus
       },
     ]
   }, [agents, tasks, taskCounts])
@@ -536,7 +530,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
                           {agent.alias}
                         </p>
                         <p className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
-                          {agent.taskCount || 0} tasks
+                          {agent.stats?.tasksCompleted || 0} tasks
                         </p>
                       </div>
                       <div
