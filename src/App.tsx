@@ -16,6 +16,7 @@ import { SyncStatusIndicator } from '@/components/Sync/SyncStatusIndicator'
 import { AgentPMPage } from '@/components/AgentPM'
 import { SettingsPage } from '@/components/Settings/SettingsPage'
 import { AccountSwitcher } from '@/components/AccountSwitcher/AccountSwitcher'
+import { RadarPage } from '@/components/Radar'
 // AcceptInvitation component available at: @/components/Auth/AcceptInvitation
 import { Loader2 } from 'lucide-react'
 import {
@@ -30,23 +31,53 @@ import {
   Palette,
   Users,
   Settings,
+  Radio,
 } from 'lucide-react'
 
-type AppView = 'notes' | 'agentpm' | 'canvas' | 'leadgen' | 'settings'
+// Helper to get app URLs based on environment
+function getAppUrl(app: string): string {
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+  const devPorts: Record<string, number> = {
+    agentpm: 3000,
+    radar: 3001,
+    notetaker: 3000, // same as agentpm - it's the same app
+    canvas: 3003,
+    leadgen: 3004,
+  }
+
+  const prodDomains: Record<string, string> = {
+    agentpm: 'agentpm.funnelists.com',
+    radar: 'radar.funnelists.com',
+    notetaker: 'notetaker.funnelists.com',
+    canvas: 'canvas.funnelists.com',
+    leadgen: 'leadgen.funnelists.com',
+  }
+
+  if (isDev) {
+    return `http://localhost:${devPorts[app] || 3000}`
+  }
+
+  return `https://${prodDomains[app] || 'funnelists.com'}`
+}
+
+type AppView = 'notes' | 'agentpm' | 'radar' | 'canvas' | 'leadgen' | 'settings'
 
 interface Tool {
   id: string
   name: string
   icon: React.ReactNode
   description?: string
+  href?: string
   comingSoon?: boolean
 }
 
 const tools: Tool[] = [
   { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'AI project management' },
+  { id: 'radar', name: 'Radar', icon: <Radio size={18} />, description: 'Intelligence feed' },
   { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'Brainstorming & ideation' },
-  { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, description: 'AI design & visuals', comingSoon: true },
-  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', comingSoon: true },
+  { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, description: 'AI design & visuals', href: getAppUrl('canvas'), comingSoon: true },
+  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', href: getAppUrl('leadgen') },
 ]
 
 // Inline ToolSwitcher component
@@ -76,10 +107,13 @@ function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; acti
               <button
                 key={tool.id}
                 onClick={() => {
-                  if (!tool.comingSoon) {
+                  if (tool.comingSoon) return
+                  if (tool.href) {
+                    window.location.href = tool.href
+                  } else {
                     onToolChange(tool.id)
-                    setIsOpen(false)
                   }
+                  setIsOpen(false)
                 }}
                 disabled={tool.comingSoon}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
@@ -333,12 +367,48 @@ function App() {
     const viewMap: Record<string, AppView> = {
       'notetaker': 'notes',
       'agentpm': 'agentpm',
+      'radar': 'radar',
       'canvas': 'canvas',
       'leadgen': 'leadgen',
       'settings': 'settings',
     }
     setCurrentView(viewMap[toolId] || 'notes')
   }
+
+  // Handler for creating a task from Radar content
+  const handleRadarCreateTask = useCallback((title: string, description: string) => {
+    // Switch to AgentPM and trigger task creation
+    setCurrentView('agentpm')
+    // Store the task info to be picked up by AgentPMPage
+    // We'll use a simple event or query param approach
+    sessionStorage.setItem('pendingTask', JSON.stringify({ title, description }))
+    // Dispatch a custom event that AgentPMPage can listen for
+    window.dispatchEvent(new CustomEvent('createTaskFromRadar', { detail: { title, description } }))
+  }, [])
+
+  // Handler for saving content to notes from Radar
+  const handleRadarSaveToNotes = useCallback((title: string, content: string) => {
+    // Create a new note with the content
+    addNote({
+      title,
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 1 },
+            content: [{ type: 'text', text: title }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: content }],
+          },
+        ],
+      },
+    })
+    // Switch to notes view
+    setCurrentView('notes')
+  }, [addNote])
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)' }}>
@@ -358,7 +428,7 @@ function App() {
           <AccountSwitcher compact />
           <ToolSwitcher
             tools={tools}
-            activeTool={currentView === 'notes' ? 'notetaker' : currentView === 'settings' ? 'agentpm' : currentView}
+            activeTool={currentView === 'notes' ? 'notetaker' : currentView === 'settings' ? 'agentpm' : currentView === 'radar' ? 'radar' : currentView}
             onToolChange={handleToolChange}
           />
         </div>
@@ -427,6 +497,12 @@ function App() {
             </div>
           )}
           {currentView === 'agentpm' && <AgentPMPage />}
+          {currentView === 'radar' && (
+            <RadarPage
+              onCreateTask={handleRadarCreateTask}
+              onSaveToNotes={handleRadarSaveToNotes}
+            />
+          )}
           {currentView === 'settings' && (
             <SettingsPage onBack={() => setCurrentView('notes')} />
           )}
