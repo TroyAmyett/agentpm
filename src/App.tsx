@@ -376,7 +376,7 @@ function App() {
   }
 
   // Handler for creating a task from Radar content
-  const handleRadarCreateTask = useCallback((title: string, description: string) => {
+  const handleRadarCreateTask = (title: string, description: string) => {
     // Switch to AgentPM and trigger task creation
     setCurrentView('agentpm')
     // Store the task info to be picked up by AgentPMPage
@@ -384,10 +384,10 @@ function App() {
     sessionStorage.setItem('pendingTask', JSON.stringify({ title, description }))
     // Dispatch a custom event that AgentPMPage can listen for
     window.dispatchEvent(new CustomEvent('createTaskFromRadar', { detail: { title, description } }))
-  }, [])
+  }
 
   // Handler for saving content to notes from Radar
-  const handleRadarSaveToNotes = useCallback((title: string, content: string) => {
+  const handleRadarSaveToNotes = (title: string, content: string) => {
     // Create a new note with the content
     addNote({
       title,
@@ -408,7 +408,7 @@ function App() {
     })
     // Switch to notes view
     setCurrentView('notes')
-  }, [addNote])
+  }
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)' }}>
