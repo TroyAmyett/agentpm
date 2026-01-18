@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, RefreshCw, Rss, Bookmark, Users, Plus, Trash2, Pencil, ExternalLink, Youtube, Twitter, Flame, Save } from 'lucide-react'
+import { Search, RefreshCw, Rss, Bookmark, Users, Plus, Trash2, Pencil, ExternalLink, Youtube, Twitter, Flame, Save, Palette, Mail, Clock, Settings } from 'lucide-react'
 import type { Topic, Source, Advisor, ContentItemWithInteraction, ContentType, DeepDiveAnalysis } from '@/types/radar'
 import * as radarService from '@/services/radar'
+import type { DigestPreferences } from '@/services/radar/radarService'
 import { CardStream } from './CardStream'
 import { TopicFilter } from './TopicFilter'
 import { ContentTypeFilter } from './ContentTypeFilter'
 import { DeepDiveModal, AddSourceModal } from './modals'
 import { RadarSidebar, type RadarTab } from './RadarSidebar'
 import { formatDistanceToNow } from 'date-fns'
+
+const iconOptions = ['bot', 'sparkles', 'link', 'users', 'play', 'globe', 'code', 'database']
+const colorOptions = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
 
 interface RadarPageProps {
   onCreateTask?: (title: string, description: string) => void
@@ -34,6 +38,30 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
   const [deepDiveItem, setDeepDiveItem] = useState<ContentItemWithInteraction | null>(null)
   const [deepDiveAnalysis, setDeepDiveAnalysis] = useState<DeepDiveAnalysis | null>(null)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+
+  // Settings - Topics
+  const [newTopicName, setNewTopicName] = useState('')
+  const [newTopicColor, setNewTopicColor] = useState('#0ea5e9')
+  const [newTopicIcon, setNewTopicIcon] = useState('sparkles')
+  const [isAddingTopic, setIsAddingTopic] = useState(false)
+  const [editingTopic, setEditingTopic] = useState<Topic | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editColor, setEditColor] = useState('')
+  const [editIcon, setEditIcon] = useState('')
+  const [isUpdatingTopic, setIsUpdatingTopic] = useState(false)
+
+  // Settings - Digest Preferences
+  const [digestPrefs, setDigestPrefs] = useState<DigestPreferences>({
+    digest_enabled: true,
+    digest_frequency: 'daily',
+    digest_time: '06:00',
+    digest_timezone: 'America/New_York',
+    digest_topics: [],
+    email_address: null,
+  })
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false)
+  const [prefsSaved, setPrefsSaved] = useState(false)
+  const [settingsLoading, setSettingsLoading] = useState(false)
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -79,6 +107,31 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
     }
   }, [searchQuery])
 
+  const fetchSettings = useCallback(async () => {
+    setSettingsLoading(true)
+    try {
+      const [topicsData, prefsData] = await Promise.all([
+        radarService.fetchTopics(),
+        radarService.fetchPreferences(),
+      ])
+      setTopics(topicsData)
+      if (prefsData) {
+        setDigestPrefs({
+          digest_enabled: prefsData.digest_enabled ?? true,
+          digest_frequency: prefsData.digest_frequency || 'daily',
+          digest_time: prefsData.digest_time?.substring(0, 5) || '06:00',
+          digest_timezone: prefsData.digest_timezone || 'America/New_York',
+          digest_topics: prefsData.digest_topics || [],
+          email_address: prefsData.email_address || null,
+        })
+      }
+    } catch (error) {
+      console.error('Failed to fetch settings:', error)
+    } finally {
+      setSettingsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (activeTab === 'dashboard') {
       fetchData()
@@ -89,8 +142,10 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
     } else if (activeTab === 'experts') {
       radarService.fetchAdvisors().then(setAdvisors)
       radarService.fetchTopics().then(setTopics)
+    } else if (activeTab === 'settings') {
+      fetchSettings()
     }
-  }, [activeTab, fetchData, fetchSources, fetchSavedItems])
+  }, [activeTab, fetchData, fetchSources, fetchSavedItems, fetchSettings])
 
   // Content type filter
   const filteredItems = useMemo(() => {
@@ -281,6 +336,99 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
     if (!confirm('Are you sure you want to unfollow this expert?')) return
     await radarService.deleteAdvisor(id)
     setAdvisors((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  // Topic management
+  const handleAddTopic = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newTopicName.trim()) return
+
+    setIsAddingTopic(true)
+    try {
+      const newTopic = await radarService.createTopic({
+        name: newTopicName,
+        color: newTopicColor,
+        icon: newTopicIcon,
+      })
+      if (newTopic) {
+        setTopics((prev) => [...prev, newTopic])
+        setNewTopicName('')
+      }
+    } catch (error) {
+      console.error('Failed to add topic:', error)
+    } finally {
+      setIsAddingTopic(false)
+    }
+  }
+
+  const handleEditTopic = (topic: Topic) => {
+    setEditingTopic(topic)
+    setEditName(topic.name)
+    setEditColor(topic.color || '#0ea5e9')
+    setEditIcon(topic.icon || 'sparkles')
+  }
+
+  const handleUpdateTopic = async () => {
+    if (!editingTopic || !editName.trim()) return
+
+    setIsUpdatingTopic(true)
+    try {
+      const updatedTopic = await radarService.updateTopic(editingTopic.id, {
+        name: editName,
+        color: editColor,
+        icon: editIcon,
+      })
+      if (updatedTopic) {
+        setTopics((prev) =>
+          prev.map((t) => (t.id === updatedTopic.id ? updatedTopic : t))
+        )
+        setEditingTopic(null)
+      }
+    } catch (error) {
+      console.error('Failed to update topic:', error)
+    } finally {
+      setIsUpdatingTopic(false)
+    }
+  }
+
+  const handleDeleteTopic = async (topicId: string) => {
+    if (!confirm('Are you sure you want to delete this topic? This will unlink all associated content.')) {
+      return
+    }
+
+    try {
+      await radarService.deleteTopic(topicId)
+      setTopics((prev) => prev.filter((t) => t.id !== topicId))
+    } catch (error) {
+      console.error('Failed to delete topic:', error)
+    }
+  }
+
+  // Digest preferences
+  const handleSaveDigestPrefs = async () => {
+    setIsSavingPrefs(true)
+    setPrefsSaved(false)
+    try {
+      await radarService.savePreferences({
+        ...digestPrefs,
+        digest_time: digestPrefs.digest_time + ':00',
+      })
+      setPrefsSaved(true)
+      setTimeout(() => setPrefsSaved(false), 3000)
+    } catch (error) {
+      console.error('Failed to save preferences:', error)
+    } finally {
+      setIsSavingPrefs(false)
+    }
+  }
+
+  const toggleTopicInDigest = (topicSlug: string) => {
+    setDigestPrefs((prev) => ({
+      ...prev,
+      digest_topics: prev.digest_topics.includes(topicSlug)
+        ? prev.digest_topics.filter((t) => t !== topicSlug)
+        : [...prev.digest_topics, topicSlug],
+    }))
   }
 
   const typeIcons: Record<string, React.ComponentType<any>> = { rss: Rss, youtube: Youtube, twitter: Twitter }
@@ -609,93 +757,370 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
           {activeTab === 'settings' && (
             <>
               <div className="mb-6">
-                <h1 className="text-2xl font-semibold">Radar Settings</h1>
-                <p className="text-white/60 mt-1">
-                  Configure your content preferences and notifications
-                </p>
+                <h1 className="text-2xl font-semibold">Settings</h1>
+                <p className="text-white/60 mt-1">Manage your topics and preferences</p>
               </div>
 
-              <div className="max-w-2xl space-y-6">
-                {/* Refresh Settings */}
-                <div className="radar-glass-card p-6">
-                  <h2 className="text-lg font-semibold mb-4">Content Refresh</h2>
+              <div className="max-w-2xl">
+                {/* Topics Section */}
+                <section className="radar-glass-card p-6 mb-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 rounded-lg bg-[#0ea5e9]/20">
+                      <Palette className="w-5 h-5 text-[#0ea5e9]" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold">Topics</h2>
+                      <p className="text-white/60 text-sm">
+                        Organize your content with custom topics
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Add Topic Form */}
+                  <form onSubmit={handleAddTopic} className="mb-6 p-4 rounded-lg bg-white/5">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm text-white/60 mb-2">Name</label>
+                        <input
+                          type="text"
+                          value={newTopicName}
+                          onChange={(e) => setNewTopicName(e.target.value)}
+                          placeholder="Topic name"
+                          className="radar-glass-input w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-white/60 mb-2">Color</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {colorOptions.map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => setNewTopicColor(color)}
+                              className={`w-8 h-8 rounded-full transition-transform ${
+                                newTopicColor === color ? 'scale-110 ring-2 ring-white' : ''
+                              }`}
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-white/60 mb-2">Icon</label>
+                        <select
+                          value={newTopicIcon}
+                          onChange={(e) => setNewTopicIcon(e.target.value)}
+                          className="radar-glass-input w-full"
+                        >
+                          {iconOptions.map((icon) => (
+                            <option key={icon} value={icon}>
+                              {icon}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isAddingTopic || !newTopicName.trim()}
+                      className="radar-glass-button flex items-center gap-2 bg-[#0ea5e9] hover:bg-[#0ea5e9]/80 disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{isAddingTopic ? 'Adding...' : 'Add Topic'}</span>
+                    </button>
+                  </form>
+
+                  {/* Topics List */}
+                  {settingsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {topics.map((topic) => (
+                        <div key={topic.id}>
+                          {editingTopic?.id === topic.id ? (
+                            // Edit Mode
+                            <div className="p-4 rounded-lg bg-white/10 border border-[#0ea5e9]/50">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm text-white/60 mb-2">Name</label>
+                                  <input
+                                    type="text"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="radar-glass-input w-full"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm text-white/60 mb-2">Color</label>
+                                  <div className="flex gap-2 flex-wrap">
+                                    {colorOptions.map((color) => (
+                                      <button
+                                        key={color}
+                                        type="button"
+                                        onClick={() => setEditColor(color)}
+                                        className={`w-8 h-8 rounded-full transition-transform ${
+                                          editColor === color ? 'scale-110 ring-2 ring-white' : ''
+                                        }`}
+                                        style={{ backgroundColor: color }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm text-white/60 mb-2">Icon</label>
+                                  <select
+                                    value={editIcon}
+                                    onChange={(e) => setEditIcon(e.target.value)}
+                                    className="radar-glass-input w-full"
+                                  >
+                                    {iconOptions.map((icon) => (
+                                      <option key={icon} value={icon}>
+                                        {icon}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleUpdateTopic}
+                                  disabled={isUpdatingTopic || !editName.trim()}
+                                  className="px-4 py-2 bg-[#0ea5e9] text-white rounded-lg hover:bg-[#0ea5e9]/80 disabled:opacity-50"
+                                >
+                                  {isUpdatingTopic ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => setEditingTopic(null)}
+                                  className="px-4 py-2 radar-glass-button"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            // View Mode
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 group hover:bg-white/10 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: topic.color || '#0ea5e9' }}
+                                />
+                                <span className="font-medium">{topic.name}</span>
+                                {topic.is_default && (
+                                  <span className="text-xs text-white/40 px-2 py-0.5 rounded bg-white/10">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => handleEditTopic(topic)}
+                                  className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white"
+                                  title="Edit topic"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTopic(topic.id)}
+                                  className="p-2 rounded-lg hover:bg-red-500/20 text-white/60 hover:text-red-400"
+                                  title="Delete topic"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Email Digest Section */}
+                <section className="radar-glass-card p-6 mb-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 rounded-lg bg-purple-500/20">
+                      <Mail className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold">Email Digests</h2>
+                      <p className="text-white/60 text-sm">
+                        Get daily or weekly summaries delivered to your inbox
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    {/* Enable/Disable */}
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
+                      <div>
+                        <p className="font-medium">Enable Email Digests</p>
+                        <p className="text-white/60 text-sm">
+                          Receive curated content summaries by email
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={digestPrefs.digest_enabled}
+                          onChange={(e) =>
+                            setDigestPrefs((p) => ({ ...p, digest_enabled: e.target.checked }))
+                          }
+                        />
+                        <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0ea5e9]"></div>
+                      </label>
+                    </div>
+
+                    {digestPrefs.digest_enabled && (
+                      <>
+                        {/* Email Address */}
+                        <div className="p-4 rounded-lg bg-white/5">
+                          <label className="block text-sm font-medium mb-2">Email Address</label>
+                          <input
+                            type="email"
+                            value={digestPrefs.email_address || ''}
+                            onChange={(e) =>
+                              setDigestPrefs((p) => ({ ...p, email_address: e.target.value }))
+                            }
+                            placeholder="your@email.com"
+                            className="radar-glass-input w-full"
+                          />
+                        </div>
+
+                        {/* Frequency */}
+                        <div className="p-4 rounded-lg bg-white/5">
+                          <label className="block text-sm font-medium mb-2">Frequency</label>
+                          <div className="flex gap-2">
+                            {(['daily', 'weekly', 'both'] as const).map((freq) => (
+                              <button
+                                key={freq}
+                                type="button"
+                                onClick={() => setDigestPrefs((p) => ({ ...p, digest_frequency: freq }))}
+                                className={`flex-1 py-2 px-4 rounded-lg transition-all ${
+                                  digestPrefs.digest_frequency === freq
+                                    ? 'bg-[#0ea5e9] text-white'
+                                    : 'radar-glass-button text-white/70'
+                                }`}
+                              >
+                                {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time */}
+                        <div className="p-4 rounded-lg bg-white/5">
+                          <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            Delivery Time
+                          </label>
+                          <input
+                            type="time"
+                            value={digestPrefs.digest_time}
+                            onChange={(e) =>
+                              setDigestPrefs((p) => ({ ...p, digest_time: e.target.value }))
+                            }
+                            className="radar-glass-input w-full"
+                          />
+                          <p className="text-white/40 text-xs mt-2">
+                            Timezone: {digestPrefs.digest_timezone}
+                          </p>
+                        </div>
+
+                        {/* Topics to Include */}
+                        <div className="p-4 rounded-lg bg-white/5">
+                          <label className="block text-sm font-medium mb-2">
+                            Topics to Include (leave empty for all)
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {topics.map((topic) => (
+                              <button
+                                key={topic.id}
+                                type="button"
+                                onClick={() => toggleTopicInDigest(topic.slug)}
+                                className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                                  digestPrefs.digest_topics.includes(topic.slug)
+                                    ? 'text-white'
+                                    : 'bg-white/10 text-white/60'
+                                }`}
+                                style={{
+                                  backgroundColor: digestPrefs.digest_topics.includes(topic.slug)
+                                    ? topic.color || '#0ea5e9'
+                                    : undefined,
+                                }}
+                              >
+                                {topic.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Save Button */}
+                    <button
+                      onClick={handleSaveDigestPrefs}
+                      disabled={isSavingPrefs}
+                      className="w-full py-3 bg-[#0ea5e9] text-white rounded-lg font-medium hover:bg-[#0ea5e9]/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      {isSavingPrefs ? 'Saving...' : prefsSaved ? 'Saved!' : 'Save Digest Preferences'}
+                    </button>
+                  </div>
+                </section>
+
+                {/* Preferences Section */}
+                <section className="radar-glass-card p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 rounded-lg bg-[#0ea5e9]/20">
+                      <Settings className="w-5 h-5 text-[#0ea5e9]" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold">Preferences</h2>
+                      <p className="text-white/60 text-sm">
+                        Customize your experience
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
                       <div>
                         <p className="font-medium">Auto-refresh feeds</p>
-                        <p className="text-sm text-white/50">Automatically check for new content</p>
+                        <p className="text-white/60 text-sm">
+                          Automatically fetch new content periodically
+                        </p>
                       </div>
-                      <button className="px-4 py-2 rounded-lg bg-[#0ea5e9] hover:bg-[#0ea5e9]/80 text-white text-sm font-medium transition-colors">
-                        Enabled
-                      </button>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0ea5e9]"></div>
+                      </label>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Refresh interval</p>
-                        <p className="text-sm text-white/50">How often to check for updates</p>
-                      </div>
-                      <select className="radar-glass-input px-3 py-2 text-sm">
-                        <option value="15">Every 15 minutes</option>
-                        <option value="30">Every 30 minutes</option>
-                        <option value="60">Every hour</option>
-                        <option value="360">Every 6 hours</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Display Settings */}
-                <div className="radar-glass-card p-6">
-                  <h2 className="text-lg font-semibold mb-4">Display</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
                       <div>
-                        <p className="font-medium">Content layout</p>
-                        <p className="text-sm text-white/50">Choose how content is displayed</p>
+                        <p className="font-medium">Show read items</p>
+                        <p className="text-white/60 text-sm">
+                          Display items you've already viewed
+                        </p>
                       </div>
-                      <select className="radar-glass-input px-3 py-2 text-sm">
-                        <option value="stream">Stream</option>
-                        <option value="grid">Grid</option>
-                        <option value="compact">Compact</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Show summaries</p>
-                        <p className="text-sm text-white/50">Display AI-generated content summaries</p>
-                      </div>
-                      <button className="px-4 py-2 rounded-lg bg-[#0ea5e9] hover:bg-[#0ea5e9]/80 text-white text-sm font-medium transition-colors">
-                        Enabled
-                      </button>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0ea5e9]"></div>
+                      </label>
                     </div>
                   </div>
-                </div>
-
-                {/* Data Management */}
-                <div className="radar-glass-card p-6">
-                  <h2 className="text-lg font-semibold mb-4">Data Management</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Clear read history</p>
-                        <p className="text-sm text-white/50">Remove read tracking for all content</p>
-                      </div>
-                      <button className="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 text-white text-sm font-medium transition-colors">
-                        Clear
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Export saved items</p>
-                        <p className="text-sm text-white/50">Download your saved content as JSON</p>
-                      </div>
-                      <button className="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 text-white text-sm font-medium transition-colors flex items-center gap-2">
-                        <Save className="w-4 h-4" />
-                        Export
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                </section>
               </div>
             </>
           )}

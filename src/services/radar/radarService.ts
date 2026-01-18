@@ -58,6 +58,49 @@ export async function createTopic(topic: { name: string; color?: string; icon?: 
   return data
 }
 
+export async function updateTopic(id: string, updates: { name?: string; color?: string; icon?: string }): Promise<Topic | null> {
+  if (!supabase) return null
+
+  const accountId = getAccountId()
+  const updateData: Record<string, any> = { ...updates }
+  if (updates.name) {
+    updateData.slug = updates.name.toLowerCase().replace(/\s+/g, '-')
+  }
+
+  const { data, error } = await supabase
+    .from('topics')
+    .update(updateData)
+    .eq('id', id)
+    .eq('account_id', accountId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating topic:', error)
+    return null
+  }
+
+  return data
+}
+
+export async function deleteTopic(id: string): Promise<boolean> {
+  if (!supabase) return false
+
+  const accountId = getAccountId()
+  const { error } = await supabase
+    .from('topics')
+    .delete()
+    .eq('id', id)
+    .eq('account_id', accountId)
+
+  if (error) {
+    console.error('Error deleting topic:', error)
+    return false
+  }
+
+  return true
+}
+
 // Sources
 export async function fetchSources(): Promise<Source[]> {
   if (!supabase) return []
@@ -529,4 +572,81 @@ export async function lookupSourceUrl(url: string): Promise<any> {
     console.error('Error looking up source:', error)
     throw error
   }
+}
+
+// Digest Preferences
+export interface DigestPreferences {
+  digest_enabled: boolean
+  digest_frequency: 'daily' | 'weekly' | 'both'
+  digest_time: string
+  digest_timezone: string
+  digest_topics: string[]
+  email_address: string | null
+}
+
+export async function fetchPreferences(): Promise<DigestPreferences | null> {
+  if (!supabase) return null
+
+  const accountId = getAccountId()
+  const { data, error } = await supabase
+    .from('digest_preferences')
+    .select('*')
+    .eq('account_id', accountId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching preferences:', error)
+    return null
+  }
+
+  return data || {
+    digest_enabled: true,
+    digest_frequency: 'daily',
+    digest_time: '06:00',
+    digest_timezone: 'America/New_York',
+    digest_topics: [],
+    email_address: null,
+  }
+}
+
+export async function savePreferences(prefs: DigestPreferences): Promise<boolean> {
+  if (!supabase) return false
+
+  const accountId = getAccountId()
+
+  // Check if preferences exist
+  const { data: existing } = await supabase
+    .from('digest_preferences')
+    .select('id')
+    .eq('account_id', accountId)
+    .single()
+
+  if (existing) {
+    const { error } = await supabase
+      .from('digest_preferences')
+      .update({
+        ...prefs,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('account_id', accountId)
+
+    if (error) {
+      console.error('Error updating preferences:', error)
+      return false
+    }
+  } else {
+    const { error } = await supabase
+      .from('digest_preferences')
+      .insert({
+        account_id: accountId,
+        ...prefs,
+      })
+
+    if (error) {
+      console.error('Error creating preferences:', error)
+      return false
+    }
+  }
+
+  return true
 }
