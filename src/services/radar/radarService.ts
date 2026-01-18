@@ -1,6 +1,7 @@
 // Radar service - direct Supabase queries for Radar functionality
 
 import { supabase } from '@/services/supabase/client'
+import { useAccountStore } from '@/stores/accountStore'
 import type {
   Topic,
   Source,
@@ -9,10 +10,16 @@ import type {
 } from '@/types/radar'
 
 // Get account ID from the account store
-function getAccountId(): string {
-  // Import dynamically to avoid circular deps
-  const { useAccountStore } = require('@/stores/accountStore')
-  return useAccountStore.getState().currentAccountId || 'default-account'
+function getAccountId(): string | null {
+  const accountId = useAccountStore.getState().currentAccountId
+
+  // Only return if it's a valid UUID (not the default demo account IDs)
+  if (!accountId || accountId.startsWith('default-')) {
+    console.warn('No valid account ID available. User needs to be logged in.')
+    return null
+  }
+
+  return accountId
 }
 
 // Topics
@@ -20,6 +27,8 @@ export async function fetchTopics(): Promise<Topic[]> {
   if (!supabase) return []
 
   const accountId = getAccountId()
+  if (!accountId) return []
+
   const { data, error } = await supabase
     .from('topics')
     .select('*')
@@ -38,7 +47,9 @@ export async function createTopic(topic: { name: string; color?: string; icon?: 
   if (!supabase) return null
 
   const accountId = getAccountId()
-  const { data, error } = await supabase
+  if (!accountId) return null
+
+  const { data, error} = await supabase
     .from('topics')
     .insert({
       account_id: accountId,
