@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, RefreshCw, Rss, Bookmark, Users, Plus, Trash2, Pencil, ExternalLink, Youtube, Twitter } from 'lucide-react'
+import { Search, RefreshCw, Rss, Bookmark, Users, Plus, Trash2, Pencil, ExternalLink, Youtube, Twitter, Flame, Save } from 'lucide-react'
 import type { Topic, Source, Advisor, ContentItemWithInteraction, ContentType, DeepDiveAnalysis } from '@/types/radar'
 import * as radarService from '@/services/radar'
 import { CardStream } from './CardStream'
 import { TopicFilter } from './TopicFilter'
 import { ContentTypeFilter } from './ContentTypeFilter'
 import { DeepDiveModal, AddSourceModal } from './modals'
+import { RadarSidebar, type RadarTab } from './RadarSidebar'
 import { formatDistanceToNow } from 'date-fns'
-
-// Tabs
-type RadarTab = 'dashboard' | 'sources' | 'experts' | 'saved' | 'settings'
 
 interface RadarPageProps {
   onCreateTask?: (title: string, description: string) => void
@@ -295,294 +293,413 @@ export function RadarPage({ onCreateTask, onSaveToNotes }: RadarPageProps) {
     youtube: (u) => `https://youtube.com/@${u}`,
   }
 
-  const tabs = [
-    { id: 'dashboard' as RadarTab, label: 'Dashboard', icon: Rss },
-    { id: 'sources' as RadarTab, label: 'Sources', icon: Rss },
-    { id: 'experts' as RadarTab, label: 'Experts', icon: Users },
-    { id: 'saved' as RadarTab, label: 'Saved', icon: Bookmark },
-  ]
-
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--fl-color-bg-base)' }}>
-      {/* Header */}
-      <div className="flex-shrink-0 border-b" style={{ borderColor: 'var(--fl-color-border)', background: 'var(--fl-color-bg-surface)' }}>
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-              <input
-                type="text"
-                placeholder="Search content..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="radar-glass-input pl-10 w-64"
-              />
-            </div>
+    <div className="flex h-full" style={{ background: 'var(--fl-color-bg-base)' }}>
+      {/* Sidebar */}
+      <RadarSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Content Header - Actions bar */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b"
+          style={{ borderColor: 'var(--fl-color-border)', background: 'var(--fl-color-bg-surface)' }}
+        >
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+            <input
+              type="text"
+              placeholder="Search content..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="radar-glass-input pl-10 w-64"
+            />
           </div>
 
+          {/* Action buttons based on current tab */}
+          <div className="flex items-center gap-2">
+            {(activeTab === 'dashboard' || activeTab === 'whats-hot') && (
+              <button
+                onClick={handleRefreshFeeds}
+                disabled={isRefreshing}
+                className="radar-glass-button flex items-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            )}
+
+            {activeTab === 'sources' && (
+              <button
+                onClick={() => setAddSourceOpen(true)}
+                className="radar-glass-button flex items-center gap-2 bg-[#0ea5e9] hover:bg-[#0ea5e9]/80"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Source</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-auto p-6">
+          {/* Dashboard */}
           {activeTab === 'dashboard' && (
-            <button
-              onClick={handleRefreshFeeds}
-              disabled={isRefreshing}
-              className="radar-glass-button flex items-center gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
-          )}
-
-          {activeTab === 'sources' && (
-            <button
-              onClick={() => setAddSourceOpen(true)}
-              className="radar-glass-button flex items-center gap-2 bg-[#0ea5e9] hover:bg-[#0ea5e9]/80"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Source</span>
-            </button>
-          )}
-        </div>
-
-        {/* Tab Bar */}
-        <div className="flex items-center px-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-[#0ea5e9] text-[#0ea5e9]'
-                  : 'border-transparent text-white/60 hover:text-white'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {/* Dashboard */}
-        {activeTab === 'dashboard' && (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <TopicFilter
-                topics={topics}
-                selectedTopic={selectedTopic}
-                onSelectTopic={setSelectedTopic}
-              />
-            </div>
-
-            <div className="mb-6">
-              <ContentTypeFilter
-                selectedTypes={selectedTypes}
-                onToggleType={handleToggleType}
-                onToggleAll={handleToggleAllTypes}
-              />
-            </div>
-
-            <CardStream
-              items={filteredItems}
-              isLoading={isLoading}
-              isRefreshing={isRefreshing}
-              onLike={handleLike}
-              onSave={handleSave}
-              onAddNote={handleAddNote}
-              onDeepDive={handleDeepDive}
-              onDismiss={handleDismiss}
-              onCreateTask={handleCreateTask}
-              onSaveToNotes={handleSaveToNotes}
-            />
-          </>
-        )}
-
-        {/* Sources */}
-        {activeTab === 'sources' && (
-          <>
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold">Sources</h1>
-              <p className="text-white/60 mt-1">
-                Manage your RSS feeds, YouTube channels, and X accounts
-              </p>
-            </div>
-
-            {sources.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-white/40">
-                <Rss className="w-16 h-16 mb-4" />
-                <p className="text-lg">No sources yet</p>
-                <p className="text-sm mt-1">Add RSS feeds, YouTube channels, or X accounts to get started</p>
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <TopicFilter
+                  topics={topics}
+                  selectedTopic={selectedTopic}
+                  onSelectTopic={setSelectedTopic}
+                />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {sources.map((source) => {
-                  const Icon = typeIcons[source.type] || Rss
-                  return (
-                    <div key={source.id} className="radar-glass-card p-4 group">
-                      <div className="flex items-start gap-3">
-                        {source.image_url ? (
-                          <img
-                            src={source.image_url}
-                            alt={source.name}
-                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div
-                            className="p-2 rounded-lg flex-shrink-0"
-                            style={{ backgroundColor: `${typeColors[source.type]}20` }}
-                          >
-                            <Icon className="w-5 h-5" style={{ color: typeColors[source.type] }} />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{source.name}</h3>
-                          <p className="text-white/40 text-sm truncate">
-                            {source.type === 'twitter' ? `@${source.username}` : source.url}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => {/* TODO: edit */}}
-                          className="p-2 rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      </div>
 
-                      {source.last_fetched_at && (
-                        <p className="text-white/30 text-xs mt-3">
-                          Last fetched {formatDistanceToNow(new Date(source.last_fetched_at), { addSuffix: true })}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
-                        <button
-                          onClick={() => handleRefreshSource(source)}
-                          className="flex-1 radar-glass-button flex items-center justify-center gap-2 text-sm"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                          <span>Refresh</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSource(source.id)}
-                          className="p-2 rounded-lg hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="mb-6">
+                <ContentTypeFilter
+                  selectedTypes={selectedTypes}
+                  onToggleType={handleToggleType}
+                  onToggleAll={handleToggleAllTypes}
+                />
               </div>
-            )}
-          </>
-        )}
 
-        {/* Experts */}
-        {activeTab === 'experts' && (
-          <>
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold">Experts</h1>
-              <p className="text-white/60 mt-1">
-                Follow thought leaders and industry experts
-              </p>
-            </div>
-
-            {advisors.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-white/40">
-                <Users className="w-16 h-16 mb-4" />
-                <p className="text-lg">No experts yet</p>
-                <p className="text-sm mt-1">Follow thought leaders on X, LinkedIn, or YouTube</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {advisors.map((advisor) => {
-                  const Icon = platformIcons[advisor.platform] || Users
-                  const profileUrl = platformUrls[advisor.platform]?.(advisor.username)
-
-                  return (
-                    <div key={advisor.id} className="radar-glass-card p-4">
-                      <div className="flex items-start gap-3">
-                        {advisor.avatar_url ? (
-                          <img
-                            src={advisor.avatar_url}
-                            alt={advisor.name}
-                            className="w-14 h-14 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-14 h-14 rounded-full bg-[#0ea5e9]/20 flex items-center justify-center">
-                            <span className="text-[#0ea5e9] font-semibold text-xl">
-                              {advisor.name?.charAt(0) || '?'}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{advisor.name}</h3>
-                          <div className="flex items-center gap-1 text-white/40">
-                            <Icon className="w-4 h-4" style={{ color: platformColors[advisor.platform] }} />
-                            <span className="text-sm">@{advisor.username}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {advisor.bio && (
-                        <p className="text-white/60 text-sm mt-3 line-clamp-2">{advisor.bio}</p>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
-                        <a
-                          href={profileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 radar-glass-button flex items-center justify-center gap-2 text-sm"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          <span>View Profile</span>
-                        </a>
-                        <button
-                          onClick={() => handleDeleteAdvisor(advisor.id)}
-                          className="p-2 rounded-lg hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Saved */}
-        {activeTab === 'saved' && (
-          <>
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold">Saved Items</h1>
-              <p className="text-white/60 mt-1">
-                Your bookmarked articles, videos, and posts
-              </p>
-            </div>
-
-            {!isLoading && items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-white/40">
-                <Bookmark className="w-16 h-16 mb-4" />
-                <p className="text-lg">No saved items yet</p>
-                <p className="text-sm mt-1">Save content from the dashboard to access it later</p>
-              </div>
-            ) : (
               <CardStream
-                items={items}
+                items={filteredItems}
                 isLoading={isLoading}
+                isRefreshing={isRefreshing}
                 onLike={handleLike}
                 onSave={handleSave}
                 onAddNote={handleAddNote}
+                onDeepDive={handleDeepDive}
+                onDismiss={handleDismiss}
                 onCreateTask={handleCreateTask}
                 onSaveToNotes={handleSaveToNotes}
               />
-            )}
-          </>
-        )}
+            </>
+          )}
+
+          {/* What's Hot */}
+          {activeTab === 'whats-hot' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold flex items-center gap-2">
+                  <Flame className="w-6 h-6 text-orange-500" />
+                  What's Hot
+                </h1>
+                <p className="text-white/60 mt-1">
+                  Trending content and most engaging items from your sources
+                </p>
+              </div>
+
+              <div className="mb-6">
+                <ContentTypeFilter
+                  selectedTypes={selectedTypes}
+                  onToggleType={handleToggleType}
+                  onToggleAll={handleToggleAllTypes}
+                />
+              </div>
+
+              {/* Show most liked/saved content sorted by engagement */}
+              <CardStream
+                items={filteredItems.slice().sort((a, b) => {
+                  const aScore = (a.interaction?.is_liked ? 1 : 0) + (a.interaction?.is_saved ? 1 : 0)
+                  const bScore = (b.interaction?.is_liked ? 1 : 0) + (b.interaction?.is_saved ? 1 : 0)
+                  return bScore - aScore
+                })}
+                isLoading={isLoading}
+                isRefreshing={isRefreshing}
+                onLike={handleLike}
+                onSave={handleSave}
+                onAddNote={handleAddNote}
+                onDeepDive={handleDeepDive}
+                onDismiss={handleDismiss}
+                onCreateTask={handleCreateTask}
+                onSaveToNotes={handleSaveToNotes}
+              />
+            </>
+          )}
+
+          {/* Sources */}
+          {activeTab === 'sources' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold">Sources</h1>
+                <p className="text-white/60 mt-1">
+                  Manage your RSS feeds, YouTube channels, and X accounts
+                </p>
+              </div>
+
+              {sources.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-white/40">
+                  <Rss className="w-16 h-16 mb-4" />
+                  <p className="text-lg">No sources yet</p>
+                  <p className="text-sm mt-1">Add RSS feeds, YouTube channels, or X accounts to get started</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {sources.map((source) => {
+                    const Icon = typeIcons[source.type] || Rss
+                    return (
+                      <div key={source.id} className="radar-glass-card p-4 group">
+                        <div className="flex items-start gap-3">
+                          {source.image_url ? (
+                            <img
+                              src={source.image_url}
+                              alt={source.name}
+                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div
+                              className="p-2 rounded-lg flex-shrink-0"
+                              style={{ backgroundColor: `${typeColors[source.type]}20` }}
+                            >
+                              <Icon className="w-5 h-5" style={{ color: typeColors[source.type] }} />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold truncate">{source.name}</h3>
+                            <p className="text-white/40 text-sm truncate">
+                              {source.type === 'twitter' ? `@${source.username}` : source.url}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {/* TODO: edit */}}
+                            className="p-2 rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {source.last_fetched_at && (
+                          <p className="text-white/30 text-xs mt-3">
+                            Last fetched {formatDistanceToNow(new Date(source.last_fetched_at), { addSuffix: true })}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
+                          <button
+                            onClick={() => handleRefreshSource(source)}
+                            className="flex-1 radar-glass-button flex items-center justify-center gap-2 text-sm"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            <span>Refresh</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSource(source.id)}
+                            className="p-2 rounded-lg hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Experts */}
+          {activeTab === 'experts' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold">Experts</h1>
+                <p className="text-white/60 mt-1">
+                  Follow thought leaders and industry experts
+                </p>
+              </div>
+
+              {advisors.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-white/40">
+                  <Users className="w-16 h-16 mb-4" />
+                  <p className="text-lg">No experts yet</p>
+                  <p className="text-sm mt-1">Follow thought leaders on X, LinkedIn, or YouTube</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {advisors.map((advisor) => {
+                    const Icon = platformIcons[advisor.platform] || Users
+                    const profileUrl = platformUrls[advisor.platform]?.(advisor.username)
+
+                    return (
+                      <div key={advisor.id} className="radar-glass-card p-4">
+                        <div className="flex items-start gap-3">
+                          {advisor.avatar_url ? (
+                            <img
+                              src={advisor.avatar_url}
+                              alt={advisor.name}
+                              className="w-14 h-14 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-14 h-14 rounded-full bg-[#0ea5e9]/20 flex items-center justify-center">
+                              <span className="text-[#0ea5e9] font-semibold text-xl">
+                                {advisor.name?.charAt(0) || '?'}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold truncate">{advisor.name}</h3>
+                            <div className="flex items-center gap-1 text-white/40">
+                              <Icon className="w-4 h-4" style={{ color: platformColors[advisor.platform] }} />
+                              <span className="text-sm">@{advisor.username}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {advisor.bio && (
+                          <p className="text-white/60 text-sm mt-3 line-clamp-2">{advisor.bio}</p>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
+                          <a
+                            href={profileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 radar-glass-button flex items-center justify-center gap-2 text-sm"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            <span>View Profile</span>
+                          </a>
+                          <button
+                            onClick={() => handleDeleteAdvisor(advisor.id)}
+                            className="p-2 rounded-lg hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Saved */}
+          {activeTab === 'saved' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold">Saved Items</h1>
+                <p className="text-white/60 mt-1">
+                  Your bookmarked articles, videos, and posts
+                </p>
+              </div>
+
+              {!isLoading && items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-white/40">
+                  <Bookmark className="w-16 h-16 mb-4" />
+                  <p className="text-lg">No saved items yet</p>
+                  <p className="text-sm mt-1">Save content from the dashboard to access it later</p>
+                </div>
+              ) : (
+                <CardStream
+                  items={items}
+                  isLoading={isLoading}
+                  onLike={handleLike}
+                  onSave={handleSave}
+                  onAddNote={handleAddNote}
+                  onCreateTask={handleCreateTask}
+                  onSaveToNotes={handleSaveToNotes}
+                />
+              )}
+            </>
+          )}
+
+          {/* Settings */}
+          {activeTab === 'settings' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold">Radar Settings</h1>
+                <p className="text-white/60 mt-1">
+                  Configure your content preferences and notifications
+                </p>
+              </div>
+
+              <div className="max-w-2xl space-y-6">
+                {/* Refresh Settings */}
+                <div className="radar-glass-card p-6">
+                  <h2 className="text-lg font-semibold mb-4">Content Refresh</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Auto-refresh feeds</p>
+                        <p className="text-sm text-white/50">Automatically check for new content</p>
+                      </div>
+                      <button className="px-4 py-2 rounded-lg bg-[#0ea5e9] hover:bg-[#0ea5e9]/80 text-white text-sm font-medium transition-colors">
+                        Enabled
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Refresh interval</p>
+                        <p className="text-sm text-white/50">How often to check for updates</p>
+                      </div>
+                      <select className="radar-glass-input px-3 py-2 text-sm">
+                        <option value="15">Every 15 minutes</option>
+                        <option value="30">Every 30 minutes</option>
+                        <option value="60">Every hour</option>
+                        <option value="360">Every 6 hours</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Display Settings */}
+                <div className="radar-glass-card p-6">
+                  <h2 className="text-lg font-semibold mb-4">Display</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Content layout</p>
+                        <p className="text-sm text-white/50">Choose how content is displayed</p>
+                      </div>
+                      <select className="radar-glass-input px-3 py-2 text-sm">
+                        <option value="stream">Stream</option>
+                        <option value="grid">Grid</option>
+                        <option value="compact">Compact</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Show summaries</p>
+                        <p className="text-sm text-white/50">Display AI-generated content summaries</p>
+                      </div>
+                      <button className="px-4 py-2 rounded-lg bg-[#0ea5e9] hover:bg-[#0ea5e9]/80 text-white text-sm font-medium transition-colors">
+                        Enabled
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data Management */}
+                <div className="radar-glass-card p-6">
+                  <h2 className="text-lg font-semibold mb-4">Data Management</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Clear read history</p>
+                        <p className="text-sm text-white/50">Remove read tracking for all content</p>
+                      </div>
+                      <button className="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 text-white text-sm font-medium transition-colors">
+                        Clear
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Export saved items</p>
+                        <p className="text-sm text-white/50">Download your saved content as JSON</p>
+                      </div>
+                      <button className="px-4 py-2 rounded-lg border border-white/20 hover:bg-white/10 text-white text-sm font-medium transition-colors flex items-center gap-2">
+                        <Save className="w-4 h-4" />
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Modals */}
