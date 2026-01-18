@@ -1,51 +1,59 @@
 ---
 active: true
 iteration: 1
-max_iterations: 35
+max_iterations: 30
 completion_promise: "COMPLETE"
-started_at: "2026-01-18T17:31:04Z"
+started_at: "2026-01-18T19:29:53Z"
 ---
 
-Embed Radar into AgentPM as /radar route.
+Unify navigation across Canvas and LeadGen to match AgentPM pattern.
 
-COPY RADAR INTO AGENTPM:
-* Copy from C:/dev/funnelists/radar into AgentPM:
-  - app/ pages → app/radar/
-  - components/ → components/radar/
-  - lib/sources/ → lib/radar/sources/
-  - lib/ai/ → lib/radar/ai/
-* Update all imports to reflect new paths
-* Remove duplicate dependencies
+STANDARD LAYOUT (all apps must follow):
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [Logo] AppName    [Tool Switcher ▼]                    🔔  [User]  ⚙️ │
+├────────────┬────────────────────────────────────────────────────────────┤
+│            │                                                            │
+│  Sidebar   │   Content Area                                            │
+│            │                                                            │
+└────────────┴────────────────────────────────────────────────────────────┘
 
-ROUTES:
-* /radar - Dashboard (card stream)
-* /radar/sources - Manage sources
-* /radar/experts - Manage experts
-* /radar/saved - Saved items
-* /radar/settings - Radar preferences
+HEADER (56px height):
+* Left: App logo + name
+* Center-left: Tool switcher dropdown (AgentPM, Radar, Canvas, LeadGen)
+* Right: Notification bell (placeholder), User avatar/menu, Settings gear
+* Background: bg-[#0a0a0f] or bg-white/[0.02]
+* Border: border-b border-white/10
 
-SIDEBAR:
-* Add 'Radar' to AgentPM sidebar
-* Icon: Radio (from lucide-react)
-* Position: after Dashboard, before Projects
-* Highlight when on /radar/* routes
+SIDEBAR (240px width):
+* Background: bg-white/[0.02]
+* Border: border-r border-white/10
+* Navigation items with icons (Lucide)
+* Active item: cyan highlight
+* Collapsible on mobile
 
-AUTH:
-* Use AgentPM's existing useAuth hook
-* No separate login needed
-* User context already available
+CANVAS UPDATES:
+* Add sidebar with: Generate, History, Templates, Settings
+* Move configuration from left panel to sidebar or keep as content
+* Header should match standard pattern
+* Tool switcher should work
 
-INLINE ACTIONS:
-* 'Create Task' from Radar card → opens task modal (not external link)
-* 'Save to Notes' from Radar card → creates note directly
+LEADGEN UPDATES:
+* Add sidebar with: Dashboard, Leads, Import, Enrichment, Settings
+* Header should match standard pattern
+* Tool switcher should work
+
+SHARED STYLES:
+* All apps use same colors: bg-[#0a0a0f], cyan accent #0ea5e9
+* All apps use same glassmorphism: bg-white/[0.02], backdrop-blur, border-white/10
+* All apps use Lucide icons
+* All apps use Inter font
 
 Success criteria:
-* Radar accessible at /radar in AgentPM
-* Radar appears in sidebar
-* Uses AgentPM auth
-* Create Task works inline
-* Save to Notes works inline
-* All Radar features work
+* Canvas has sidebar + standard header
+* LeadGen has sidebar + standard header
+* Tool switcher works in both apps
+* Navigation pattern matches AgentPM/Radar
+* Consistent glassmorphism styling
 * No linter errors
 
 Output <promise>COMPLETE</promise> when done.
