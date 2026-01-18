@@ -1,0 +1,278 @@
+// Skills Page - Main skills management dashboard
+
+import { useState, useEffect, useCallback } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { Plus, FileText, Search, Filter } from 'lucide-react'
+import { useAuthStore } from '@/stores/authStore'
+import { useAccountStore } from '@/stores/accountStore'
+import { useSkillStore } from '@/stores/skillStore'
+import { SkillCard } from './SkillCard'
+import { SkillDetailView } from './SkillDetailView'
+import { ImportSkillModal } from './ImportSkillModal'
+import type { Skill, SkillSourceType } from '@/types/agentpm'
+
+type FilterSource = 'all' | SkillSourceType
+
+export function SkillsPage() {
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterSource, setFilterSource] = useState<FilterSource>('all')
+
+  const { user } = useAuthStore()
+  const { currentAccountId } = useAccountStore()
+  const {
+    skills,
+    isLoading,
+    error,
+    fetchSkills,
+    importFromGitHub,
+    importFromRaw,
+    toggleEnabled,
+    checkForUpdates,
+    syncSkill,
+    deleteSkill,
+    clearError,
+  } = useSkillStore()
+
+  const userId = user?.id || 'demo-user'
+  const accountId = currentAccountId || 'demo-account-id'
+
+  // Fetch skills on mount and when account changes
+  useEffect(() => {
+    if (accountId && !accountId.startsWith('default-') && !accountId.startsWith('demo-')) {
+      fetchSkills(accountId)
+    }
+  }, [accountId, fetchSkills])
+
+  // Filter skills
+  const filteredSkills = skills.filter((skill) => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchesName = skill.name.toLowerCase().includes(query)
+      const matchesDesc = skill.description?.toLowerCase().includes(query)
+      const matchesTags = skill.tags?.some((t) => t.toLowerCase().includes(query))
+      if (!matchesName && !matchesDesc && !matchesTags) {
+        return false
+      }
+    }
+
+    // Source filter
+    if (filterSource !== 'all' && skill.sourceType !== filterSource) {
+      return false
+    }
+
+    return true
+  })
+
+  // Handlers
+  const handleImportGitHub = useCallback(
+    async (url: string) => {
+      await importFromGitHub(url, accountId, userId)
+    },
+    [accountId, userId, importFromGitHub]
+  )
+
+  const handleImportRaw = useCallback(
+    async (content: string, name?: string) => {
+      await importFromRaw(content, accountId, userId, name)
+    },
+    [accountId, userId, importFromRaw]
+  )
+
+  const handleToggleEnabled = useCallback(
+    async (skill: Skill, enabled: boolean) => {
+      await toggleEnabled(skill.id, enabled)
+      if (selectedSkill?.id === skill.id) {
+        setSelectedSkill({ ...skill, isEnabled: enabled })
+      }
+    },
+    [toggleEnabled, selectedSkill]
+  )
+
+  const handleCheckUpdates = useCallback(
+    async (skill: Skill) => {
+      return checkForUpdates(skill)
+    },
+    [checkForUpdates]
+  )
+
+  const handleSync = useCallback(
+    async (skill: Skill) => {
+      await syncSkill(skill)
+      // Refresh selected skill
+      const updated = useSkillStore.getState().getSkill(skill.id)
+      if (updated) setSelectedSkill(updated)
+    },
+    [syncSkill]
+  )
+
+  const handleDelete = useCallback(
+    async (skill: Skill) => {
+      await deleteSkill(skill.id)
+      setSelectedSkill(null)
+    },
+    [deleteSkill]
+  )
+
+  // Show detail view if a skill is selected
+  if (selectedSkill) {
+    return (
+      <SkillDetailView
+        skill={selectedSkill}
+        onBack={() => setSelectedSkill(null)}
+        onToggleEnabled={(enabled) => handleToggleEnabled(selectedSkill, enabled)}
+        onCheckUpdates={() => handleCheckUpdates(selectedSkill)}
+        onSync={() => handleSync(selectedSkill)}
+        onDelete={() => handleDelete(selectedSkill)}
+      />
+    )
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-surface-50 dark:bg-surface-900">
+      {/* Header */}
+      <div className="flex-shrink-0 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-surface-900 dark:text-surface-100">
+              Skills
+            </h1>
+            <p className="text-sm text-surface-600 dark:text-surface-400">
+              Import and manage Claude Code skills for your projects
+            </p>
+          </div>
+          <button
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-medium rounded-lg transition-colors"
+          >
+            <Plus size={18} />
+            Add Skill
+          </button>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="flex items-center gap-4">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search skills..."
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Source Filter */}
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-surface-500" />
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value as FilterSource)}
+              className="px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">All Sources</option>
+              <option value="github">GitHub</option>
+              <option value="local">Local</option>
+              <option value="marketplace">Marketplace</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-6">
+        {/* Error */}
+        {error && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={clearError}
+              className="text-sm underline hover:no-underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Loading */}
+        {isLoading && skills.length === 0 && (
+          <div className="flex items-center justify-center py-12 text-surface-500">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p>Loading skills...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && filteredSkills.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-surface-500">
+            <FileText size={48} className="mb-4 opacity-50" />
+            {skills.length === 0 ? (
+              <>
+                <p className="text-lg font-medium mb-2">No skills yet</p>
+                <p className="text-sm mb-4">
+                  Import skills from GitHub or create your own
+                </p>
+                <button
+                  onClick={() => setIsImportOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-medium rounded-lg transition-colors"
+                >
+                  <Plus size={18} />
+                  Add Your First Skill
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-medium mb-2">No matching skills</p>
+                <p className="text-sm">Try adjusting your search or filters</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Skills Grid */}
+        {filteredSkills.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <AnimatePresence mode="popLayout">
+              {filteredSkills.map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  onClick={() => setSelectedSkill(skill)}
+                  onToggleEnabled={(enabled) => handleToggleEnabled(skill, enabled)}
+                />
+              ))}
+            </AnimatePresence>
+
+            {/* Add Skill Card */}
+            <button
+              onClick={() => setIsImportOpen(true)}
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors min-h-[180px]"
+            >
+              <Plus size={32} className="text-surface-400 mb-2" />
+              <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
+                Add Skill
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Import Modal */}
+      <ImportSkillModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportGitHub={handleImportGitHub}
+        onImportRaw={handleImportRaw}
+      />
+    </div>
+  )
+}

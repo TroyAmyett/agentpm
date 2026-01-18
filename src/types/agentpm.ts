@@ -659,6 +659,66 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
 ]
 
 // =============================================================================
+// SKILL
+// =============================================================================
+
+export type SkillSourceType = 'github' | 'local' | 'marketplace'
+
+export interface Skill {
+  id: string
+  accountId: string
+  userId?: string
+
+  // Metadata
+  name: string
+  description?: string
+  version: string
+  author?: string
+  tags: string[]
+
+  // Content
+  content: string
+
+  // Source tracking
+  sourceType: SkillSourceType
+  sourceUrl?: string
+  sourceRepo?: string
+  sourcePath?: string
+  sourceBranch: string
+  sourceSha?: string
+
+  // Status
+  isEnabled: boolean
+  isOrgShared: boolean
+
+  // Timestamps
+  createdAt: string
+  updatedAt: string
+  lastSyncedAt?: string
+
+  // Soft delete
+  deletedAt?: string
+}
+
+export interface ProjectSkill {
+  id: string
+  projectId: string
+  skillId: string
+  isEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Skill metadata from frontmatter
+export interface SkillMetadata {
+  name?: string
+  description?: string
+  version?: string
+  author?: string
+  tags?: string[]
+}
+
+// =============================================================================
 // UTILITY TYPES
 // =============================================================================
 

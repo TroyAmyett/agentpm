@@ -95,6 +95,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   createTask: async (taskData) => {
     const { tasks } = get()
 
+    // Validate accountId - don't allow placeholder IDs
+    if (!taskData.accountId || taskData.accountId.startsWith('default-') || taskData.accountId.startsWith('demo-')) {
+      throw new Error('Please select a valid account before creating tasks. You may need to sign in or create an account.')
+    }
+
     // Create with initial status history
     const task = await db.createTask({
       ...taskData,

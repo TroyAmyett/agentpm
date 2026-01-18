@@ -9,22 +9,27 @@ import {
   Bell,
   Settings,
   Plus,
+  FileText,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useAccountStore } from '@/stores/accountStore'
+import { useUIStore } from '@/stores/uiStore'
 import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
 import { OrgChart } from './OrgChart'
+import { KanbanView } from './Kanban'
+import { ViewSwitcher } from './ViewSwitcher'
+import { SkillsPage } from './Skills'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'tasks' | 'org-chart' | 'reviews'
+type TabId = 'dashboard' | 'tasks' | 'org-chart' | 'reviews' | 'skills'
 
 interface Tab {
   id: TabId
@@ -37,6 +42,7 @@ const tabs: Tab[] = [
   { id: 'tasks', label: 'Tasks', icon: <ListTodo size={18} /> },
   { id: 'org-chart', label: 'Org Chart', icon: <GitBranch size={18} /> },
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
+  { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
 ]
 
 export function AgentPMPage() {
@@ -50,9 +56,10 @@ export function AgentPMPage() {
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
 
   const { user } = useAuthStore()
-  const { accounts, currentAccountId, currentAccount, fetchAccounts } = useAccountStore()
+  const { accounts, currentAccountId, currentAccount, fetchAccounts, initializeUserAccounts } = useAccountStore()
   const { agents, fetchAgents, subscribeToAgents, pauseAgent, resumeAgent, resetAgentHealth } = useAgentStore()
   const { projects, fetchProjects } = useProjectStore()
+  const { taskViewMode, setTaskViewMode } = useUIStore()
   const {
     tasks,
     fetchTasks,
@@ -75,10 +82,16 @@ export function AgentPMPage() {
     agents.map((a) => [a.id, a.alias])
   )
 
-  // Fetch data on mount and when account changes
+  // Initialize user accounts on mount (creates default account if needed)
   useEffect(() => {
-    fetchAccounts()
-  }, [fetchAccounts])
+    if (user) {
+      // User is authenticated - ensure they have an account
+      initializeUserAccounts()
+    } else {
+      // Not authenticated - use default accounts
+      fetchAccounts()
+    }
+  }, [user, fetchAccounts, initializeUserAccounts])
 
   useEffect(() => {
     if (accountId) {
@@ -305,42 +318,86 @@ export function AgentPMPage() {
         )}
 
         {activeTab === 'tasks' && (
-          <div className="flex h-full">
-            {/* Task List */}
-            <div className="w-96 flex-shrink-0 bg-white dark:bg-surface-800 border-r border-surface-200 dark:border-surface-700">
-              <TaskList
-                tasks={tasks}
-                agents={agentNameMap}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={setSelectedTaskId}
-                onCreateTask={() => setIsCreateTaskOpen(true)}
+          <div className="flex flex-col h-full">
+            {/* View Switcher Bar */}
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
+              <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
+                {tasks.length} tasks
+              </span>
+              <ViewSwitcher
+                currentView={taskViewMode}
+                onViewChange={(view) => setTaskViewMode(view)}
               />
             </div>
 
-            {/* Task Detail */}
-            <div className="flex-1">
-              <AnimatePresence mode="wait">
-                {selectedTask ? (
-                  <TaskDetail
-                    key={selectedTask.id}
-                    task={selectedTask}
-                    agent={selectedTaskAgent}
-                    onClose={() => setSelectedTaskId(null)}
-                    onUpdateStatus={handleUpdateStatus}
-                    onDelete={() => handleDeleteTask(selectedTask.id)}
-                    onEdit={() => setEditingTask(selectedTask)}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-surface-500">
-                    <div className="text-center">
-                      <ListTodo size={48} className="mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium">Select a task</p>
-                      <p className="text-sm">Choose a task from the list to view details</p>
-                    </div>
+            {/* Content based on view mode */}
+            <div className="flex-1 overflow-hidden">
+              {taskViewMode === 'kanban' && (
+                <KanbanView
+                  tasks={tasks}
+                  agents={agentNameMap}
+                  onTaskClick={setSelectedTaskId}
+                  onAddTask={() => {
+                    setIsCreateTaskOpen(true)
+                  }}
+                  onStatusChange={(taskId, status) => handleUpdateStatus(taskId, status)}
+                />
+              )}
+
+              {(taskViewMode === 'list' || taskViewMode === 'agent-tasks') && (
+                <div className="flex h-full">
+                  {/* Task List */}
+                  <div className="w-96 flex-shrink-0 bg-white dark:bg-surface-800 border-r border-surface-200 dark:border-surface-700">
+                    <TaskList
+                      tasks={tasks}
+                      agents={agentNameMap}
+                      selectedTaskId={selectedTaskId}
+                      onSelectTask={setSelectedTaskId}
+                      onCreateTask={() => setIsCreateTaskOpen(true)}
+                    />
                   </div>
-                )}
-              </AnimatePresence>
+
+                  {/* Task Detail */}
+                  <div className="flex-1">
+                    <AnimatePresence mode="wait">
+                      {selectedTask ? (
+                        <TaskDetail
+                          key={selectedTask.id}
+                          task={selectedTask}
+                          agent={selectedTaskAgent}
+                          onClose={() => setSelectedTaskId(null)}
+                          onUpdateStatus={handleUpdateStatus}
+                          onDelete={() => handleDeleteTask(selectedTask.id)}
+                          onEdit={() => setEditingTask(selectedTask)}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-surface-500">
+                          <div className="text-center">
+                            <ListTodo size={48} className="mx-auto mb-4 opacity-50" />
+                            <p className="text-lg font-medium">Select a task</p>
+                            <p className="text-sm">Choose a task from the list to view details</p>
+                          </div>
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Task Detail Sidebar for Kanban View */}
+            {taskViewMode === 'kanban' && selectedTask && (
+              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+                <TaskDetail
+                  task={selectedTask}
+                  agent={selectedTaskAgent}
+                  onClose={() => setSelectedTaskId(null)}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDelete={() => handleDeleteTask(selectedTask.id)}
+                  onEdit={() => setEditingTask(selectedTask)}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -404,6 +461,8 @@ export function AgentPMPage() {
             </div>
           </div>
         )}
+
+        {activeTab === 'skills' && <SkillsPage />}
       </div>
 
       {/* Modals */}
@@ -418,6 +477,8 @@ export function AgentPMPage() {
         agents={agents}
         defaultAgentId={preselectedAgentId}
         defaultTitle={voiceTaskTitle}
+        currentUserId={userId}
+        currentUserName={user?.email?.split('@')[0] || 'Me'}
       />
 
       {editingTask && (
