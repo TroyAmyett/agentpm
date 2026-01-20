@@ -1,8 +1,8 @@
-// Import Skill Modal - Import skills from GitHub or raw content
+// Import Skill Modal - Import skills from GitHub, raw content, or file upload
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Github, FileText, AlertTriangle, Loader2 } from 'lucide-react'
+import { X, Github, FileText, Upload, AlertTriangle, Loader2, File } from 'lucide-react'
 
 interface ImportSkillModalProps {
   isOpen: boolean
@@ -11,7 +11,7 @@ interface ImportSkillModalProps {
   onImportRaw: (content: string, name?: string) => Promise<void>
 }
 
-type ImportTab = 'github' | 'raw'
+type ImportTab = 'github' | 'raw' | 'upload'
 
 export function ImportSkillModal({
   isOpen,
@@ -26,6 +26,69 @@ export function ImportSkillModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // File upload state
+  const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null)
+  const [fileContent, setFileContent] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Handle file selection
+  const handleFileSelect = useCallback((file: globalThis.File) => {
+    if (!file.name.endsWith('.md')) {
+      setError('Please select a .md file')
+      return
+    }
+    if (file.size > 1024 * 1024) { // 1MB limit
+      setError('File size must be less than 1MB')
+      return
+    }
+
+    setSelectedFile(file)
+    setError(null)
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      setFileContent(content)
+    }
+    reader.onerror = () => {
+      setError('Failed to read file')
+      setSelectedFile(null)
+    }
+    reader.readAsText(file)
+  }, [])
+
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      handleFileSelect(files[0])
+    }
+  }, [handleFileSelect])
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleFileSelect(files[0])
+    }
+  }, [handleFileSelect])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -38,12 +101,20 @@ export function ImportSkillModal({
           return
         }
         await onImportGitHub(githubUrl.trim())
-      } else {
+      } else if (activeTab === 'raw') {
         if (!rawContent.trim()) {
           setError('Please enter skill content')
           return
         }
         await onImportRaw(rawContent.trim(), rawName.trim() || undefined)
+      } else if (activeTab === 'upload') {
+        if (!fileContent) {
+          setError('Please select a file')
+          return
+        }
+        // Extract name from filename (without .md extension)
+        const fileName = selectedFile?.name.replace(/\.md$/, '') || undefined
+        await onImportRaw(fileContent, fileName)
       }
       handleClose()
     } catch (err) {
@@ -57,6 +128,9 @@ export function ImportSkillModal({
     setGithubUrl('')
     setRawContent('')
     setRawName('')
+    setSelectedFile(null)
+    setFileContent(null)
+    setIsDragging(false)
     setError(null)
     setActiveTab('github')
     onClose()
@@ -119,6 +193,17 @@ export function ImportSkillModal({
                 <FileText size={18} />
                 Raw Content
               </button>
+              <button
+                onClick={() => setActiveTab('upload')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'upload'
+                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                    : 'border-transparent text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                }`}
+              >
+                <Upload size={18} />
+                Upload File
+              </button>
             </div>
 
             {/* Form */}
@@ -131,7 +216,7 @@ export function ImportSkillModal({
                 </div>
               )}
 
-              {activeTab === 'github' ? (
+              {activeTab === 'github' && (
                 <>
                   {/* GitHub URL */}
                   <div>
@@ -151,7 +236,9 @@ export function ImportSkillModal({
                     </p>
                   </div>
                 </>
-              ) : (
+              )}
+
+              {activeTab === 'raw' && (
                 <>
                   {/* Skill Name */}
                   <div>
@@ -194,6 +281,78 @@ When working on...`}
                       className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none font-mono text-sm"
                     />
                   </div>
+                </>
+              )}
+
+              {activeTab === 'upload' && (
+                <>
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".md"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
+
+                  {/* Drop zone */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                      isDragging
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : selectedFile
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                        : 'border-surface-300 dark:border-surface-600 hover:border-primary-400 hover:bg-surface-50 dark:hover:bg-surface-800'
+                    }`}
+                  >
+                    {selectedFile ? (
+                      <>
+                        <File size={32} className="text-green-500" />
+                        <div className="text-center">
+                          <p className="font-medium text-surface-900 dark:text-surface-100">
+                            {selectedFile.name}
+                          </p>
+                          <p className="text-xs text-surface-500 mt-1">
+                            {(selectedFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedFile(null)
+                            setFileContent(null)
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = ''
+                            }
+                          }}
+                          className="text-xs text-surface-500 hover:text-red-500 underline"
+                        >
+                          Remove file
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={32} className="text-surface-400" />
+                        <div className="text-center">
+                          <p className="font-medium text-surface-700 dark:text-surface-300">
+                            Drop .md file here
+                          </p>
+                          <p className="text-sm text-surface-500 mt-1">
+                            or click to browse
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-surface-500">
+                    Upload a markdown file with optional YAML frontmatter for metadata (name, description, tags, etc.)
+                  </p>
                 </>
               )}
 

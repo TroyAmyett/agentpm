@@ -15,6 +15,7 @@ import {
   Heading3,
   List,
   ListOrdered,
+  CheckSquare,
   Quote,
   Code,
   Minus,
@@ -75,6 +76,14 @@ const commands: CommandItem[] = [
     icon: <ListOrdered size={18} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleOrderedList().run()
+    },
+  },
+  {
+    title: 'Checklist',
+    description: 'Task list with checkboxes',
+    icon: <CheckSquare size={18} />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleTaskList().run()
     },
   },
   {

@@ -61,6 +61,20 @@ export interface AIAction {
   prompt: string
 }
 
+// User Templates
+export interface UserTemplate {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  icon: string
+  category: string | null
+  content: JSONContent
+  is_favorite: boolean
+  created_at: string
+  updated_at: string
+}
+
 // UI State types
 export interface UIState {
   sidebarOpen: boolean

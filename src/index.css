@@ -122,6 +122,21 @@ aside {
   @apply mb-1;
 }
 
+/* Fix extra spacing when pasting lists - paragraphs inside list items shouldn't have margin */
+.tiptap li p {
+  @apply mb-0;
+}
+
+.tiptap li p:first-child {
+  @apply mt-0;
+}
+
+/* Ensure consistent list item spacing */
+.tiptap ol > li,
+.tiptap ul > li {
+  @apply my-0.5;
+}
+
 .tiptap blockquote {
   @apply border-l-4 border-primary-500 pl-4 italic text-surface-600 my-4;
 }
@@ -160,6 +175,33 @@ aside {
 
 .tiptap s {
   @apply line-through;
+}
+
+/* Task list (checkboxes) styles */
+.tiptap ul[data-type="taskList"] {
+  @apply list-none ml-0 pl-0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  @apply flex items-start gap-2 mb-1;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  @apply flex-shrink-0 mt-1;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  @apply w-4 h-4 rounded border-2 border-surface-300 dark:border-surface-600
+         cursor-pointer accent-primary-500
+         checked:bg-primary-500 checked:border-primary-500;
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  @apply flex-1;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+  @apply line-through text-surface-400 dark:text-surface-500;
 }
 
 /* Selection styles */

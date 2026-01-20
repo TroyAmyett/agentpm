@@ -7,6 +7,7 @@ import {
   Code,
   List,
   ListOrdered,
+  CheckSquare,
   Quote,
   Heading1,
   Heading2,
@@ -139,6 +140,13 @@ export function FormattingToolbar({ editor }: FormattingToolbarProps) {
         title="Numbered List"
       >
         <ListOrdered size={18} />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        isActive={editor.isActive('taskList')}
+        title="Checklist"
+      >
+        <CheckSquare size={18} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBlockquote().run()}

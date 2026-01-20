@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import type { Note, Folder } from '@/types'
+import type { Note, Folder, UserTemplate } from '@/types'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // Notes CRUD
@@ -191,4 +191,62 @@ export function subscribeToFolders(
       (payload) => onDelete((payload.old as { id: string }).id)
     )
     .subscribe()
+}
+
+// User Templates CRUD
+export async function fetchUserTemplates(userId: string): Promise<UserTemplate[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('user_templates')
+    .select('*')
+    .eq('user_id', userId)
+    .order('is_favorite', { ascending: false })
+    .order('name')
+
+  if (error) throw error
+  return data || []
+}
+
+export async function createUserTemplate(
+  template: Omit<UserTemplate, 'id' | 'created_at' | 'updated_at'>
+): Promise<UserTemplate> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('user_templates')
+    .insert(template)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateUserTemplate(
+  id: string,
+  updates: Partial<UserTemplate>
+): Promise<UserTemplate> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('user_templates')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteUserTemplate(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('user_templates')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
