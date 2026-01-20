@@ -1,23 +1,47 @@
 // Skill Store - Zustand store for AgentPM skills management
 
 import { create } from 'zustand'
-import type { Skill } from '@/types/agentpm'
+import type { Skill, SkillBuilderMessage } from '@/types/agentpm'
 import * as skillsService from '@/services/skills'
 
 interface SkillState {
   // State
   skills: Skill[]
+  officialSkills: Skill[] // @fun/ skills for discovery
   selectedSkillId: string | null
   isLoading: boolean
   error: string | null
 
   // Actions
   fetchSkills: (accountId: string) => Promise<void>
+  fetchOfficialSkills: () => Promise<void>
   selectSkill: (id: string | null) => void
   getSkill: (id: string) => Skill | undefined
 
   importFromGitHub: (url: string, accountId: string, userId: string) => Promise<Skill>
   importFromRaw: (content: string, accountId: string, userId: string, name?: string) => Promise<Skill>
+
+  // Skills Builder
+  createFromBuilder: (
+    accountId: string,
+    userId: string,
+    skill: {
+      name: string
+      description: string
+      content: string
+      forkedFrom?: string
+      builderConversation: SkillBuilderMessage[]
+    }
+  ) => Promise<Skill>
+  updateFromBuilder: (
+    id: string,
+    skill: {
+      name: string
+      description: string
+      content: string
+      builderConversation: SkillBuilderMessage[]
+    }
+  ) => Promise<Skill>
 
   toggleEnabled: (id: string, isEnabled: boolean) => Promise<void>
   checkForUpdates: (skill: Skill) => Promise<boolean>
@@ -35,6 +59,7 @@ interface SkillState {
 
 export const useSkillStore = create<SkillState>((set, get) => ({
   skills: [],
+  officialSkills: [],
   selectedSkillId: null,
   isLoading: false,
   error: null,
@@ -49,6 +74,15 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         error: err instanceof Error ? err.message : 'Failed to fetch skills',
         isLoading: false,
       })
+    }
+  },
+
+  fetchOfficialSkills: async () => {
+    try {
+      const officialSkills = await skillsService.fetchOfficialSkills()
+      set({ officialSkills })
+    } catch (err) {
+      console.error('Failed to fetch official skills:', err)
     }
   },
 
@@ -85,6 +119,42 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       return skill
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create skill'
+      set({ error: message, isLoading: false })
+      throw new Error(message)
+    }
+  },
+
+  createFromBuilder: async (accountId, userId, skillInput) => {
+    set({ isLoading: true, error: null })
+    try {
+      const skill = await skillsService.createBuilderSkill({
+        accountId,
+        userId,
+        ...skillInput,
+      })
+      set((state) => ({
+        skills: [skill, ...state.skills],
+        isLoading: false,
+      }))
+      return skill
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create skill'
+      set({ error: message, isLoading: false })
+      throw new Error(message)
+    }
+  },
+
+  updateFromBuilder: async (id, skillInput) => {
+    set({ isLoading: true, error: null })
+    try {
+      const skill = await skillsService.updateBuilderSkill(id, skillInput)
+      set((state) => ({
+        skills: state.skills.map((s) => (s.id === id ? skill : s)),
+        isLoading: false,
+      }))
+      return skill
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update skill'
       set({ error: message, isLoading: false })
       throw new Error(message)
     }

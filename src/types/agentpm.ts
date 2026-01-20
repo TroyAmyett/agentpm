@@ -663,6 +663,12 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
 // =============================================================================
 
 export type SkillSourceType = 'github' | 'local' | 'marketplace'
+export type SkillTier = 'free' | 'pro' | 'business' | 'enterprise'
+
+export interface SkillBuilderMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 export interface Skill {
   id: string
@@ -690,6 +696,12 @@ export interface Skill {
   // Status
   isEnabled: boolean
   isOrgShared: boolean
+
+  // Skills Builder fields
+  namespace?: string // '@fun' for official skills, null for user-created
+  forkedFrom?: string // UUID of the skill this was customized from
+  tier: SkillTier // Subscription tier required
+  builderConversation?: SkillBuilderMessage[] // Chat history for editing
 
   // Timestamps
   createdAt: string

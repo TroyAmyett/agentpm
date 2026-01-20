@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, FileText, Layout, Loader2 } from 'lucide-react'
-import type { JSONContent } from '@tiptap/react'
+import { X, Layout, Loader2 } from 'lucide-react'
 
 interface SaveAsTemplateModalProps {
   isOpen: boolean

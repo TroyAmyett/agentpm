@@ -2,6 +2,25 @@
 
 ## Active Work
 
+### Skills Builder (January 2025) - Phase 1 MVP
+
+| Priority | Feature | Status | Description |
+|----------|---------|--------|-------------|
+| 1 | Builder chat UI | ✅ Completed | Two-panel modal with chat on left, preview on right |
+| 2 | @fun/ skills search | ✅ Completed | Search official skills during skill creation |
+| 3 | Skill customization flow | ✅ Completed | Fork/customize existing skills as starting point |
+| 4 | Skill preview & test | ✅ Completed | Preview generated skill, test with sample input |
+| 5 | Save to account | ✅ Completed | Save skill with conversation history for future edits |
+
+**Files created:**
+- `supabase/migrations/20250120_skills_builder.sql` - Database schema for namespace, forked_from, tier, builder_conversation
+- `src/components/AgentPM/Skills/SkillsBuilderModal.tsx` - Main builder UI component
+- Updated `src/types/agentpm.ts` with SkillTier, SkillBuilderMessage types
+- Updated `src/services/skills/index.ts` with fetchOfficialSkills, createBuilderSkill functions
+- Updated `src/stores/skillStore.ts` with officialSkills state and builder actions
+
+---
+
 ### Notetaker Improvements (January 2025)
 
 | Priority | Feature | Status | Description |

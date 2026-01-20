@@ -2,7 +2,7 @@
 // GitHub import and skill management for AgentPM
 
 import { supabase } from '../supabase/client'
-import type { Skill, SkillMetadata, SkillSourceType } from '@/types/agentpm'
+import type { Skill, SkillMetadata, SkillSourceType, SkillBuilderMessage } from '@/types/agentpm'
 
 // =============================================================================
 // HELPER: Case conversion
@@ -489,4 +489,110 @@ export async function syncSkill(skill: Skill): Promise<Skill> {
  */
 export async function toggleSkillEnabled(id: string, isEnabled: boolean): Promise<Skill> {
   return updateSkill(id, { isEnabled })
+}
+
+// =============================================================================
+// SKILLS BUILDER FUNCTIONS
+// =============================================================================
+
+/**
+ * Fetch all official @fun/ skills
+ */
+export async function fetchOfficialSkills(): Promise<Skill[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills')
+    .select('*')
+    .eq('namespace', '@fun')
+    .is('deleted_at', null)
+    .order('name', { ascending: true })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<Skill>(row))
+}
+
+export interface CreateBuilderSkillInput {
+  accountId: string
+  userId: string
+  name: string
+  description: string
+  content: string
+  forkedFrom?: string
+  builderConversation: SkillBuilderMessage[]
+}
+
+/**
+ * Create a skill from Skills Builder
+ */
+export async function createBuilderSkill(input: CreateBuilderSkillInput): Promise<Skill> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // Parse frontmatter to extract any embedded metadata
+  const { metadata } = parseFrontmatter(input.content)
+
+  const { data, error } = await supabase
+    .from('skills')
+    .insert(
+      toSnakeCaseKeys({
+        accountId: input.accountId,
+        userId: input.userId,
+        name: metadata.name || input.name,
+        description: metadata.description || input.description,
+        version: metadata.version || '1.0.0',
+        author: metadata.author || null,
+        tags: metadata.tags || [],
+        content: input.content,
+        sourceType: 'local' as SkillSourceType,
+        forkedFrom: input.forkedFrom || null,
+        builderConversation: input.builderConversation,
+        tier: 'free',
+        isEnabled: true,
+        isOrgShared: false,
+      })
+    )
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<Skill>(data)
+}
+
+/**
+ * Update a skill from Skills Builder (preserves conversation history)
+ */
+export async function updateBuilderSkill(
+  id: string,
+  input: {
+    name: string
+    description: string
+    content: string
+    builderConversation: SkillBuilderMessage[]
+  }
+): Promise<Skill> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // Parse frontmatter to extract any embedded metadata
+  const { metadata } = parseFrontmatter(input.content)
+
+  const { data, error } = await supabase
+    .from('skills')
+    .update(
+      toSnakeCaseKeys({
+        name: metadata.name || input.name,
+        description: metadata.description || input.description,
+        version: metadata.version,
+        author: metadata.author,
+        tags: metadata.tags,
+        content: input.content,
+        builderConversation: input.builderConversation,
+        updatedAt: new Date().toISOString(),
+      })
+    )
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<Skill>(data)
 }

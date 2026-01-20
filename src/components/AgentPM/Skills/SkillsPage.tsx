@@ -2,19 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, FileText, Search, Filter } from 'lucide-react'
+import { Plus, FileText, Search, Filter, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { SkillCard } from './SkillCard'
 import { SkillDetailView } from './SkillDetailView'
 import { ImportSkillModal } from './ImportSkillModal'
-import type { Skill, SkillSourceType } from '@/types/agentpm'
+import { SkillsBuilderModal } from './SkillsBuilderModal'
+import type { Skill, SkillSourceType, SkillBuilderMessage } from '@/types/agentpm'
 
 type FilterSource = 'all' | SkillSourceType
 
 export function SkillsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false)
+  const [builderBaseSkill, setBuilderBaseSkill] = useState<Skill | null>(null)
+  const [builderEditSkill, setBuilderEditSkill] = useState<Skill | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterSource, setFilterSource] = useState<FilterSource>('all')
@@ -23,11 +27,15 @@ export function SkillsPage() {
   const { currentAccountId } = useAccountStore()
   const {
     skills,
+    officialSkills,
     isLoading,
     error,
     fetchSkills,
+    fetchOfficialSkills,
     importFromGitHub,
     importFromRaw,
+    createFromBuilder,
+    updateFromBuilder,
     toggleEnabled,
     checkForUpdates,
     syncSkill,
@@ -43,7 +51,9 @@ export function SkillsPage() {
     if (accountId && !accountId.startsWith('default-') && !accountId.startsWith('demo-')) {
       fetchSkills(accountId)
     }
-  }, [accountId, fetchSkills])
+    // Also fetch official skills for the builder
+    fetchOfficialSkills()
+  }, [accountId, fetchSkills, fetchOfficialSkills])
 
   // Filter skills
   const filteredSkills = skills.filter((skill) => {
@@ -116,6 +126,46 @@ export function SkillsPage() {
     [deleteSkill]
   )
 
+  // Skills Builder handlers
+  const handleOpenBuilder = useCallback(() => {
+    setBuilderBaseSkill(null)
+    setBuilderEditSkill(null)
+    setIsBuilderOpen(true)
+  }, [])
+
+  // Note: handleCustomizeSkill and handleEditSkillWithBuilder will be added in Phase 2
+  // when Customize/Edit buttons are added to SkillCard
+
+  const handleCloseBuilder = useCallback(() => {
+    setIsBuilderOpen(false)
+    setBuilderBaseSkill(null)
+    setBuilderEditSkill(null)
+  }, [])
+
+  const handleSaveFromBuilder = useCallback(
+    async (skillData: {
+      name: string
+      description: string
+      content: string
+      forkedFrom?: string
+      builderConversation: SkillBuilderMessage[]
+    }) => {
+      if (builderEditSkill) {
+        // Update existing skill
+        await updateFromBuilder(builderEditSkill.id, {
+          name: skillData.name,
+          description: skillData.description,
+          content: skillData.content,
+          builderConversation: skillData.builderConversation,
+        })
+      } else {
+        // Create new skill
+        await createFromBuilder(accountId, userId, skillData)
+      }
+    },
+    [accountId, userId, createFromBuilder, updateFromBuilder, builderEditSkill]
+  )
+
   // Show detail view if a skill is selected
   if (selectedSkill) {
     return (
@@ -143,13 +193,22 @@ export function SkillsPage() {
               Import and manage Claude Code skills for your projects
             </p>
           </div>
-          <button
-            onClick={() => setIsImportOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-medium rounded-lg transition-colors"
-          >
-            <Plus size={18} />
-            Add Skill
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenBuilder}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-medium rounded-lg transition-all shadow-sm"
+            >
+              <Sparkles size={18} />
+              New Skill
+            </button>
+            <button
+              onClick={() => setIsImportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 font-medium rounded-lg transition-colors"
+            >
+              <Plus size={18} />
+              Import
+            </button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -219,15 +278,24 @@ export function SkillsPage() {
               <>
                 <p className="text-lg font-medium mb-2">No skills yet</p>
                 <p className="text-sm mb-4">
-                  Import skills from GitHub or create your own
+                  Create a custom skill with AI or import from GitHub
                 </p>
-                <button
-                  onClick={() => setIsImportOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-medium rounded-lg transition-colors"
-                >
-                  <Plus size={18} />
-                  Add Your First Skill
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleOpenBuilder}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-medium rounded-lg transition-all"
+                  >
+                    <Sparkles size={18} />
+                    Create with AI
+                  </button>
+                  <button
+                    onClick={() => setIsImportOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 font-medium rounded-lg transition-colors"
+                  >
+                    <Plus size={18} />
+                    Import
+                  </button>
+                </div>
               </>
             ) : (
               <>
@@ -272,6 +340,16 @@ export function SkillsPage() {
         onClose={() => setIsImportOpen(false)}
         onImportGitHub={handleImportGitHub}
         onImportRaw={handleImportRaw}
+      />
+
+      {/* Skills Builder Modal */}
+      <SkillsBuilderModal
+        isOpen={isBuilderOpen}
+        onClose={handleCloseBuilder}
+        onSave={handleSaveFromBuilder}
+        officialSkills={officialSkills}
+        editingSkill={builderEditSkill}
+        baseSkill={builderBaseSkill}
       />
     </div>
   )
