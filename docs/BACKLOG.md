@@ -2,7 +2,23 @@
 
 ## Active Work
 
-### Skills Builder (January 2025) - Phase 1 MVP
+### Skills Builder (January 2025) - Phase 2
+
+| Priority | Feature | Status | Description |
+|----------|---------|--------|-------------|
+| 1 | Customize button on SkillCard | ✅ Completed | Quick customize button for @fun/ official skills |
+| 2 | Edit with AI button | ✅ Completed | Edit existing skills using builder conversation history |
+| 3 | Official Skills section | ✅ Completed | Discovery section showing @fun/ skills on SkillsPage |
+| 4 | SkillDetailView actions | ✅ Completed | Customize & Edit with AI buttons in detail view |
+
+**Files modified (Phase 2):**
+- `src/components/AgentPM/Skills/SkillCard.tsx` - Added Customize and Edit with AI buttons
+- `src/components/AgentPM/Skills/SkillDetailView.tsx` - Added Customize and Edit with AI actions
+- `src/components/AgentPM/Skills/SkillsPage.tsx` - Added Official Skills discovery section
+
+---
+
+### Skills Builder (January 2025) - Phase 1 MVP ✅
 
 | Priority | Feature | Status | Description |
 |----------|---------|--------|-------------|
@@ -12,7 +28,7 @@
 | 4 | Skill preview & test | ✅ Completed | Preview generated skill, test with sample input |
 | 5 | Save to account | ✅ Completed | Save skill with conversation history for future edits |
 
-**Files created:**
+**Files created (Phase 1):**
 - `supabase/migrations/20250120_skills_builder.sql` - Database schema for namespace, forked_from, tier, builder_conversation
 - `src/components/AgentPM/Skills/SkillsBuilderModal.tsx` - Main builder UI component
 - Updated `src/types/agentpm.ts` with SkillTier, SkillBuilderMessage types

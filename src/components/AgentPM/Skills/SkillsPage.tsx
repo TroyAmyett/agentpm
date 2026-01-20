@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, FileText, Search, Filter, Sparkles } from 'lucide-react'
+import { Plus, FileText, Search, Filter, Sparkles, ChevronRight, Crown } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useSkillStore } from '@/stores/skillStore'
@@ -22,6 +22,7 @@ export function SkillsPage() {
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterSource, setFilterSource] = useState<FilterSource>('all')
+  const [showAllOfficialSkills, setShowAllOfficialSkills] = useState(false)
 
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
@@ -133,8 +134,19 @@ export function SkillsPage() {
     setIsBuilderOpen(true)
   }, [])
 
-  // Note: handleCustomizeSkill and handleEditSkillWithBuilder will be added in Phase 2
-  // when Customize/Edit buttons are added to SkillCard
+  const handleCustomizeSkill = useCallback((skill: Skill) => {
+    setBuilderBaseSkill(skill)
+    setBuilderEditSkill(null)
+    setSelectedSkill(null) // Close detail view if open
+    setIsBuilderOpen(true)
+  }, [])
+
+  const handleEditSkillWithBuilder = useCallback((skill: Skill) => {
+    setBuilderBaseSkill(null)
+    setBuilderEditSkill(skill)
+    setSelectedSkill(null) // Close detail view if open
+    setIsBuilderOpen(true)
+  }, [])
 
   const handleCloseBuilder = useCallback(() => {
     setIsBuilderOpen(false)
@@ -166,6 +178,9 @@ export function SkillsPage() {
     [accountId, userId, createFromBuilder, updateFromBuilder, builderEditSkill]
   )
 
+  // Check if skill is official (@fun/ namespace)
+  const isOfficialSkill = (skill: Skill) => skill.namespace === '@fun'
+
   // Show detail view if a skill is selected
   if (selectedSkill) {
     return (
@@ -176,6 +191,8 @@ export function SkillsPage() {
         onCheckUpdates={() => handleCheckUpdates(selectedSkill)}
         onSync={() => handleSync(selectedSkill)}
         onDelete={() => handleDelete(selectedSkill)}
+        onEditWithAI={handleEditSkillWithBuilder}
+        onCustomize={handleCustomizeSkill}
       />
     )
   }
@@ -260,6 +277,61 @@ export function SkillsPage() {
           </div>
         )}
 
+        {/* Official Skills Section */}
+        {officialSkills.length > 0 && !searchQuery && filterSource === 'all' && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-gradient-to-r from-primary-500 to-purple-500">
+                  <Crown size={16} className="text-white" />
+                </div>
+                <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                  Official Skills
+                </h2>
+                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                  @fun
+                </span>
+              </div>
+              {officialSkills.length > 4 && (
+                <button
+                  onClick={() => setShowAllOfficialSkills(!showAllOfficialSkills)}
+                  className="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  {showAllOfficialSkills ? 'Show less' : `View all ${officialSkills.length}`}
+                  <ChevronRight size={16} className={`transition-transform ${showAllOfficialSkills ? 'rotate-90' : ''}`} />
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+              Curated skills by Funnelists. Customize any skill to make it your own.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {(showAllOfficialSkills ? officialSkills : officialSkills.slice(0, 4)).map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  onClick={() => setSelectedSkill(skill)}
+                  onToggleEnabled={() => {}} // Official skills can't be toggled
+                  onCustomize={handleCustomizeSkill}
+                  isOfficial={true}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Your Skills Section Header */}
+        {skills.length > 0 && !searchQuery && filterSource === 'all' && officialSkills.length > 0 && (
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+              Your Skills
+            </h2>
+            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-surface-200 dark:bg-surface-700 text-surface-600 dark:text-surface-400">
+              {skills.length}
+            </span>
+          </div>
+        )}
+
         {/* Loading */}
         {isLoading && skills.length === 0 && (
           <div className="flex items-center justify-center py-12 text-surface-500">
@@ -316,6 +388,9 @@ export function SkillsPage() {
                   skill={skill}
                   onClick={() => setSelectedSkill(skill)}
                   onToggleEnabled={(enabled) => handleToggleEnabled(skill, enabled)}
+                  onCustomize={handleCustomizeSkill}
+                  onEditWithAI={handleEditSkillWithBuilder}
+                  isOfficial={isOfficialSkill(skill)}
                 />
               ))}
             </AnimatePresence>

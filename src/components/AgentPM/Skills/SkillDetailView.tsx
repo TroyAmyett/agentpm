@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Loader2,
+  Sparkles,
+  GitFork,
 } from 'lucide-react'
 import type { Skill } from '@/types/agentpm'
 
@@ -27,6 +29,8 @@ interface SkillDetailViewProps {
   onCheckUpdates: () => Promise<boolean>
   onSync: () => Promise<void>
   onDelete: () => Promise<void>
+  onEditWithAI?: (skill: Skill) => void
+  onCustomize?: (skill: Skill) => void
 }
 
 export function SkillDetailView({
@@ -36,6 +40,8 @@ export function SkillDetailView({
   onCheckUpdates,
   onSync,
   onDelete,
+  onEditWithAI,
+  onCustomize,
 }: SkillDetailViewProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
@@ -48,6 +54,11 @@ export function SkillDetailView({
     local: <FileCode size={16} className="text-surface-500" />,
     marketplace: <Building2 size={16} className="text-surface-500" />,
   }[skill.sourceType]
+
+  // Check if skill is official (@fun/ namespace)
+  const isOfficial = skill.namespace === '@fun'
+  // Check if skill was created with AI builder (has conversation history)
+  const hasBuilderHistory = skill.builderConversation && skill.builderConversation.length > 0
 
   const handleCheckUpdates = async () => {
     setIsChecking(true)
@@ -255,27 +266,54 @@ export function SkillDetailView({
 
       {/* Actions Footer */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900">
-        {/* Enable/Disable */}
-        <button
-          onClick={() => onToggleEnabled(!skill.isEnabled)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            skill.isEnabled
-              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
-              : 'bg-surface-200 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600'
-          }`}
-        >
-          {skill.isEnabled ? (
-            <>
-              <ToggleRight size={18} />
-              Enabled
-            </>
-          ) : (
-            <>
-              <ToggleLeft size={18} />
-              Disabled
-            </>
+        {/* Left side buttons */}
+        <div className="flex items-center gap-2">
+          {/* Enable/Disable - only for non-official skills */}
+          {!isOfficial && (
+            <button
+              onClick={() => onToggleEnabled(!skill.isEnabled)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                skill.isEnabled
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
+                  : 'bg-surface-200 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600'
+              }`}
+            >
+              {skill.isEnabled ? (
+                <>
+                  <ToggleRight size={18} />
+                  Enabled
+                </>
+              ) : (
+                <>
+                  <ToggleLeft size={18} />
+                  Disabled
+                </>
+              )}
+            </button>
           )}
-        </button>
+
+          {/* Customize button for official skills */}
+          {isOfficial && onCustomize && (
+            <button
+              onClick={() => onCustomize(skill)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary-500 to-purple-500 hover:from-primary-600 hover:to-purple-600 text-white text-sm font-medium transition-colors"
+            >
+              <GitFork size={16} />
+              Customize This Skill
+            </button>
+          )}
+
+          {/* Edit with AI button for user skills with builder history */}
+          {!isOfficial && hasBuilderHistory && onEditWithAI && (
+            <button
+              onClick={() => onEditWithAI(skill)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-sm font-medium transition-colors"
+            >
+              <Sparkles size={16} />
+              Edit with AI
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Check for Updates (GitHub only) */}
@@ -294,34 +332,38 @@ export function SkillDetailView({
             </button>
           )}
 
-          {/* Delete */}
-          {showDeleteConfirm ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-surface-600 dark:text-surface-400">
-                Delete this skill?
-              </span>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-3 py-1.5 rounded-lg bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 text-sm font-medium transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-sm font-medium transition-colors"
-            >
-              <Trash2 size={16} />
-              Delete
-            </button>
+          {/* Delete - only for non-official skills */}
+          {!isOfficial && (
+            <>
+              {showDeleteConfirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-surface-600 dark:text-surface-400">
+                    Delete this skill?
+                  </span>
+                  <button
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="px-3 py-1.5 rounded-lg bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-sm font-medium transition-colors"
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
