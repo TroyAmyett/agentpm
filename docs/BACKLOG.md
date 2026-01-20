@@ -10,10 +10,11 @@
 | 2 | Edit with AI button | ✅ Completed | Edit existing skills using builder conversation history |
 | 3 | Official Skills section | ✅ Completed | Discovery section showing @fun/ skills on SkillsPage |
 | 4 | SkillDetailView actions | ✅ Completed | Customize & Edit with AI buttons in detail view |
+| 5 | Download for Claude Code | ✅ Completed | Download .md file with installation instructions |
 
 **Files modified (Phase 2):**
 - `src/components/AgentPM/Skills/SkillCard.tsx` - Added Customize and Edit with AI buttons
-- `src/components/AgentPM/Skills/SkillDetailView.tsx` - Added Customize and Edit with AI actions
+- `src/components/AgentPM/Skills/SkillDetailView.tsx` - Added Customize/Edit with AI buttons + "Use in Claude Code" download modal
 - `src/components/AgentPM/Skills/SkillsPage.tsx` - Added Official Skills discovery section
 
 ---
@@ -68,6 +69,7 @@
 
 _Add ideas here that aren't prioritized yet_
 
+- **MCP Server for Skills Sync** - Build an MCP server that serves skills from AgentPM. Users configure Claude Code to connect, and skills sync automatically. Would eliminate the manual download/install step.
 - Skills marketplace / sharing between users
 - Notetaker mobile-friendly layout (revisit later)
 
