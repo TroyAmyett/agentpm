@@ -112,6 +112,46 @@ Provide constructive feedback with specific suggestions for improvement.`,
 Provide structured task breakdowns with clear assignments.`,
     maxTokens: 2048,
   },
+  forge: {
+    systemPrompt: `You are Forge, an expert software developer agent. Your task is to implement features based on Product Requirements Documents (PRDs).
+
+When implementing a PRD:
+1. Analyze the requirements carefully
+2. Plan the implementation approach
+3. Write clean, well-structured code
+4. Follow existing patterns in the codebase
+5. Add appropriate error handling
+6. Write tests when applicable
+
+Output your implementation in this JSON format:
+{
+  "plan": "Brief implementation plan",
+  "files": [
+    {
+      "path": "relative/path/to/file.ts",
+      "action": "create" | "modify" | "delete",
+      "content": "Full file content for create, or diff/patch for modify",
+      "description": "What this change does"
+    }
+  ],
+  "commits": [
+    {
+      "message": "feat: description of change",
+      "files": ["list", "of", "files"]
+    }
+  ],
+  "testPlan": "How to verify the implementation works",
+  "notes": "Any important notes for the reviewer"
+}
+
+Guidelines:
+- Make atomic commits with clear, descriptive messages
+- Follow existing code style and patterns
+- Add appropriate error handling
+- Write tests for new functionality
+- Do not make changes outside the scope of the PRD`,
+    maxTokens: 8000,
+  },
   general: {
     systemPrompt: `You are a helpful AI assistant. Complete the requested task to the best of your ability.
 Be thorough, accurate, and provide useful output.
@@ -487,6 +527,73 @@ async function processTask(
       } catch {
         // If not JSON, store as raw content
         outputData = { content: resultText }
+      }
+    } else if (agentType === 'forge') {
+      // Parse Forge implementation output
+      try {
+        const forgeData = JSON.parse(resultText)
+
+        // Generate branch name
+        const branchName = (task.input as Record<string, unknown>)?.targetBranch as string ||
+          `forge/feature-${Date.now().toString(36)}`
+
+        // Build structured output
+        outputData = {
+          branchName,
+          implementation: forgeData,
+          plan: forgeData.plan,
+          files: forgeData.files || [],
+          commits: (forgeData.commits || []).map((c: { message: string; files?: string[] }) => ({
+            sha: crypto.randomUUID().slice(0, 7),
+            message: c.message,
+            filesChanged: c.files || [],
+            timestamp: new Date().toISOString(),
+          })),
+          filesChanged: (forgeData.files || []).map((f: { path: string; action: string }) => ({
+            path: f.path,
+            changeType: f.action === 'create' ? 'added' :
+                       f.action === 'delete' ? 'deleted' : 'modified',
+            additions: 0,
+            deletions: 0,
+          })),
+          testPlan: forgeData.testPlan,
+          notes: forgeData.notes,
+          summary: `Implementation plan: ${forgeData.plan}`,
+          totalTokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+          totalCost: Math.ceil(
+            (response.usage.input_tokens / 1_000_000) * 300 +
+            (response.usage.output_tokens / 1_000_000) * 1500
+          ),
+          generatedAt: new Date().toISOString(),
+        }
+
+        resultText = `Forge Implementation Generated\n\nPlan: ${forgeData.plan}\n\nFiles to modify: ${(forgeData.files || []).length}\nCommits planned: ${(forgeData.commits || []).length}`
+
+        // Create Forge session record
+        await supabase.from('forge_sessions').insert({
+          id: crypto.randomUUID(),
+          task_id: task.id,
+          agent_id: task.assigned_to,
+          account_id: task.account_id,
+          input: task.input,
+          status: 'awaiting-approval',
+          current_step: 'Awaiting approval to apply changes',
+          progress: 95,
+          output: outputData,
+          started_at: new Date().toISOString(),
+          last_activity_at: new Date().toISOString(),
+          created_by: task.assigned_to,
+          created_by_type: 'agent',
+        }).catch((err: Error) => {
+          console.warn('Could not create forge_sessions record:', err.message)
+          // Non-fatal - continue even if sessions table doesn't exist
+        })
+      } catch (parseError) {
+        // If not valid JSON, treat as raw implementation notes
+        outputData = {
+          rawImplementation: resultText,
+          generatedAt: new Date().toISOString(),
+        }
       }
     }
 

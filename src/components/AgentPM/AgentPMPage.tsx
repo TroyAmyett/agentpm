@@ -11,6 +11,7 @@ import {
   Plus,
   FileText,
   Bot,
+  Hammer,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -29,9 +30,10 @@ import { SkillsPage } from './Skills'
 import { AgentsPage } from './Agents'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
-import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
+import { ForgeTaskModal } from './Forge'
+import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills'
+type TabId = 'dashboard' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills' | 'forge'
 
 interface Tab {
   id: TabId
@@ -42,6 +44,7 @@ interface Tab {
 const tabs: Tab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
   { id: 'tasks', label: 'Tasks', icon: <ListTodo size={18} /> },
+  { id: 'forge', label: 'Forge', icon: <Hammer size={18} /> },
   { id: 'agents', label: 'Agents', icon: <Bot size={18} /> },
   { id: 'org-chart', label: 'Org Chart', icon: <GitBranch size={18} /> },
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
@@ -57,6 +60,7 @@ export function AgentPMPage() {
   const [preselectedAgentId, setPreselectedAgentId] = useState<string | undefined>(undefined)
   const [selectedAgent, setSelectedAgent] = useState<AgentPersona | null>(null)
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
+  const [isForgeTaskOpen, setIsForgeTaskOpen] = useState(false)
 
   const { user } = useAuthStore()
   const { accounts, currentAccountId, currentAccount, fetchAccounts, initializeUserAccounts } = useAccountStore()
@@ -125,11 +129,42 @@ export function AgentPMPage() {
       assignedTo?: string
       assignedToType?: 'user' | 'agent'
       projectId?: string
+      input?: ForgeTaskInput
     }) => {
       await createTask({
         ...taskData,
         accountId,
         status: taskData.assignedTo && taskData.assignedToType === 'agent' ? 'queued' : 'pending',
+        createdBy: userId,
+        createdByType: 'user',
+        updatedBy: userId,
+        updatedByType: 'user',
+      } as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
+    },
+    [accountId, userId, createTask]
+  )
+
+  // Handle Forge task creation
+  const handleCreateForgeTask = useCallback(
+    async (taskData: {
+      title: string
+      description?: string
+      priority: Task['priority']
+      assignedTo: string
+      assignedToType: 'agent'
+      projectId?: string
+      input: ForgeTaskInput
+    }) => {
+      await createTask({
+        title: taskData.title,
+        description: taskData.description,
+        priority: taskData.priority,
+        assignedTo: taskData.assignedTo,
+        assignedToType: taskData.assignedToType,
+        projectId: taskData.projectId,
+        input: taskData.input as unknown as Record<string, unknown>,
+        accountId,
+        status: 'queued', // Forge tasks start as queued
         createdBy: userId,
         createdByType: 'user',
         updatedBy: userId,
@@ -164,8 +199,13 @@ export function AgentPMPage() {
   // Handle task deletion
   const handleDeleteTask = useCallback(
     async (taskId: string) => {
-      await deleteTask(taskId, userId)
-      setSelectedTaskId(null)
+      try {
+        await deleteTask(taskId, userId)
+        setSelectedTaskId(null)
+      } catch (err) {
+        console.error('Failed to delete task:', err)
+        alert('Failed to delete task. Please try again.')
+      }
     },
     [deleteTask, userId]
   )
@@ -467,6 +507,131 @@ export function AgentPMPage() {
 
         {activeTab === 'agents' && <AgentsPage />}
 
+        {activeTab === 'forge' && (
+          <div className="h-full overflow-auto p-6">
+            <div className="max-w-4xl mx-auto">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
+                    <Hammer className="text-orange-500" size={24} />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">
+                      Forge
+                    </h1>
+                    <p className="text-surface-500">
+                      Transform PRDs into working code with AI
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsForgeTaskOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <Plus size={16} />
+                  New Forge Task
+                </button>
+              </div>
+
+              {/* Forge Tasks */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-surface-700 dark:text-surface-300">
+                  Recent Forge Tasks
+                </h2>
+                {tasks.filter((t) => {
+                  const forgeAgent = agents.find((a) => a.agentType === 'forge')
+                  return forgeAgent && t.assignedTo === forgeAgent.id
+                }).length === 0 ? (
+                  <div className="text-center py-12 bg-surface-100 dark:bg-surface-800 rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600">
+                    <Hammer size={48} className="mx-auto mb-4 text-surface-400" />
+                    <p className="text-lg font-medium text-surface-600 dark:text-surface-400">
+                      No Forge tasks yet
+                    </p>
+                    <p className="text-sm text-surface-500 mt-1 mb-4">
+                      Create a task to start implementing PRDs with AI
+                    </p>
+                    <button
+                      onClick={() => setIsForgeTaskOpen(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors"
+                    >
+                      <Plus size={16} />
+                      Create Forge Task
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {tasks
+                      .filter((t) => {
+                        const forgeAgent = agents.find((a) => a.agentType === 'forge')
+                        return forgeAgent && t.assignedTo === forgeAgent.id
+                      })
+                      .map((task) => (
+                        <div
+                          key={task.id}
+                          onClick={() => {
+                            setSelectedTaskId(task.id)
+                            setActiveTab('tasks')
+                          }}
+                          className="p-4 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-orange-500 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="font-medium text-surface-900 dark:text-surface-100">
+                                {task.title}
+                              </h3>
+                              <p className="text-sm text-surface-500 mt-1">
+                                {task.description?.slice(0, 100)}...
+                              </p>
+                            </div>
+                            <span
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                task.status === 'completed'
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                  : task.status === 'in_progress'
+                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                    : task.status === 'failed'
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                      : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400'
+                              }`}
+                            >
+                              {task.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Getting Started */}
+              <div className="mt-8 p-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-xl border border-orange-200 dark:border-orange-800">
+                <h3 className="font-semibold text-orange-800 dark:text-orange-300 mb-3">
+                  How Forge Works
+                </h3>
+                <ol className="space-y-2 text-sm text-orange-700 dark:text-orange-400">
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <span>Write a PRD (Product Requirements Document) describing what you want to build</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <span>Point Forge to your repository and configure branch settings</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <span>Forge uses Claude Code to implement the PRD, running tests along the way</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                    <span>Review the changes and approve the pull request when ready</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'skills' && <SkillsPage />}
       </div>
 
@@ -520,6 +685,14 @@ export function AgentPMPage() {
           }}
         />
       )}
+
+      <ForgeTaskModal
+        isOpen={isForgeTaskOpen}
+        onClose={() => setIsForgeTaskOpen(false)}
+        onSubmit={handleCreateForgeTask}
+        agents={agents}
+        projectId={undefined}
+      />
 
       {/* Voice Command Bar - Fixed at bottom */}
       <div className="flex-shrink-0 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 p-4">

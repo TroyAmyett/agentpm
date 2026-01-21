@@ -121,6 +121,7 @@ export type AgentType =
   | 'researcher'
   | 'qa-tester'
   | 'orchestrator'
+  | 'forge' // Developer agent - executes PRDs against code
 
 export type AutonomyLevel = 'supervised' | 'semi-autonomous' | 'autonomous'
 
@@ -656,6 +657,43 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     showInOrgChart: true,
     sortOrder: 5,
   },
+  {
+    agentType: 'forge',
+    alias: 'Forge',
+    tagline: 'Code from PRDs, autonomously',
+    description: 'Developer agent that transforms PRDs into working code using Claude Code CLI. Creates branches, implements features, runs tests, and submits pull requests.',
+    capabilities: [
+      'read-codebase',
+      'analyze-code',
+      'create-branch',
+      'write-code',
+      'run-tests',
+      'commit-changes',
+      'push-to-remote',
+      'create-pull-request',
+    ],
+    restrictions: [
+      'force-push',
+      'delete-branches',
+      'merge-to-main',
+      'delete-repositories',
+      'modify-ci-config',
+    ],
+    triggers: ['manual', 'task-queue'],
+    autonomyLevel: 'semi-autonomous',
+    requiresApproval: ['push-to-remote', 'create-pull-request'],
+    maxActionsPerHour: 50,
+    maxCostPerAction: 1000, // 10 dollars in cents
+    canSpawnAgents: false,
+    canModifySelf: false,
+    consecutiveFailures: 0,
+    maxConsecutiveFailures: 3,
+    healthStatus: 'healthy',
+    isActive: true,
+    showOnDashboard: true,
+    showInOrgChart: true,
+    sortOrder: 6,
+  },
 ]
 
 // =============================================================================
@@ -884,6 +922,155 @@ export const SKILL_CATEGORY_INFO: Record<SkillCategory, { label: string; icon?: 
   data: { label: 'Data' },
   communication: { label: 'Communication' },
   other: { label: 'Other' },
+}
+
+// =============================================================================
+// FORGE AGENT TYPES (Developer Agent)
+// =============================================================================
+
+// Forge task input - PRD and repository configuration
+export interface ForgeTaskInput {
+  // PRD content (from note or direct input)
+  prdContent: string
+  prdNoteId?: string // Link back to source note
+
+  // Repository configuration
+  repositoryPath: string // Local path to codebase
+  repositoryUrl?: string // Git remote URL
+  baseBranch: string // Branch to base work off (e.g., 'main')
+  targetBranch?: string // Custom branch name (auto-generated if not provided)
+
+  // Execution settings
+  runTests: boolean
+  createPullRequest: boolean
+  autoCommit: boolean
+
+  // Context
+  codebaseContext?: string // Additional context about the codebase
+  relevantFiles?: string[] // Specific files to focus on
+  testCommand?: string // Custom test command (e.g., 'npm test')
+}
+
+// Forge task output - execution results
+export interface ForgeTaskOutput {
+  // Branch info
+  branchName: string
+  branchCreatedAt?: string
+
+  // Commits made
+  commits: ForgeCommit[]
+
+  // Pull request (if created)
+  pullRequest?: ForgePullRequest
+
+  // Test results
+  testResults?: ForgeTestResults
+
+  // Files changed
+  filesChanged: ForgeFileChange[]
+
+  // Execution summary
+  summary: string
+  totalTokensUsed?: number
+  totalCost?: number
+  executionTimeMs?: number
+}
+
+export interface ForgeCommit {
+  sha: string
+  message: string
+  filesChanged: string[]
+  timestamp: string
+}
+
+export interface ForgePullRequest {
+  number: number
+  url: string
+  title: string
+  body: string
+  createdAt: string
+  headBranch: string
+  baseBranch: string
+}
+
+export interface ForgeTestResults {
+  passed: boolean
+  totalTests: number
+  passedTests: number
+  failedTests: number
+  skippedTests: number
+  output?: string
+  failedTestNames?: string[]
+}
+
+export interface ForgeFileChange {
+  path: string
+  changeType: 'added' | 'modified' | 'deleted' | 'renamed'
+  additions: number
+  deletions: number
+  oldPath?: string // For renamed files
+}
+
+// Forge action types for logging
+export type ForgeActionType =
+  | 'analyze-prd'
+  | 'read-codebase'
+  | 'create-branch'
+  | 'write-file'
+  | 'delete-file'
+  | 'run-tests'
+  | 'commit'
+  | 'push'
+  | 'create-pr'
+  | 'claude-code-execute'
+
+// Forge execution status
+export type ForgeExecutionStatus =
+  | 'initializing'
+  | 'analyzing'
+  | 'implementing'
+  | 'testing'
+  | 'committing'
+  | 'pushing'
+  | 'creating-pr'
+  | 'completed'
+  | 'failed'
+  | 'awaiting-approval'
+
+// Forge session - tracks a single PRD execution
+export interface ForgeSession {
+  id: string
+  taskId: string
+  agentId: string
+  accountId: string
+
+  // Input
+  input: ForgeTaskInput
+
+  // Status
+  status: ForgeExecutionStatus
+  currentStep?: string
+  progress?: number // 0-100
+
+  // Output (built up during execution)
+  output?: Partial<ForgeTaskOutput>
+
+  // Claude Code CLI integration
+  claudeCodeSessionId?: string
+  claudeCodeOutputPath?: string
+
+  // Error tracking
+  error?: string
+  errorStep?: string
+
+  // Timestamps
+  startedAt: string
+  completedAt?: string
+  lastActivityAt: string
+
+  // Audit
+  createdBy: string
+  createdByType: 'user' | 'agent'
 }
 
 // =============================================================================
