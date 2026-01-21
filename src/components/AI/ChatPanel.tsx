@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useUIStore } from '@/stores/uiStore'
 import { getCurrentNoteContext, useNotesStore } from '@/stores/notesStore'
-import { chatWithNotes, isAnthropicConfigured, setNoteOperationCallbacks } from '@/services/ai/anthropic'
+import { chatWithNotes, isAnthropicConfigured, setNoteOperationCallbacks, type ChatStatusCallback } from '@/services/ai/anthropic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ResizeHandle } from '@/components/ResizeHandle'
 import type { JSONContent } from '@tiptap/react'
@@ -15,6 +15,7 @@ import {
   AlertCircle,
   FileText,
   PenLine,
+  Globe,
 } from 'lucide-react'
 
 interface Message {
@@ -32,6 +33,7 @@ export function ChatPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeNoteTitle, setActiveNoteTitle] = useState<string | null>(null)
+  const [chatStatus, setChatStatus] = useState<'thinking' | 'searching' | 'updating-note'>('thinking')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -142,6 +144,7 @@ export function ChatPanel() {
     setInput('')
     setError(null)
     setLoading(true)
+    setChatStatus('thinking')
 
     try {
       const { currentNote, otherNotes } = getCurrentNoteContext()
@@ -150,10 +153,17 @@ export function ChatPanel() {
         content: m.content,
       }))
 
-      const result = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory)
+      const handleStatusChange: ChatStatusCallback = (status) => {
+        setChatStatus(status)
+      }
 
-      // Build response content with note update indicator if applicable
+      const result = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory, handleStatusChange)
+
+      // Build response content with indicator if applicable
       let content = result.response
+      if (result.webSearchUsed) {
+        content = `🌐 ${content}`
+      }
       if (result.noteUpdated) {
         content = `✏️ ${content}`
       } else if (result.noteCreated) {
@@ -299,8 +309,22 @@ export function ChatPanel() {
                 </div>
                 <div className="bg-surface-100 dark:bg-surface-800 rounded-2xl rounded-tl-sm px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin text-primary-500" />
-                    <span className="text-sm text-surface-500">Thinking...</span>
+                    {chatStatus === 'searching' ? (
+                      <>
+                        <Globe size={16} className="text-blue-500 animate-pulse" />
+                        <span className="text-sm text-surface-500">Searching the web...</span>
+                      </>
+                    ) : chatStatus === 'updating-note' ? (
+                      <>
+                        <PenLine size={16} className="text-green-500 animate-pulse" />
+                        <span className="text-sm text-surface-500">Updating note...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 size={16} className="animate-spin text-primary-500" />
+                        <span className="text-sm text-surface-500">Thinking...</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

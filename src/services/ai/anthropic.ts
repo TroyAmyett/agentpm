@@ -30,6 +30,22 @@ interface Tool {
   }
 }
 
+// Web search tool
+const WEB_SEARCH_TOOL: Tool = {
+  name: 'web_search',
+  description: 'Search the web for current information. Use this when the user asks about current events, products, services, tools, or anything that requires up-to-date information from the internet. Also use when looking for specific websites, tools, or services.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'The search query to find information on the web.',
+      },
+    },
+    required: ['query'],
+  },
+}
+
 // Tools for note operations
 const NOTE_TOOLS: Tool[] = [
   {
@@ -96,6 +112,40 @@ let noteCallbacks: NoteOperationCallbacks | null = null
 
 export function setNoteOperationCallbacks(callbacks: NoteOperationCallbacks | null) {
   noteCallbacks = callbacks
+}
+
+// Web search function
+interface WebSearchResult {
+  title: string
+  url: string
+  description: string
+  age?: string
+}
+
+async function performWebSearch(query: string): Promise<WebSearchResult[]> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase not configured for web search')
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/web-search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+    },
+    body: JSON.stringify({ query, count: 8 }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Search failed' }))
+    throw new Error(error.error || 'Web search failed')
+  }
+
+  const data = await response.json()
+  return data.results || []
 }
 
 export const isAnthropicConfigured = () => !!ANTHROPIC_API_KEY
@@ -203,13 +253,17 @@ export async function performAIAction(
   )
 }
 
+// Status callback type for chat progress updates
+export type ChatStatusCallback = (status: 'thinking' | 'searching' | 'updating-note') => void
+
 // Chat with notes - prioritizes the active note for context and can edit notes
 export async function chatWithNotes(
   userMessage: string,
   activeNote: { title: string; content: string; id: string } | null,
   otherNotesContext: string,
-  chatHistory: AnthropicMessage[]
-): Promise<{ response: string; noteUpdated?: boolean; noteCreated?: boolean }> {
+  chatHistory: AnthropicMessage[],
+  onStatusChange?: ChatStatusCallback
+): Promise<{ response: string; noteUpdated?: boolean; noteCreated?: boolean; webSearchUsed?: boolean }> {
   let systemPrompt: string
 
   if (activeNote) {
@@ -225,11 +279,18 @@ ${activeNote.content}
 ${otherNotesContext ? `You also have access to their other notes for additional context if needed:\n${otherNotesContext}` : ''}
 
 CAPABILITIES:
+- You CAN search the web using the web_search tool to find current information, tools, services, products, or anything requiring up-to-date knowledge
 - You CAN update the current note using the update_current_note tool
 - You CAN append content to the current note using the append_to_note tool
 - You CAN create new notes using the create_new_note tool
 - When the user asks you to "add this", "update the note", "write this down", etc., USE THE TOOLS to actually modify the note
 - For append_to_note, just include the NEW content to add - it will be appended to the existing content
+
+WHEN TO SEARCH:
+- When asked about tools, services, products, or skills in a specific domain
+- When asked about current events or recent information
+- When asked to find or research something on the internet
+- When you don't have enough knowledge to answer accurately
 
 Be helpful, creative, and proactive. If they ask a general question, relate it back to what they're working on when relevant. Suggest ideas, point out potential improvements, and help them develop their thoughts.`
   } else {
@@ -238,7 +299,15 @@ Be helpful, creative, and proactive. If they ask a general question, relate it b
 You have access to the user's notes for context. Answer questions based on the notes when relevant.
 Be helpful, concise, and accurate. If you don't know something or it's not in the notes, say so.
 
-You CAN create new notes using the create_new_note tool if the user asks.
+CAPABILITIES:
+- You CAN search the web using the web_search tool to find current information
+- You CAN create new notes using the create_new_note tool if the user asks
+
+WHEN TO SEARCH:
+- When asked about tools, services, products, or skills in a specific domain
+- When asked about current events or recent information
+- When asked to find or research something on the internet
+- When you don't have enough knowledge to answer accurately
 
 Here are the user's notes for context:
 ${otherNotesContext}`
@@ -248,8 +317,13 @@ ${otherNotesContext}`
     throw new Error('Anthropic API key not configured')
   }
 
-  // Build messages array for API
-  const apiMessages = [
+  // Build tools array - always include web search
+  const tools = activeNote
+    ? [WEB_SEARCH_TOOL, ...NOTE_TOOLS]
+    : [WEB_SEARCH_TOOL, ...NOTE_TOOLS.filter(t => t.name === 'create_new_note')]
+
+  // Build messages array for API - this will be mutated during tool use loop
+  const apiMessages: Array<{ role: 'user' | 'assistant'; content: string | ContentBlock[] }> = [
     ...chatHistory.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -257,62 +331,124 @@ ${otherNotesContext}`
     { role: 'user' as const, content: userMessage },
   ]
 
-  // Call Claude with tools
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: apiMessages,
-      tools: activeNote ? NOTE_TOOLS : NOTE_TOOLS.filter(t => t.name === 'create_new_note'),
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || 'Failed to call Claude API')
-  }
-
-  const data: AnthropicResponse = await response.json()
-
   let textResponse = ''
   let noteUpdated = false
   let noteCreated = false
+  let webSearchUsed = false
+  let iterationCount = 0
+  const maxIterations = 5 // Prevent infinite loops
 
-  // Process response content
-  for (const block of data.content) {
-    if (block.type === 'text' && block.text) {
-      textResponse += block.text
-    } else if (block.type === 'tool_use' && noteCallbacks) {
-      // Handle tool calls
+  // Tool use loop - continue until Claude finishes or we hit max iterations
+  while (iterationCount < maxIterations) {
+    iterationCount++
+    onStatusChange?.('thinking')
+
+    // Call Claude with tools
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: apiMessages,
+        tools,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error?.message || 'Failed to call Claude API')
+    }
+
+    const data: AnthropicResponse = await response.json()
+
+    // Collect tool uses and text from this response
+    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+
+    for (const block of data.content) {
+      if (block.type === 'text' && block.text) {
+        textResponse += block.text
+      } else if (block.type === 'tool_use' && block.id && block.name && block.input) {
+        toolUses.push({ id: block.id, name: block.name, input: block.input })
+      }
+    }
+
+    // If no tool use, we're done
+    if (data.stop_reason !== 'tool_use' || toolUses.length === 0) {
+      break
+    }
+
+    // Process tool uses and collect results
+    const toolResults: ContentBlock[] = []
+
+    for (const toolUse of toolUses) {
+      let toolResult = ''
+
       try {
-        if (block.name === 'update_current_note' && block.input) {
-          const content = block.input.content as string
-          const title = block.input.title as string | undefined
+        if (toolUse.name === 'web_search') {
+          const query = toolUse.input.query as string
+          webSearchUsed = true
+          onStatusChange?.('searching')
+          const searchResults = await performWebSearch(query)
+
+          if (searchResults.length > 0) {
+            toolResult = `Search results for "${query}":\n\n` +
+              searchResults.map((r, i) =>
+                `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}${r.age ? ` (${r.age})` : ''}`
+              ).join('\n\n')
+          } else {
+            toolResult = `No results found for "${query}". Try a different search query.`
+          }
+        } else if (toolUse.name === 'update_current_note' && noteCallbacks) {
+          onStatusChange?.('updating-note')
+          const content = toolUse.input.content as string
+          const title = toolUse.input.title as string | undefined
           await noteCallbacks.updateCurrentNote(content, title)
           noteUpdated = true
-        } else if (block.name === 'create_new_note' && block.input) {
-          const title = block.input.title as string
-          const content = block.input.content as string
+          toolResult = 'Note updated successfully.'
+        } else if (toolUse.name === 'create_new_note' && noteCallbacks) {
+          onStatusChange?.('updating-note')
+          const title = toolUse.input.title as string
+          const content = toolUse.input.content as string
           await noteCallbacks.createNewNote(title, content)
           noteCreated = true
-        } else if (block.name === 'append_to_note' && block.input) {
-          const content = block.input.content as string
+          toolResult = `New note "${title}" created successfully.`
+        } else if (toolUse.name === 'append_to_note' && noteCallbacks) {
+          onStatusChange?.('updating-note')
+          const content = toolUse.input.content as string
           await noteCallbacks.appendToNote(content)
           noteUpdated = true
+          toolResult = 'Content appended to note successfully.'
+        } else {
+          toolResult = `Tool ${toolUse.name} not available.`
         }
       } catch (err) {
         console.error('Tool execution error:', err)
-        textResponse += `\n\n(Note: I tried to update the note but encountered an error: ${err instanceof Error ? err.message : 'Unknown error'})`
+        toolResult = `Error: ${err instanceof Error ? err.message : 'Unknown error'}`
       }
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: toolResult,
+      })
     }
+
+    // Add assistant response and tool results to messages for next iteration
+    apiMessages.push({
+      role: 'assistant',
+      content: data.content,
+    })
+    apiMessages.push({
+      role: 'user',
+      content: toolResults,
+    })
   }
 
   // If only tool use happened, add a confirmation message
@@ -324,7 +460,7 @@ ${otherNotesContext}`
     }
   }
 
-  return { response: textResponse, noteUpdated, noteCreated }
+  return { response: textResponse, noteUpdated, noteCreated, webSearchUsed }
 }
 
 // Tag suggestions
