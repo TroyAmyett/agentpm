@@ -210,7 +210,7 @@ async function uploadImageToStorage(
   supabase: ReturnType<typeof createClient>,
   base64Data: string,
   fileName: string
-): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+): Promise<{ success: boolean; publicUrl?: string; storagePath?: string; error?: string }> {
   try {
     // Remove data URL prefix if present
     const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, '')
@@ -222,10 +222,12 @@ async function uploadImageToStorage(
       bytes[i] = binaryString.charCodeAt(i)
     }
 
+    const storagePath = `hero/${fileName}.png`
+
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('blog-images')
-      .upload(`hero/${fileName}.png`, bytes, {
+      .upload(storagePath, bytes, {
         contentType: 'image/png',
         upsert: true,
       })
@@ -238,14 +240,40 @@ async function uploadImageToStorage(
     // Get public URL
     const { data: urlData } = supabase.storage
       .from('blog-images')
-      .getPublicUrl(`hero/${fileName}.png`)
+      .getPublicUrl(storagePath)
 
-    return { success: true, publicUrl: urlData.publicUrl }
+    return { success: true, publicUrl: urlData.publicUrl, storagePath }
   } catch (error) {
     console.error('Error uploading image:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error uploading image',
+    }
+  }
+}
+
+// Delete image from Supabase Storage after successful CMS publish
+async function cleanupStorageImage(
+  supabase: ReturnType<typeof createClient>,
+  storagePath: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.storage
+      .from('blog-images')
+      .remove([storagePath])
+
+    if (error) {
+      console.error('Storage cleanup error:', error)
+      return { success: false, error: error.message }
+    }
+
+    console.log(`Cleaned up storage image: ${storagePath}`)
+    return { success: true }
+  } catch (error) {
+    console.error('Error cleaning up storage:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error cleaning up storage',
     }
   }
 }
@@ -354,6 +382,7 @@ async function processTask(
               outputData = {
                 ...promptData,
                 imageUrl: uploadResult.publicUrl,
+                storagePath: uploadResult.storagePath, // Track for cleanup after CMS publish
                 generatedAt: new Date().toISOString(),
               }
               resultText = `Image generated successfully!\n\nURL: ${uploadResult.publicUrl}\n\nPrompt used: ${promptData.prompt}`
@@ -397,12 +426,46 @@ async function processTask(
         if (publishData.ready && publishData.postData) {
           const publishResult = await publishToCMS(publishData.postData)
           if (publishResult.success) {
+            // Clean up Supabase Storage images after successful CMS publish
+            // The CMS now has the image, so we can delete our temporary copy
+            const cleanedUpImages: string[] = []
+            const cleanupErrors: string[] = []
+
+            // Check for storagePath in the task input (passed from previous workflow step)
+            const inputStoragePath = task.input?.storagePath as string | undefined
+            if (inputStoragePath) {
+              const cleanup = await cleanupStorageImage(supabase, inputStoragePath)
+              if (cleanup.success) {
+                cleanedUpImages.push(inputStoragePath)
+              } else {
+                cleanupErrors.push(`${inputStoragePath}: ${cleanup.error}`)
+              }
+            }
+
+            // Also check heroImage storagePath if present
+            const heroStoragePath = publishData.postData?.heroImage?.storagePath as string | undefined
+            if (heroStoragePath && heroStoragePath !== inputStoragePath) {
+              const cleanup = await cleanupStorageImage(supabase, heroStoragePath)
+              if (cleanup.success) {
+                cleanedUpImages.push(heroStoragePath)
+              } else {
+                cleanupErrors.push(`${heroStoragePath}: ${cleanup.error}`)
+              }
+            }
+
             outputData = {
               published: true,
               post: publishResult.post,
               publishedAt: new Date().toISOString(),
+              storageCleanup: {
+                cleaned: cleanedUpImages,
+                errors: cleanupErrors.length > 0 ? cleanupErrors : undefined,
+              },
             }
             resultText = `Successfully published to CMS!\n\nPost: ${publishData.postData.title}\nSlug: ${publishData.postData.slug}`
+            if (cleanedUpImages.length > 0) {
+              resultText += `\n\nCleaned up ${cleanedUpImages.length} temporary image(s) from storage.`
+            }
           } else {
             return { success: false, error: publishResult.error }
           }
