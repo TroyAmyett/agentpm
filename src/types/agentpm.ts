@@ -731,6 +731,162 @@ export interface SkillMetadata {
 }
 
 // =============================================================================
+// SKILLS INDEX (Agent-Agnostic Curated Skills)
+// =============================================================================
+
+// Supported AI agents/platforms
+export type SkillAgent =
+  | 'universal'   // Works with any agent
+  | 'claude'      // Anthropic Claude
+  | 'gemini'      // Google Gemini
+  | 'gpt'         // OpenAI GPT
+  | 'grok'        // xAI Grok
+  | 'llama'       // Meta Llama
+  | 'mistral'     // Mistral AI
+  | 'copilot'     // GitHub Copilot
+
+// Skill categories
+export type SkillCategory =
+  | 'development'     // Coding, debugging, code review
+  | 'writing'         // Content creation, documentation
+  | 'analysis'        // Data analysis, research
+  | 'productivity'    // Task management, planning
+  | 'design'          // UI/UX, visual design
+  | 'devops'          // CI/CD, infrastructure
+  | 'security'        // Security audits, vulnerability analysis
+  | 'data'            // Data processing, ETL
+  | 'communication'   // Email, presentations
+  | 'other'
+
+// Approval status
+export type SkillApprovalStatus =
+  | 'pending'     // Submitted, awaiting review
+  | 'approved'    // Reviewed and approved
+  | 'rejected'    // Reviewed and rejected
+  | 'deprecated'  // Was approved but now outdated
+
+// Skills Index entry (curated, approved skills)
+export interface SkillIndexEntry {
+  id: string
+
+  // Basic info
+  name: string
+  slug: string
+  description: string
+  longDescription?: string
+
+  // Categorization
+  category: SkillCategory
+  tags: string[]
+
+  // Authorship
+  authorName?: string
+  authorUrl?: string
+  authorVerified: boolean
+
+  // Source
+  githubUrl?: string
+  githubOwner?: string
+  githubRepo?: string
+  githubPath?: string
+  githubBranch: string
+  rawContentUrl?: string
+
+  // Version tracking
+  version: string
+  lastCommitSha?: string
+  contentHash?: string
+
+  // Agent compatibility
+  compatibleAgents: SkillAgent[]
+  minContextWindow?: number
+  requiresTools: string[]
+
+  // Skill format
+  formatVersion: string
+  hasConditionalSections: boolean
+
+  // Approval & curation
+  approvalStatus: SkillApprovalStatus
+  approvedBy?: string
+  approvedAt?: string
+  rejectionReason?: string
+
+  // Featuring
+  isFeatured: boolean
+  featuredOrder?: number
+  featuredAt?: string
+
+  // Stats
+  importCount: number
+  starCount: number
+
+  // Preview
+  previewSnippet?: string
+
+  // Timestamps
+  createdAt: string
+  updatedAt: string
+  lastSyncedAt?: string
+
+  // Soft delete
+  deletedAt?: string
+  deletedBy?: string
+}
+
+// Search result with ranking
+export interface SkillIndexSearchResult extends SkillIndexEntry {
+  rank: number
+}
+
+// Search filters
+export interface SkillIndexFilters {
+  query?: string
+  category?: SkillCategory
+  agent?: SkillAgent
+  tags?: string[]
+}
+
+// Skill import tracking
+export interface SkillImport {
+  id: string
+  skillsIndexId: string
+  skillId: string
+  accountId: string
+  userId?: string
+  importedVersion: string
+  importedAt: string
+  updateAvailable: boolean
+  lastCheckedAt?: string
+}
+
+// Agent display info for UI
+export const SKILL_AGENT_INFO: Record<SkillAgent, { label: string; icon?: string; color: string }> = {
+  universal: { label: 'Universal', color: 'gray' },
+  claude: { label: 'Claude', color: 'orange' },
+  gemini: { label: 'Gemini', color: 'blue' },
+  gpt: { label: 'GPT', color: 'green' },
+  grok: { label: 'Grok', color: 'purple' },
+  llama: { label: 'Llama', color: 'indigo' },
+  mistral: { label: 'Mistral', color: 'cyan' },
+  copilot: { label: 'Copilot', color: 'slate' },
+}
+
+// Category display info for UI
+export const SKILL_CATEGORY_INFO: Record<SkillCategory, { label: string; icon?: string }> = {
+  development: { label: 'Development' },
+  writing: { label: 'Writing' },
+  analysis: { label: 'Analysis' },
+  productivity: { label: 'Productivity' },
+  design: { label: 'Design' },
+  devops: { label: 'DevOps' },
+  security: { label: 'Security' },
+  data: { label: 'Data' },
+  communication: { label: 'Communication' },
+  other: { label: 'Other' },
+}
+
+// =============================================================================
 // UTILITY TYPES
 // =============================================================================
 

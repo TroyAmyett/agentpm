@@ -2,7 +2,18 @@
 // GitHub import and skill management for AgentPM
 
 import { supabase } from '../supabase/client'
-import type { Skill, SkillMetadata, SkillSourceType, SkillBuilderMessage } from '@/types/agentpm'
+import type {
+  Skill,
+  SkillMetadata,
+  SkillSourceType,
+  SkillBuilderMessage,
+  SkillIndexEntry,
+  SkillIndexSearchResult,
+  SkillIndexFilters,
+  SkillCategory,
+  SkillAgent,
+  SkillImport,
+} from '@/types/agentpm'
 
 // =============================================================================
 // HELPER: Case conversion
@@ -595,4 +606,305 @@ export async function updateBuilderSkill(
 
   if (error) throw error
   return toCamelCaseKeys<Skill>(data)
+}
+
+// =============================================================================
+// SKILLS INDEX FUNCTIONS (Curated Skills Discovery)
+// =============================================================================
+
+/**
+ * Search the curated skills index
+ */
+export async function searchSkillsIndex(
+  filters: SkillIndexFilters = {},
+  limit: number = 20,
+  offset: number = 0
+): Promise<SkillIndexSearchResult[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // Use the database function for full-text search
+  const { data, error } = await supabase.rpc('search_skills_index', {
+    search_query: filters.query || null,
+    filter_category: filters.category || null,
+    filter_agent: filters.agent || null,
+    filter_tags: filters.tags || null,
+    page_limit: limit,
+    page_offset: offset,
+  })
+
+  if (error) throw error
+  return (data || []).map((row: Record<string, unknown>) => toCamelCaseKeys<SkillIndexSearchResult>(row))
+}
+
+/**
+ * Fetch featured skills from the index
+ */
+export async function fetchFeaturedSkills(): Promise<SkillIndexEntry[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('*')
+    .eq('approval_status', 'approved')
+    .eq('is_featured', true)
+    .is('deleted_at', null)
+    .order('featured_order', { ascending: true })
+    .limit(10)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillIndexEntry>(row))
+}
+
+/**
+ * Fetch a single skill from the index by slug
+ */
+export async function fetchSkillIndexBySlug(slug: string): Promise<SkillIndexEntry | null> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('*')
+    .eq('slug', slug)
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
+
+  return toCamelCaseKeys<SkillIndexEntry>(data)
+}
+
+/**
+ * Fetch a single skill from the index by ID
+ */
+export async function fetchSkillIndexById(id: string): Promise<SkillIndexEntry | null> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('*')
+    .eq('id', id)
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
+
+  return toCamelCaseKeys<SkillIndexEntry>(data)
+}
+
+/**
+ * Fetch skills by category
+ */
+export async function fetchSkillsByCategory(
+  category: SkillCategory,
+  limit: number = 20
+): Promise<SkillIndexEntry[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('*')
+    .eq('category', category)
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+    .order('import_count', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillIndexEntry>(row))
+}
+
+/**
+ * Fetch skills compatible with a specific agent
+ */
+export async function fetchSkillsForAgent(
+  agent: SkillAgent,
+  limit: number = 20
+): Promise<SkillIndexEntry[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('*')
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+    .or(`compatible_agents.cs.{${agent}},compatible_agents.cs.{universal}`)
+    .order('import_count', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillIndexEntry>(row))
+}
+
+/**
+ * Import a skill from the index into user's account
+ */
+export async function importFromIndex(
+  indexEntry: SkillIndexEntry,
+  accountId: string,
+  userId: string
+): Promise<Skill> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // If we have a GitHub URL, fetch fresh content
+  let content: string
+  let sourceSha: string | undefined
+
+  if (indexEntry.githubUrl) {
+    content = await fetchGitHubContent(indexEntry.githubUrl)
+    const parsed = parseGitHubUrl(indexEntry.githubUrl)
+    if (parsed) {
+      const sha = await getLatestCommitSha(
+        parsed.owner,
+        parsed.repo,
+        parsed.path,
+        parsed.branch
+      )
+      sourceSha = sha || undefined
+    }
+  } else if (indexEntry.rawContentUrl) {
+    const response = await fetch(indexEntry.rawContentUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch skill content: ${response.statusText}`)
+    }
+    content = await response.text()
+  } else {
+    throw new Error('Skill has no content source')
+  }
+
+  // Parse frontmatter from fetched content
+  const { metadata, body } = parseFrontmatter(content)
+
+  // Create the skill in user's account
+  const skill = await createSkill({
+    accountId,
+    userId,
+    name: metadata.name || indexEntry.name,
+    description: metadata.description || indexEntry.description,
+    version: metadata.version || indexEntry.version,
+    author: metadata.author || indexEntry.authorName,
+    tags: metadata.tags || indexEntry.tags,
+    content: body,
+    sourceType: indexEntry.githubUrl ? 'github' : 'marketplace',
+    sourceUrl: indexEntry.githubUrl || indexEntry.rawContentUrl,
+    sourceRepo: indexEntry.githubOwner && indexEntry.githubRepo
+      ? `${indexEntry.githubOwner}/${indexEntry.githubRepo}`
+      : undefined,
+    sourcePath: indexEntry.githubPath,
+    sourceBranch: indexEntry.githubBranch,
+    sourceSha,
+    isEnabled: true,
+  })
+
+  // Track the import
+  await supabase.from('skill_imports').insert({
+    skills_index_id: indexEntry.id,
+    skill_id: skill.id,
+    account_id: accountId,
+    user_id: userId,
+    imported_version: indexEntry.version,
+  })
+
+  return skill
+}
+
+/**
+ * Check if a skill from the index has been imported by the user
+ */
+export async function checkSkillImported(
+  indexId: string,
+  accountId: string
+): Promise<SkillImport | null> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_imports')
+    .select('*')
+    .eq('skills_index_id', indexId)
+    .eq('account_id', accountId)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
+
+  return toCamelCaseKeys<SkillImport>(data)
+}
+
+/**
+ * Fetch all skills the user has imported from the index
+ */
+export async function fetchUserImports(accountId: string): Promise<SkillImport[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_imports')
+    .select('*')
+    .eq('account_id', accountId)
+    .order('imported_at', { ascending: false })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillImport>(row))
+}
+
+/**
+ * Get all unique categories with counts
+ */
+export async function fetchCategoryCounts(): Promise<Array<{ category: SkillCategory; count: number }>> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('category')
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+
+  if (error) throw error
+
+  // Count categories manually (Supabase doesn't support GROUP BY easily in client)
+  const counts = (data || []).reduce((acc: Record<string, number>, row) => {
+    acc[row.category] = (acc[row.category] || 0) + 1
+    return acc
+  }, {})
+
+  return Object.entries(counts).map(([category, count]) => ({
+    category: category as SkillCategory,
+    count,
+  }))
+}
+
+/**
+ * Get popular tags from the index
+ */
+export async function fetchPopularTags(limit: number = 20): Promise<Array<{ tag: string; count: number }>> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skills_index')
+    .select('tags')
+    .eq('approval_status', 'approved')
+    .is('deleted_at', null)
+
+  if (error) throw error
+
+  // Flatten and count tags
+  const tagCounts = (data || []).reduce((acc: Record<string, number>, row) => {
+    for (const tag of row.tags || []) {
+      acc[tag] = (acc[tag] || 0) + 1
+    }
+    return acc
+  }, {})
+
+  return Object.entries(tagCounts)
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
 }

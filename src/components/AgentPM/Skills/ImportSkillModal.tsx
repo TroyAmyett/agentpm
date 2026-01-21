@@ -1,25 +1,31 @@
-// Import Skill Modal - Import skills from GitHub, raw content, or file upload
+// Import Skill Modal - Import skills from GitHub, raw content, file upload, or browse index
 
 import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Github, FileText, Upload, AlertTriangle, Loader2, File } from 'lucide-react'
+import { X, Github, FileText, Upload, AlertTriangle, Loader2, File, Search } from 'lucide-react'
 
 interface ImportSkillModalProps {
   isOpen: boolean
   onClose: () => void
   onImportGitHub: (url: string) => Promise<void>
   onImportRaw: (content: string, name?: string) => Promise<void>
+  accountId?: string
+  userId?: string
+  onOpenBrowse?: () => void  // Callback to open BrowseSkillsModal from parent
 }
 
-type ImportTab = 'github' | 'raw' | 'upload'
+type ImportTab = 'browse' | 'github' | 'raw' | 'upload'
 
 export function ImportSkillModal({
   isOpen,
   onClose,
   onImportGitHub,
   onImportRaw,
+  accountId,
+  userId,
+  onOpenBrowse,
 }: ImportSkillModalProps) {
-  const [activeTab, setActiveTab] = useState<ImportTab>('github')
+  const [activeTab, setActiveTab] = useState<ImportTab>('browse')
   const [githubUrl, setGithubUrl] = useState('')
   const [rawContent, setRawContent] = useState('')
   const [rawName, setRawName] = useState('')
@@ -171,6 +177,19 @@ export function ImportSkillModal({
 
             {/* Tabs */}
             <div className="flex border-b border-surface-200 dark:border-surface-700">
+              {accountId && userId && (
+                <button
+                  onClick={() => setActiveTab('browse')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'browse'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                  }`}
+                >
+                  <Search size={18} />
+                  Browse
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('github')}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -206,7 +225,30 @@ export function ImportSkillModal({
               </button>
             </div>
 
+            {/* Browse Tab - Shows search UI inline */}
+            {activeTab === 'browse' && accountId && userId && (
+              <div className="p-6 text-center">
+                <Search size={48} className="mx-auto text-surface-300 dark:text-surface-600 mb-4" />
+                <h3 className="text-lg font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Browse Skill Index
+                </h3>
+                <p className="text-sm text-surface-500 mb-4">
+                  Search and import from our curated collection of skills compatible with Claude, Gemini, GPT, and more.
+                </p>
+                <button
+                  onClick={() => {
+                    onClose()
+                    onOpenBrowse?.()
+                  }}
+                  className="px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium transition-colors"
+                >
+                  Open Skills Browser
+                </button>
+              </div>
+            )}
+
             {/* Form */}
+            {activeTab !== 'browse' && (
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               {/* Error */}
               {error && (
@@ -382,6 +424,7 @@ When working on...`}
                 </button>
               </div>
             </form>
+            )}
           </motion.div>
         </>
       )}

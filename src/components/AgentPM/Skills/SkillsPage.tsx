@@ -10,12 +10,14 @@ import { SkillCard } from './SkillCard'
 import { SkillDetailView } from './SkillDetailView'
 import { ImportSkillModal } from './ImportSkillModal'
 import { SkillsBuilderModal } from './SkillsBuilderModal'
+import { BrowseSkillsModal } from './BrowseSkillsModal'
 import type { Skill, SkillSourceType, SkillBuilderMessage } from '@/types/agentpm'
 
 type FilterSource = 'all' | SkillSourceType
 
 export function SkillsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false)
   const [isBuilderOpen, setIsBuilderOpen] = useState(false)
   const [builderBaseSkill, setBuilderBaseSkill] = useState<Skill | null>(null)
   const [builderEditSkill, setBuilderEditSkill] = useState<Skill | null>(null)
@@ -415,6 +417,21 @@ export function SkillsPage() {
         onClose={() => setIsImportOpen(false)}
         onImportGitHub={handleImportGitHub}
         onImportRaw={handleImportRaw}
+        accountId={accountId}
+        userId={userId}
+        onOpenBrowse={() => setIsBrowseOpen(true)}
+      />
+
+      {/* Browse Skills Modal */}
+      <BrowseSkillsModal
+        isOpen={isBrowseOpen}
+        onClose={() => setIsBrowseOpen(false)}
+        accountId={accountId}
+        userId={userId}
+        onImportSuccess={() => {
+          fetchSkills(accountId)
+          setIsBrowseOpen(false)
+        }}
       />
 
       {/* Skills Builder Modal */}
