@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useUIStore } from '@/stores/uiStore'
-import { getCurrentNoteContext } from '@/stores/notesStore'
-import { chatWithNotes, isAnthropicConfigured } from '@/services/ai/anthropic'
+import { getCurrentNoteContext, useNotesStore } from '@/stores/notesStore'
+import { chatWithNotes, isAnthropicConfigured, setNoteOperationCallbacks } from '@/services/ai/anthropic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ResizeHandle } from '@/components/ResizeHandle'
+import type { JSONContent } from '@tiptap/react'
 import {
   X,
   Send,
@@ -13,6 +14,7 @@ import {
   Bot,
   AlertCircle,
   FileText,
+  PenLine,
 } from 'lucide-react'
 
 interface Message {
@@ -24,6 +26,7 @@ interface Message {
 
 export function ChatPanel() {
   const { chatPanelOpen, setChatPanelOpen, chatPanelWidth, setChatPanelWidth } = useUIStore()
+  const { updateNote, addNote, currentNoteId, notes } = useNotesStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,13 +35,75 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Update active note title when panel opens or periodically
+  // Update active note title when panel opens or note changes
   useEffect(() => {
     if (chatPanelOpen) {
       const { currentNote } = getCurrentNoteContext()
       setActiveNoteTitle(currentNote?.title || null)
     }
-  }, [chatPanelOpen])
+  }, [chatPanelOpen, currentNoteId])
+
+  // Set up note operation callbacks for AI
+  useEffect(() => {
+    setNoteOperationCallbacks({
+      updateCurrentNote: async (content: string, title?: string) => {
+        if (!currentNoteId) throw new Error('No note selected')
+        const currentNote = notes.find(n => n.id === currentNoteId)
+        if (!currentNote) throw new Error('Note not found')
+
+        // Convert plain text content to Tiptap JSON format
+        const jsonContent = {
+          type: 'doc',
+          content: content.split('\n').map(line => ({
+            type: 'paragraph',
+            content: line ? [{ type: 'text', text: line }] : [],
+          })),
+        }
+
+        await updateNote(currentNoteId, {
+          content: jsonContent,
+          ...(title ? { title } : {}),
+        })
+      },
+      createNewNote: async (title: string, content: string) => {
+        const jsonContent = {
+          type: 'doc',
+          content: content.split('\n').map(line => ({
+            type: 'paragraph',
+            content: line ? [{ type: 'text', text: line }] : [],
+          })),
+        }
+        await addNote({ title, content: jsonContent })
+      },
+      appendToNote: async (content: string) => {
+        if (!currentNoteId) throw new Error('No note selected')
+        const currentNote = notes.find(n => n.id === currentNoteId)
+        if (!currentNote) throw new Error('Note not found')
+
+        // Get existing content and append new content
+        const existingContent = currentNote.content as JSONContent
+        const newParagraphs: JSONContent[] = content.split('\n').map(line => ({
+          type: 'paragraph',
+          content: line ? [{ type: 'text', text: line }] : [],
+        }))
+
+        const updatedContent: JSONContent = {
+          ...existingContent,
+          content: [...(existingContent.content || []), ...newParagraphs],
+        }
+
+        await updateNote(currentNoteId, { content: updatedContent })
+      },
+      getCurrentNoteContent: () => {
+        const { currentNote } = getCurrentNoteContext()
+        return currentNote?.content || ''
+      },
+    })
+
+    return () => {
+      setNoteOperationCallbacks(null)
+    }
+  }, [currentNoteId, notes, updateNote, addNote])
 
   const handleResize = useCallback((delta: number) => {
     setChatPanelWidth(chatPanelWidth + delta)
@@ -81,20 +146,34 @@ export function ChatPanel() {
     try {
       const { currentNote, otherNotes } = getCurrentNoteContext()
       const chatHistory = messages.map((m) => ({
-        role: m.role,
+        role: m.role as 'user' | 'assistant',
         content: m.content,
       }))
 
-      const response = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory)
+      const result = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory)
+
+      // Build response content with note update indicator if applicable
+      let content = result.response
+      if (result.noteUpdated) {
+        content = `✏️ ${content}`
+      } else if (result.noteCreated) {
+        content = `📝 ${content}`
+      }
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: response,
+        content,
         timestamp: new Date(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
+
+      // Refresh the active note title in case it changed
+      if (result.noteUpdated || result.noteCreated) {
+        const { currentNote: updatedNote } = getCurrentNoteContext()
+        setActiveNoteTitle(updatedNote?.title || null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get response')
     } finally {
@@ -164,8 +243,12 @@ export function ChatPanel() {
                       Let's work on "{activeNoteTitle}"
                     </h3>
                     <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      Brainstorm ideas, expand concepts, get suggestions, or ask anything about this note.
+                      I can brainstorm ideas, suggest features, and update your note directly. Just ask!
                     </p>
+                    <div className="flex items-center justify-center gap-1 mt-3 text-xs text-primary-600 dark:text-primary-400">
+                      <PenLine size={12} />
+                      <span>Can edit this note</span>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -173,7 +256,7 @@ export function ChatPanel() {
                       Start a conversation
                     </h3>
                     <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      Ask questions about your notes and I'll help you find answers.
+                      Ask questions about your notes. I can also create new notes for you.
                     </p>
                   </>
                 )}
