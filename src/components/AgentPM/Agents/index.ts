@@ -1,3 +1,6 @@
 export { AgentCard } from './AgentCard'
 export { AgentCardCompact } from './AgentCardCompact'
 export { AgentStatusBadge } from './AgentStatusBadge'
+export { AgentsPage } from './AgentsPage'
+export { CreateAgentModal } from './CreateAgentModal'
+export { EditAgentModal } from './EditAgentModal'

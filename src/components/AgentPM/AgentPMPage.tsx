@@ -10,6 +10,7 @@ import {
   Settings,
   Plus,
   FileText,
+  Bot,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -25,11 +26,12 @@ import { OrgChart } from './OrgChart'
 import { KanbanView } from './Kanban'
 import { ViewSwitcher } from './ViewSwitcher'
 import { SkillsPage } from './Skills'
+import { AgentsPage } from './Agents'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'tasks' | 'org-chart' | 'reviews' | 'skills'
+type TabId = 'dashboard' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills'
 
 interface Tab {
   id: TabId
@@ -40,6 +42,7 @@ interface Tab {
 const tabs: Tab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
   { id: 'tasks', label: 'Tasks', icon: <ListTodo size={18} /> },
+  { id: 'agents', label: 'Agents', icon: <Bot size={18} /> },
   { id: 'org-chart', label: 'Org Chart', icon: <GitBranch size={18} /> },
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
   { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
@@ -461,6 +464,8 @@ export function AgentPMPage() {
             </div>
           </div>
         )}
+
+        {activeTab === 'agents' && <AgentsPage />}
 
         {activeTab === 'skills' && <SkillsPage />}
       </div>
