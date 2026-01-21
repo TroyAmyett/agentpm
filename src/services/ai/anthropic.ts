@@ -114,18 +114,37 @@ export async function performAIAction(
   )
 }
 
-// Chat with notes
+// Chat with notes - prioritizes the active note for context
 export async function chatWithNotes(
   userMessage: string,
-  notesContext: string,
+  activeNote: { title: string; content: string } | null,
+  otherNotesContext: string,
   chatHistory: AnthropicMessage[]
 ): Promise<string> {
-  const systemPrompt = `You are an AI assistant that helps users understand and work with their notes.
+  let systemPrompt: string
+
+  if (activeNote) {
+    // User has a note open - focus on helping with that note
+    systemPrompt = `You are an AI assistant helping the user work on their note titled "${activeNote.title}".
+
+YOUR PRIMARY FOCUS: The user is currently working on the note below. Help them brainstorm ideas, expand on concepts, suggest features, answer questions about this content, or help in any way they need.
+
+== CURRENT NOTE: "${activeNote.title}" ==
+${activeNote.content}
+== END OF CURRENT NOTE ==
+
+${otherNotesContext ? `You also have access to their other notes for additional context if needed:\n${otherNotesContext}` : ''}
+
+Be helpful, creative, and proactive. If they ask a general question, relate it back to what they're working on when relevant. Suggest ideas, point out potential improvements, and help them develop their thoughts.`
+  } else {
+    // No active note - general notes assistant
+    systemPrompt = `You are an AI assistant that helps users understand and work with their notes.
 You have access to the user's notes for context. Answer questions based on the notes when relevant.
 Be helpful, concise, and accurate. If you don't know something or it's not in the notes, say so.
 
 Here are the user's notes for context:
-${notesContext}`
+${otherNotesContext}`
+  }
 
   const messages: AnthropicMessage[] = [
     ...chatHistory,

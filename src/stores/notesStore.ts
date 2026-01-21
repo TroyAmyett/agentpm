@@ -669,3 +669,27 @@ export function getAllNotesText(): string {
     })
     .join('\n\n---\n\n')
 }
+
+// Export helper for getting the current note with context
+export function getCurrentNoteContext(): { currentNote: { title: string; content: string } | null; otherNotes: string } {
+  const { notes, currentNoteId } = useNotesStore.getState()
+  const currentNote = notes.find((n) => n.id === currentNoteId)
+
+  if (!currentNote) {
+    return { currentNote: null, otherNotes: getAllNotesText() }
+  }
+
+  const currentContent = extractTextFromContent(currentNote.content)
+  const otherNotes = notes
+    .filter((n) => n.id !== currentNoteId)
+    .map((note) => {
+      const content = extractTextFromContent(note.content)
+      return `## ${note.title}\n${content}`
+    })
+    .join('\n\n---\n\n')
+
+  return {
+    currentNote: { title: currentNote.title, content: currentContent },
+    otherNotes,
+  }
+}

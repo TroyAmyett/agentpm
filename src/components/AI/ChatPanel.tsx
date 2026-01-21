@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useUIStore } from '@/stores/uiStore'
-import { getAllNotesText } from '@/stores/notesStore'
+import { getCurrentNoteContext } from '@/stores/notesStore'
 import { chatWithNotes, isAnthropicConfigured } from '@/services/ai/anthropic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ResizeHandle } from '@/components/ResizeHandle'
@@ -12,6 +12,7 @@ import {
   User,
   Bot,
   AlertCircle,
+  FileText,
 } from 'lucide-react'
 
 interface Message {
@@ -27,8 +28,17 @@ export function ChatPanel() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeNoteTitle, setActiveNoteTitle] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Update active note title when panel opens or periodically
+  useEffect(() => {
+    if (chatPanelOpen) {
+      const { currentNote } = getCurrentNoteContext()
+      setActiveNoteTitle(currentNote?.title || null)
+    }
+  }, [chatPanelOpen])
 
   const handleResize = useCallback((delta: number) => {
     setChatPanelWidth(chatPanelWidth + delta)
@@ -69,13 +79,13 @@ export function ChatPanel() {
     setLoading(true)
 
     try {
-      const notesContext = getAllNotesText()
+      const { currentNote, otherNotes } = getCurrentNoteContext()
       const chatHistory = messages.map((m) => ({
         role: m.role,
         content: m.content,
       }))
 
-      const response = await chatWithNotes(userMessage.content, notesContext, chatHistory)
+      const response = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory)
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
@@ -110,7 +120,7 @@ export function ChatPanel() {
           className="flex-shrink-0 border-l border-surface-200 dark:border-surface-700 flex flex-col overflow-hidden h-full"
           style={{ background: 'var(--fl-color-bg-elevated)', width: chatPanelWidth }}
         >
-          <ResizeHandle side="right" onResize={handleResize} />
+          <ResizeHandle side="left" onResize={handleResize} />
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20">
             <div className="flex items-center gap-2">
@@ -119,11 +129,18 @@ export function ChatPanel() {
               </div>
               <div>
                 <h2 className="font-semibold text-surface-900 dark:text-surface-100">
-                  Chat with Notes
+                  {activeNoteTitle ? 'AI Assistant' : 'Chat with Notes'}
                 </h2>
-                <p className="text-xs text-surface-500">
-                  Ask questions about your notes
-                </p>
+                {activeNoteTitle ? (
+                  <div className="flex items-center gap-1 text-xs text-surface-500">
+                    <FileText size={12} />
+                    <span className="truncate max-w-[150px]">{activeNoteTitle}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-surface-500">
+                    Ask questions about your notes
+                  </p>
+                )}
               </div>
             </div>
             <button
@@ -141,12 +158,25 @@ export function ChatPanel() {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-100 to-purple-100 dark:from-primary-900/30 dark:to-purple-900/30 flex items-center justify-center">
                   <Bot size={32} className="text-primary-500" />
                 </div>
-                <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
-                  Start a conversation
-                </h3>
-                <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                  Ask questions about your notes and I'll help you find answers.
-                </p>
+                {activeNoteTitle ? (
+                  <>
+                    <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
+                      Let's work on "{activeNoteTitle}"
+                    </h3>
+                    <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
+                      Brainstorm ideas, expand concepts, get suggestions, or ask anything about this note.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
+                      Start a conversation
+                    </h3>
+                    <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
+                      Ask questions about your notes and I'll help you find answers.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
