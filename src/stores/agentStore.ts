@@ -5,11 +5,23 @@ import type { AgentPersona, UpdateEntity } from '@/types/agentpm'
 import { DEFAULT_AGENT_PERSONAS } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
 
+// Fixed UUIDs for demo agents (deterministic so they persist across reloads)
+const DEMO_AGENT_UUIDS = [
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000006',
+  '00000000-0000-0000-0000-000000000007',
+  '00000000-0000-0000-0000-000000000008',
+]
+
 // Generate demo agents with full data for development
 function createDemoAgents(accountId: string): AgentPersona[] {
   const now = new Date().toISOString()
   return DEFAULT_AGENT_PERSONAS.map((partial, index) => ({
-    id: `demo-agent-${index + 1}`,
+    id: DEMO_AGENT_UUIDS[index] || `00000000-0000-0000-0000-00000000000${index + 1}`,
     accountId,
     createdAt: now,
     createdBy: 'system',
