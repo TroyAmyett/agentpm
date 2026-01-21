@@ -244,6 +244,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   handleRemoteTaskChange: (remoteTask) => {
     set((state) => {
+      // If the task has been soft-deleted, remove it from the active list
+      if (remoteTask.deletedAt) {
+        return {
+          tasks: state.tasks.filter((t) => t.id !== remoteTask.id),
+          selectedTaskId: state.selectedTaskId === remoteTask.id ? null : state.selectedTaskId,
+        }
+      }
+
       const existingIndex = state.tasks.findIndex((t) => t.id === remoteTask.id)
       if (existingIndex >= 0) {
         // Update existing

@@ -21,7 +21,7 @@ import {
   Code,
 } from 'lucide-react'
 import { useAgentStore } from '@/stores/agentStore'
-import { useTaskStore, selectTaskCounts } from '@/stores/taskStore'
+import { useTaskStore } from '@/stores/taskStore'
 import { AgentCard } from '../Agents'
 
 type ViewMode = 'grid' | 'list'
@@ -76,7 +76,17 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
   } = useAgentStore()
 
   const { tasks, isLoading: tasksLoading, fetchTasks, subscribeToTasks } = useTaskStore()
-  const taskCounts = selectTaskCounts(useTaskStore.getState())
+
+  // Use reactive selector - recalculates when tasks change
+  const taskCounts = useMemo(() => {
+    const pending = tasks.filter((t) => t.status === 'pending').length
+    const queued = tasks.filter((t) => t.status === 'queued').length
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length
+    const review = tasks.filter((t) => t.status === 'review').length
+    const completed = tasks.filter((t) => t.status === 'completed').length
+    const failed = tasks.filter((t) => t.status === 'failed').length
+    return { total: tasks.length, pending, queued, inProgress, review, completed, failed }
+  }, [tasks])
 
   // Calculate stats with trends
   const stats = useMemo(() => {

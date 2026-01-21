@@ -17,6 +17,9 @@ import {
   Edit2,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react'
 import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
@@ -41,6 +44,8 @@ export function TaskDetail({
 }: TaskDetailProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [statusNote, setStatusNote] = useState('')
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [showRawOutput, setShowRawOutput] = useState(false)
 
   const formatDateTime = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -113,6 +118,214 @@ export function TaskDetail({
   const handleStatusChange = (status: TaskStatus) => {
     onUpdateStatus?.(task.id, status, statusNote || undefined)
     setStatusNote('')
+  }
+
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopiedField(fieldName)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  // Render agent output in a human-friendly format
+  const renderAgentOutput = () => {
+    if (!task.output) return null
+
+    const output = task.output as Record<string, unknown>
+
+    // Extract values upfront with type safety
+    const title = output.title ? String(output.title) : null
+    const excerpt = output.excerpt ? String(output.excerpt) : null
+    const imageUrl = output.imageUrl ? String(output.imageUrl) : null
+    const content = output.content ? String(output.content) : null
+    const result = output.result ? String(output.result) : null
+    const category = output.category ? String(output.category) : null
+    const seoTitle = output.seoTitle ? String(output.seoTitle) : null
+    const seoDescription = output.seoDescription ? String(output.seoDescription) : null
+    const imagePrompt = output.imagePrompt ? String(output.imagePrompt) : null
+    const tags = Array.isArray(output.tags) ? output.tags.map(t => String(t)) : []
+
+    // Check if this is blog content (has title, content, etc.)
+    if (title || content || result) {
+      return (
+        <div className="space-y-4">
+          {/* Title */}
+          {title && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-surface-500 dark:text-surface-400">Title</span>
+                <button
+                  onClick={() => copyToClipboard(title, 'title')}
+                  className="p-1 hover:bg-surface-200 dark:hover:bg-surface-700 rounded"
+                  title="Copy"
+                >
+                  {copiedField === 'title' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <p className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                {title}
+              </p>
+            </div>
+          )}
+
+          {/* Excerpt */}
+          {excerpt && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-surface-500 dark:text-surface-400">Excerpt</span>
+                <button
+                  onClick={() => copyToClipboard(excerpt, 'excerpt')}
+                  className="p-1 hover:bg-surface-200 dark:hover:bg-surface-700 rounded"
+                  title="Copy"
+                >
+                  {copiedField === 'excerpt' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <p className="text-surface-600 dark:text-surface-400 italic">
+                {excerpt}
+              </p>
+            </div>
+          )}
+
+          {/* Image URL */}
+          {imageUrl && (
+            <div>
+              <span className="text-xs font-medium text-surface-500 dark:text-surface-400 block mb-2">
+                Generated Image
+              </span>
+              <div className="rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
+                <img
+                  src={imageUrl}
+                  alt="Generated"
+                  className="w-full h-48 object-cover"
+                />
+              </div>
+              <a
+                href={imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 mt-2"
+              >
+                <ExternalLink size={12} />
+                Open full size
+              </a>
+            </div>
+          )}
+
+          {/* Content/Result */}
+          {(content || result) && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-surface-500 dark:text-surface-400">
+                  {content ? 'Content' : 'Result'}
+                </span>
+                <button
+                  onClick={() => copyToClipboard(content || result || '', 'content')}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 rounded"
+                >
+                  {copiedField === 'content' ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                  Copy
+                </button>
+              </div>
+              <div className="p-4 rounded-lg bg-surface-50 dark:bg-surface-900/50 border border-surface-200 dark:border-surface-700 max-h-96 overflow-auto">
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  {/* Render as formatted text with line breaks */}
+                  {(content || result || '')
+                    .split(/\\n|[\n]/)
+                    .map((line, i) => {
+                      const trimmedLine = line.trim()
+                      if (!trimmedLine) return <br key={i} />
+                      if (trimmedLine.startsWith('## ')) {
+                        return <h2 key={i} className="text-lg font-semibold mt-4 mb-2">{trimmedLine.replace('## ', '')}</h2>
+                      }
+                      if (trimmedLine.startsWith('### ')) {
+                        return <h3 key={i} className="text-base font-semibold mt-3 mb-1">{trimmedLine.replace('### ', '')}</h3>
+                      }
+                      if (trimmedLine.startsWith('- ')) {
+                        return <li key={i} className="ml-4">{trimmedLine.replace('- ', '')}</li>
+                      }
+                      if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+                        return <p key={i} className="font-semibold">{trimmedLine.replace(/\*\*/g, '')}</p>
+                      }
+                      return <p key={i} className="mb-2">{trimmedLine}</p>
+                    })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata (tags, category, etc.) */}
+          <div className="flex flex-wrap gap-2">
+            {category && (
+              <span className="px-2 py-1 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
+                {category}
+              </span>
+            )}
+            {tags.map((tag, i) => (
+              <span key={i} className="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          {/* SEO Fields */}
+          {(seoTitle || seoDescription) && (
+            <details className="group">
+              <summary className="text-xs font-medium text-surface-500 dark:text-surface-400 cursor-pointer hover:text-surface-700 dark:hover:text-surface-300">
+                SEO Fields
+              </summary>
+              <div className="mt-2 p-3 rounded-lg bg-surface-100 dark:bg-surface-900 text-sm space-y-2">
+                {seoTitle && (
+                  <div>
+                    <span className="text-xs text-surface-500">Title:</span>
+                    <p>{seoTitle}</p>
+                  </div>
+                )}
+                {seoDescription && (
+                  <div>
+                    <span className="text-xs text-surface-500">Description:</span>
+                    <p>{seoDescription}</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Image Prompt */}
+          {imagePrompt && (
+            <details className="group">
+              <summary className="text-xs font-medium text-surface-500 dark:text-surface-400 cursor-pointer hover:text-surface-700 dark:hover:text-surface-300">
+                Image Prompt
+              </summary>
+              <div className="mt-2 p-3 rounded-lg bg-surface-100 dark:bg-surface-900 text-sm">
+                <p className="text-surface-600 dark:text-surface-400">{imagePrompt}</p>
+              </div>
+            </details>
+          )}
+
+          {/* Toggle raw output */}
+          <button
+            onClick={() => setShowRawOutput(!showRawOutput)}
+            className="text-xs text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+          >
+            {showRawOutput ? 'Hide' : 'Show'} raw output
+          </button>
+          {showRawOutput && (
+            <pre className="p-3 rounded-lg bg-surface-100 dark:bg-surface-900 text-xs overflow-auto max-h-48">
+              {JSON.stringify(task.output, null, 2)}
+            </pre>
+          )}
+        </div>
+      )
+    }
+
+    // Fallback to JSON for non-standard output
+    return (
+      <div className="p-3 rounded-lg bg-surface-50 dark:bg-surface-900/50 text-sm font-mono overflow-auto max-h-48">
+        <pre className="whitespace-pre-wrap">
+          {JSON.stringify(task.output, null, 2)}
+        </pre>
+      </div>
+    )
   }
 
   return (
@@ -220,14 +433,10 @@ export function TaskDetail({
         {/* Output */}
         {task.output && Object.keys(task.output).length > 0 && (
           <div>
-            <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">
+            <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
               Output
             </h4>
-            <div className="p-3 rounded-lg bg-surface-50 dark:bg-surface-900/50 text-sm font-mono overflow-auto max-h-48">
-              <pre className="whitespace-pre-wrap">
-                {JSON.stringify(task.output, null, 2)}
-              </pre>
-            </div>
+            {renderAgentOutput()}
           </div>
         )}
 
