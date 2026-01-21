@@ -7,7 +7,7 @@ import type { Task, TaskStatus } from '@/types/agentpm'
 // Status to column mapping
 const STATUS_TO_COLUMN: Record<TaskStatus, string> = {
   pending: 'backlog',
-  queued: 'backlog',
+  queued: 'queued',
   in_progress: 'in_progress',
   review: 'review',
   completed: 'done',
@@ -17,6 +17,7 @@ const STATUS_TO_COLUMN: Record<TaskStatus, string> = {
 
 const COLUMN_TO_STATUS: Record<string, TaskStatus> = {
   backlog: 'pending',
+  queued: 'queued',
   in_progress: 'in_progress',
   review: 'review',
   done: 'completed',
@@ -30,6 +31,7 @@ interface Column {
 
 const DEFAULT_COLUMNS: Column[] = [
   { id: 'backlog', title: 'Backlog' },
+  { id: 'queued', title: 'Queued', wipLimit: 10 },
   { id: 'in_progress', title: 'In Progress', wipLimit: 5 },
   { id: 'review', title: 'Review', wipLimit: 3 },
   { id: 'done', title: 'Done' },
@@ -65,6 +67,7 @@ export function KanbanView({
   const tasksByColumn = useMemo(() => {
     const grouped: Record<string, Task[]> = {
       backlog: [],
+      queued: [],
       in_progress: [],
       review: [],
       done: [],

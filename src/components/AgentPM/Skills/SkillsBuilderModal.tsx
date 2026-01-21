@@ -18,6 +18,7 @@ import {
   GitFork,
 } from 'lucide-react'
 import { callClaude, isAnthropicConfigured } from '@/services/ai/anthropic'
+import { searchGitHubSkills, type GitHubSkillResult } from '@/services/skills/githubSkillSearch'
 import type { Skill, SkillBuilderMessage } from '@/types/agentpm'
 
 interface SkillsBuilderModalProps {
@@ -32,6 +33,11 @@ interface SkillsBuilderModalProps {
 interface SearchResult {
   skill: Skill
   relevance: number
+  source: 'local' | 'github'
+}
+
+interface GitHubSearchResult extends GitHubSkillResult {
+  source: 'github'
 }
 
 // System prompt for the skill builder AI
@@ -104,6 +110,8 @@ export function SkillsBuilderModal({
 
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [githubResults, setGithubResults] = useState<GitHubSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
   const [selectedBase, setSelectedBase] = useState<Skill | null>(baseSkill || null)
 
   // Test state
@@ -160,16 +168,20 @@ export function SkillsBuilderModal({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Search for relevant official skills
+  // Search for relevant skills (local and GitHub)
   const searchSkills = useCallback(
-    (query: string) => {
-      if (!query.trim() || officialSkills.length === 0) {
+    async (query: string) => {
+      if (!query.trim()) {
         setSearchResults([])
+        setGithubResults([])
         return
       }
 
+      setSearching(true)
+
+      // Search local official skills
       const queryLower = query.toLowerCase()
-      const results: SearchResult[] = officialSkills
+      const localResults: SearchResult[] = officialSkills
         .map((skill) => {
           let relevance = 0
           const nameLower = skill.name.toLowerCase()
@@ -182,13 +194,24 @@ export function SkillsBuilderModal({
           // Tag match
           if (skill.tags.some((tag) => tag.toLowerCase().includes(queryLower))) relevance += 1
 
-          return { skill, relevance }
+          return { skill, relevance, source: 'local' as const }
         })
         .filter((r) => r.relevance > 0)
         .sort((a, b) => b.relevance - a.relevance)
         .slice(0, 3)
 
-      setSearchResults(results)
+      setSearchResults(localResults)
+
+      // Search GitHub in parallel
+      try {
+        const ghResults = await searchGitHubSkills(query)
+        setGithubResults(ghResults.map((r) => ({ ...r, source: 'github' as const })))
+      } catch (err) {
+        console.error('GitHub search failed:', err)
+        setGithubResults([])
+      } finally {
+        setSearching(false)
+      }
     },
     [officialSkills]
   )
@@ -287,10 +310,11 @@ export function SkillsBuilderModal({
     }
   }
 
-  // Handle using a skill as base
+  // Handle using a local skill as base
   const handleUseAsBase = (skill: Skill) => {
     setSelectedBase(skill)
     setSearchResults([])
+    setGithubResults([])
     setSkillPreview({
       name: `my-${skill.name}`,
       description: skill.description || '',
@@ -301,6 +325,46 @@ export function SkillsBuilderModal({
       {
         role: 'assistant',
         content: `Great choice! I've loaded **${skill.name}** as a starting point. What would you like to customize?`,
+      },
+    ])
+  }
+
+  // Handle using a GitHub skill as base
+  const handleUseGitHubAsBase = (ghSkill: GitHubSearchResult) => {
+    // Create a pseudo-skill object for the base
+    const pseudoSkill: Skill = {
+      id: `github-${ghSkill.repo}-${ghSkill.path}`,
+      accountId: '',
+      name: ghSkill.name,
+      description: ghSkill.description,
+      version: '1.0.0',
+      tags: [],
+      content: ghSkill.content,
+      sourceType: 'github',
+      sourceUrl: ghSkill.url,
+      sourceRepo: ghSkill.repo,
+      sourcePath: ghSkill.path,
+      sourceBranch: 'main',
+      isEnabled: true,
+      isOrgShared: false,
+      tier: 'free',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    setSelectedBase(pseudoSkill)
+    setSearchResults([])
+    setGithubResults([])
+    setSkillPreview({
+      name: `my-${ghSkill.name}`,
+      description: ghSkill.description,
+      content: ghSkill.content,
+    })
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: `Great choice! I've loaded **${ghSkill.name}** from ${ghSkill.repo} as a starting point. What would you like to customize?`,
       },
     ])
   }
@@ -364,6 +428,8 @@ export function SkillsBuilderModal({
     setError(null)
     setSkillPreview(null)
     setSearchResults([])
+    setGithubResults([])
+    setSearching(false)
     setSelectedBase(null)
     setTestInput('')
     setTestOutput('')
@@ -454,39 +520,113 @@ export function SkillsBuilderModal({
                   ))}
 
                   {/* Search Results */}
-                  {searchResults.length > 0 && (
+                  {(searchResults.length > 0 || githubResults.length > 0 || searching) && (
                     <div className="bg-surface-50 dark:bg-surface-700/50 rounded-lg p-4">
                       <div className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400 mb-3">
                         <Search size={14} />
-                        <span>Found similar skills:</span>
+                        <span>
+                          {searching ? 'Searching for similar skills...' : 'Found similar skills:'}
+                        </span>
+                        {searching && <Loader2 size={14} className="animate-spin" />}
                       </div>
-                      <div className="space-y-2">
-                        {searchResults.map(({ skill }) => (
-                          <div
-                            key={skill.id}
-                            className="flex items-center justify-between p-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-600"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm text-surface-900 dark:text-surface-100">
-                                @fun/{skill.name}
-                              </div>
-                              <div className="text-xs text-surface-500 truncate">
-                                {skill.description}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleUseAsBase(skill)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
-                            >
-                              <GitFork size={14} />
-                              Use as Base
-                            </button>
+
+                      {/* Local @fun/ skills */}
+                      {searchResults.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-surface-500 uppercase tracking-wider mb-2">
+                            Official Skills
                           </div>
-                        ))}
-                      </div>
+                          <div className="space-y-2">
+                            {searchResults.map(({ skill }) => (
+                              <div
+                                key={skill.id}
+                                className="flex items-center justify-between p-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-600"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm text-surface-900 dark:text-surface-100">
+                                    @fun/{skill.name}
+                                  </div>
+                                  <div className="text-xs text-surface-500 truncate">
+                                    {skill.description}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleUseAsBase(skill)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                                >
+                                  <GitFork size={14} />
+                                  Use as Base
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* GitHub community skills */}
+                      {githubResults.length > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-surface-500 uppercase tracking-wider mb-2">
+                            Community Skills (GitHub)
+                          </div>
+                          <div className="space-y-2">
+                            {githubResults.map((ghSkill) => (
+                              <div
+                                key={`${ghSkill.repo}-${ghSkill.path}`}
+                                className="flex items-center justify-between p-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-600"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm text-surface-900 dark:text-surface-100">
+                                      {ghSkill.name}
+                                    </span>
+                                    {ghSkill.stars && (
+                                      <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                                        ⭐ {ghSkill.stars}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-surface-500 truncate">
+                                    {ghSkill.repo} • {ghSkill.description || 'No description'}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={ghSkill.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
+                                    title="View on GitHub"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      width="14"
+                                      height="14"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                                    </svg>
+                                  </a>
+                                  <button
+                                    onClick={() => handleUseGitHubAsBase(ghSkill)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                                  >
+                                    <GitFork size={14} />
+                                    Use as Base
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <button
-                        onClick={() => setSearchResults([])}
-                        className="text-xs text-surface-500 hover:text-surface-700 mt-2"
+                        onClick={() => {
+                          setSearchResults([])
+                          setGithubResults([])
+                        }}
+                        className="text-xs text-surface-500 hover:text-surface-700 mt-3"
                       >
                         Start from scratch instead
                       </button>

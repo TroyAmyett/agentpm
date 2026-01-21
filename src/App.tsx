@@ -492,7 +492,7 @@ function App() {
         {/* Main Content */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {currentView === 'notes' && (
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden">
               <BlockEditor />
             </div>
           )}

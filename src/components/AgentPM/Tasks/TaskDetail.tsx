@@ -120,6 +120,12 @@ export function TaskDetail({
     setStatusNote('')
   }
 
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to delete "${task.title}"? This action cannot be undone.`)) {
+      onDelete?.(task.id)
+    }
+  }
+
   const copyToClipboard = async (text: string, fieldName: string) => {
     await navigator.clipboard.writeText(text)
     setCopiedField(fieldName)
@@ -347,7 +353,7 @@ export function TaskDetail({
             <Edit2 size={18} />
           </button>
           <button
-            onClick={() => onDelete?.(task.id)}
+            onClick={handleDelete}
             className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-surface-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
             title="Delete"
           >
