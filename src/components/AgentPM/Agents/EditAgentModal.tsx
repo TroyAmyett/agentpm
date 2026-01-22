@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, AlertTriangle, Plus, RefreshCw } from 'lucide-react'
+import { X, Bot, AlertTriangle, Plus, RefreshCw, User } from 'lucide-react'
 import { useAgentStore } from '@/stores/agentStore'
+import { useAuthStore } from '@/stores/authStore'
 import type { AgentPersona, AgentType, AutonomyLevel } from '@/types/agentpm'
 
 const AGENT_TYPES: { value: AgentType | string; label: string }[] = [
@@ -75,10 +76,17 @@ export function EditAgentModal({
   const [showOnDashboard, setShowOnDashboard] = useState(agent.showOnDashboard)
   const [newCapability, setNewCapability] = useState('')
   const [newRestriction, setNewRestriction] = useState('')
+  const [reportsToId, setReportsToId] = useState<string>(
+    agent.reportsTo?.type === 'agent' ? agent.reportsTo.id : 'user'
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { updateAgent, resetAgentHealth } = useAgentStore()
+  const { user } = useAuthStore()
+  const { agents, updateAgent, resetAgentHealth } = useAgentStore()
+
+  // Get other agents that this agent could report to (excluding itself)
+  const availableManagers = agents.filter((a) => a.id !== agent.id)
 
   // Reset form when agent changes
   useEffect(() => {
@@ -91,6 +99,7 @@ export function EditAgentModal({
     setRestrictions(agent.restrictions)
     setIsActive(agent.isActive)
     setShowOnDashboard(agent.showOnDashboard)
+    setReportsToId(agent.reportsTo?.type === 'agent' ? agent.reportsTo.id : 'user')
   }, [agent])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,6 +115,27 @@ export function EditAgentModal({
     try {
       const finalAgentType = agentType === 'custom' ? customType : agentType
 
+      // Build reportsTo object
+      let reportsTo: AgentPersona['reportsTo'] = undefined
+      if (reportsToId === 'user') {
+        // Reports directly to human
+        reportsTo = {
+          id: userId,
+          type: 'user',
+          name: user?.email?.split('@')[0] || 'You',
+        }
+      } else {
+        // Reports to another agent
+        const managerAgent = availableManagers.find((a) => a.id === reportsToId)
+        if (managerAgent) {
+          reportsTo = {
+            id: managerAgent.id,
+            type: 'agent',
+            name: managerAgent.alias,
+          }
+        }
+      }
+
       await updateAgent(agent.id, {
         agentType: finalAgentType,
         alias: alias.trim(),
@@ -115,6 +145,7 @@ export function EditAgentModal({
         autonomyLevel,
         isActive,
         showOnDashboard,
+        reportsTo,
         updatedBy: userId,
         updatedByType: 'user',
       })
@@ -342,6 +373,85 @@ export function EditAgentModal({
                         <p className="text-sm text-surface-500">Display agent on the main dashboard</p>
                       </div>
                     </label>
+                  </div>
+
+                  {/* Reports To */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                      Reports To
+                    </label>
+                    <p className="text-xs text-surface-500 mb-2">
+                      Determines hierarchy in org chart. Orchestrators typically report to humans, other agents report to orchestrators.
+                    </p>
+                    <div className="space-y-2">
+                      {/* Human option */}
+                      <label
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          reportsToId === 'user'
+                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="reportsTo"
+                          value="user"
+                          checked={reportsToId === 'user'}
+                          onChange={() => setReportsToId('user')}
+                          className="sr-only"
+                        />
+                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                          <User size={16} className="text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-surface-900 dark:text-surface-100">
+                            {user?.email?.split('@')[0] || 'You'} (Human)
+                          </p>
+                          <p className="text-xs text-surface-500">Reports directly to you</p>
+                        </div>
+                      </label>
+
+                      {/* Agent options */}
+                      {availableManagers.map((managerAgent) => (
+                        <label
+                          key={managerAgent.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            reportsToId === managerAgent.id
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="reportsTo"
+                            value={managerAgent.id}
+                            checked={reportsToId === managerAgent.id}
+                            onChange={() => setReportsToId(managerAgent.id)}
+                            className="sr-only"
+                          />
+                          <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+                            {managerAgent.avatar ? (
+                              <img
+                                src={managerAgent.avatar}
+                                alt={managerAgent.alias}
+                                className="w-full h-full rounded-full object-cover"
+                              />
+                            ) : (
+                              <Bot size={16} className="text-primary-600 dark:text-primary-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-surface-900 dark:text-surface-100">
+                              {managerAgent.alias}
+                            </p>
+                            <p className="text-xs text-surface-500 truncate">
+                              {managerAgent.agentType}
+                              {managerAgent.agentType === 'orchestrator' && ' (Recommended for worker agents)'}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
