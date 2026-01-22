@@ -449,7 +449,6 @@ export function AgentPMPage() {
               {taskViewMode === 'graph' && (
                 <DependencyGraph
                   tasks={tasks}
-                  accountId={accountId}
                   onTaskClick={setSelectedTaskId}
                 />
               )}

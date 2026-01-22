@@ -568,7 +568,6 @@ export interface KnowledgeEntry extends BaseEntity {
 
   // Validation
   isVerified: boolean
-  verifiedBy?: string
   verifiedAt?: string
 
   // Relevance

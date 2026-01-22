@@ -1,7 +1,6 @@
 // Create Task Modal - Form for creating new tasks
 
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Bot, User, Calendar, AlertTriangle, Sparkles } from 'lucide-react'
 import type { TaskPriority, AgentPersona, Skill } from '@/types/agentpm'

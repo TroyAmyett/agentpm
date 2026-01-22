@@ -18,7 +18,7 @@ export function ProjectsPage() {
 
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
-  const { projects, fetchProjects, createProject, selectProject, getSelectedProject } = useProjectStore()
+  const { projects, fetchProjects, createProject } = useProjectStore()
 
   const userId = user?.id || 'demo-user'
   const accountId = currentAccountId || 'demo-account-id'

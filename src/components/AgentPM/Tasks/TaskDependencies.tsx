@@ -9,7 +9,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  ChevronDown,
 } from 'lucide-react'
 import type { Task, TaskDependency, DependencyType } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'

@@ -1,7 +1,7 @@
 // Task Card - Individual task display
 
 import { motion } from 'framer-motion'
-import { Calendar, User, Bot, Clock, ChevronRight, Link2, AlertTriangle } from 'lucide-react'
+import { Calendar, User, Bot, Clock, ChevronRight, AlertTriangle } from 'lucide-react'
 import type { Task } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'

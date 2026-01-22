@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X, FolderKanban, GitBranch, Calendar, Terminal } from 'lucide-react'
-import type { Project, TaskPriority } from '@/types/agentpm'
+import type { TaskPriority } from '@/types/agentpm'
 
 interface CreateProjectModalProps {
   isOpen: boolean

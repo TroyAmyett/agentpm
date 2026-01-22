@@ -581,7 +581,7 @@ export async function deleteTaskDependency(id: string): Promise<void> {
  * Fetch all task dependencies for an account and compute which tasks are blocked
  * Returns a map of taskId -> number of incomplete blockers
  */
-export async function fetchBlockedTasks(accountId: string, tasks: Task[]): Promise<Map<string, number>> {
+export async function fetchBlockedTasks(_accountId: string, tasks: Task[]): Promise<Map<string, number>> {
   if (!supabase) throw new Error('Supabase not configured')
 
   // Create a set of completed/cancelled task IDs (these don't block)

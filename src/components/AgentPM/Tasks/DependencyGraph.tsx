@@ -1,24 +1,18 @@
 // Dependency Graph - Visual network view of task dependencies
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { motion } from 'framer-motion'
 import {
   ZoomIn,
   ZoomOut,
   Maximize2,
   Move,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
   AlertTriangle,
-  XCircle,
 } from 'lucide-react'
 import type { Task, TaskDependency } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
 
 interface DependencyGraphProps {
   tasks: Task[]
-  accountId: string
   onTaskClick?: (taskId: string) => void
 }
 
@@ -42,7 +36,7 @@ const NODE_HEIGHT = 60
 const HORIZONTAL_SPACING = 250
 const VERTICAL_SPACING = 100
 
-export function DependencyGraph({ tasks, accountId, onTaskClick }: DependencyGraphProps) {
+export function DependencyGraph({ tasks, onTaskClick }: DependencyGraphProps) {
   const [dependencies, setDependencies] = useState<TaskDependency[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
@@ -169,42 +163,6 @@ export function DependencyGraph({ tasks, accountId, onTaskClick }: DependencyGra
     return { nodes: Array.from(nodeMap.values()), edges }
   }, [tasks, dependencies])
 
-  // Get status color
-  const getStatusColor = (status: Task['status']) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 dark:bg-green-900/30 border-green-500'
-      case 'in_progress':
-        return 'bg-blue-100 dark:bg-blue-900/30 border-blue-500'
-      case 'review':
-        return 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'
-      case 'failed':
-        return 'bg-red-100 dark:bg-red-900/30 border-red-500'
-      case 'queued':
-        return 'bg-purple-100 dark:bg-purple-900/30 border-purple-500'
-      case 'cancelled':
-        return 'bg-surface-200 dark:bg-surface-700 border-surface-400'
-      default:
-        return 'bg-surface-100 dark:bg-surface-800 border-surface-300'
-    }
-  }
-
-  // Get status icon
-  const getStatusIcon = (status: Task['status']) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle2 size={14} className="text-green-600" />
-      case 'in_progress':
-        return <Clock size={14} className="text-blue-600" />
-      case 'review':
-        return <AlertCircle size={14} className="text-orange-600" />
-      case 'failed':
-        return <XCircle size={14} className="text-red-600" />
-      default:
-        return <Clock size={14} className="text-surface-500" />
-    }
-  }
-
   // Check if a node is blocked
   const isBlocked = (node: GraphNode) => {
     return node.dependencies.some((depId) => {
@@ -249,12 +207,6 @@ export function DependencyGraph({ tasks, accountId, onTaskClick }: DependencyGra
       </div>
     )
   }
-
-  // Calculate SVG viewBox based on nodes
-  const minX = Math.min(...nodes.map((n) => n.x)) - 50
-  const maxX = Math.max(...nodes.map((n) => n.x)) + NODE_WIDTH + 50
-  const minY = Math.min(...nodes.map((n) => n.y)) - 50
-  const maxY = Math.max(...nodes.map((n) => n.y)) + NODE_HEIGHT + 50
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-surface-50 dark:bg-surface-900">

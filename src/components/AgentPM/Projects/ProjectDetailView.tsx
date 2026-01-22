@@ -11,7 +11,6 @@ import {
   GitBranch,
   Calendar,
   CheckCircle2,
-  Clock,
   Link2,
   Plus,
 } from 'lucide-react'
