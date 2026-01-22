@@ -1,9 +1,10 @@
 // Create Task Modal - Form for creating new tasks
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, User, Calendar, AlertTriangle } from 'lucide-react'
-import type { TaskPriority, AgentPersona } from '@/types/agentpm'
+import { X, Bot, User, Calendar, AlertTriangle, Sparkles } from 'lucide-react'
+import type { TaskPriority, AgentPersona, Skill } from '@/types/agentpm'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -16,8 +17,10 @@ interface CreateTaskModalProps {
     assignedTo?: string
     assignedToType?: 'user' | 'agent'
     projectId?: string
+    skillId?: string
   }) => Promise<void>
   agents: AgentPersona[]
+  skills?: Skill[]
   projectId?: string
   defaultAgentId?: string
   defaultTitle?: string
@@ -30,6 +33,7 @@ export function CreateTaskModal({
   onClose,
   onSubmit,
   agents,
+  skills = [],
   projectId,
   defaultAgentId,
   defaultTitle = '',
@@ -42,6 +46,7 @@ export function CreateTaskModal({
   const [dueAt, setDueAt] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [assignedToType, setAssignedToType] = useState<'user' | 'agent'>('agent')
+  const [skillId, setSkillId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,10 +82,13 @@ export function CreateTaskModal({
         assignedTo: assignedTo || undefined,
         assignedToType: assignedTo ? assignedToType : undefined,
         projectId,
+        skillId: skillId || undefined,
       })
       handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create task')
+      console.error('Task creation error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create task'
+      setError(errorMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -92,11 +100,13 @@ export function CreateTaskModal({
     setPriority('medium')
     setDueAt('')
     setAssignedTo('')
+    setSkillId('')
     setError(null)
     onClose()
   }
 
   const activeAgents = agents.filter((a) => a.isActive && !a.pausedAt)
+  const enabledSkills = skills.filter((s) => s.isEnabled)
 
   return (
     <AnimatePresence>
@@ -270,6 +280,35 @@ export function CreateTaskModal({
                   </select>
                 )}
               </div>
+
+              {/* Skill */}
+              {enabledSkills.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-primary-500" />
+                      Skill (optional)
+                    </span>
+                  </label>
+                  <select
+                    value={skillId}
+                    onChange={(e) => setSkillId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No skill - General task</option>
+                    {enabledSkills.map((skill) => (
+                      <option key={skill.id} value={skill.id}>
+                        {skill.name} {skill.category && `(${skill.category})`}
+                      </option>
+                    ))}
+                  </select>
+                  {skillId && (
+                    <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
+                      {enabledSkills.find((s) => s.id === skillId)?.description}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">

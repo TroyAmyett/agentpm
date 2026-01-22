@@ -20,6 +20,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useSkillStore } from '@/stores/skillStore'
 import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail, DependencyGraph } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
@@ -70,6 +71,7 @@ export function AgentPMPage() {
   const { agents, fetchAgents, subscribeToAgents, pauseAgent, resumeAgent, resetAgentHealth } = useAgentStore()
   const { projects, fetchProjects } = useProjectStore()
   const { taskViewMode, setTaskViewMode } = useUIStore()
+  const { skills, fetchSkills } = useSkillStore()
   const {
     tasks,
     blockedTasks,
@@ -109,8 +111,9 @@ export function AgentPMPage() {
       fetchAgents(accountId)
       fetchTasks(accountId)
       fetchProjects(accountId)
+      fetchSkills(accountId)
     }
-  }, [accountId, fetchAgents, fetchTasks, fetchProjects])
+  }, [accountId, fetchAgents, fetchTasks, fetchProjects, fetchSkills])
 
   // Subscribe to realtime updates
   useEffect(() => {
@@ -133,6 +136,7 @@ export function AgentPMPage() {
       assignedTo?: string
       assignedToType?: 'user' | 'agent'
       projectId?: string
+      skillId?: string
       input?: ForgeTaskInput
     }) => {
       await createTask({
@@ -259,6 +263,9 @@ export function AgentPMPage() {
   const selectedTask = selectedTaskId ? getTask(selectedTaskId) : null
   const selectedTaskAgent = selectedTask?.assignedTo
     ? agents.find((a) => a.id === selectedTask.assignedTo)
+    : undefined
+  const selectedTaskSkill = selectedTask?.skillId
+    ? skills.find((s) => s.id === selectedTask.skillId)
     : undefined
 
   const pendingReviews = getPendingReviewTasks()
@@ -415,6 +422,7 @@ export function AgentPMPage() {
                           key={selectedTask.id}
                           task={selectedTask}
                           agent={selectedTaskAgent}
+                          skill={selectedTaskSkill}
                           allTasks={tasks}
                           accountId={accountId}
                           userId={userId}
@@ -453,6 +461,7 @@ export function AgentPMPage() {
                 <TaskDetail
                   task={selectedTask}
                   agent={selectedTaskAgent}
+                  skill={selectedTaskSkill}
                   allTasks={tasks}
                   accountId={accountId}
                   userId={userId}
@@ -668,6 +677,7 @@ export function AgentPMPage() {
         }}
         onSubmit={handleCreateTask}
         agents={agents}
+        skills={skills}
         defaultAgentId={preselectedAgentId}
         defaultTitle={voiceTaskTitle}
         currentUserId={userId}

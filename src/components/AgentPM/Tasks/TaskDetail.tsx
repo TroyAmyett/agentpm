@@ -20,15 +20,18 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react'
-import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
+import type { Task, TaskStatus, AgentPersona, Skill } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
 import { TaskDependencies } from './TaskDependencies'
+import { ExecutionPanel } from './ExecutionPanel'
 
 interface TaskDetailProps {
   task: Task
   agent?: AgentPersona
+  skill?: Skill
   allTasks?: Task[]
   accountId?: string
   userId?: string
@@ -42,6 +45,7 @@ interface TaskDetailProps {
 export function TaskDetail({
   task,
   agent,
+  skill,
   allTasks = [],
   accountId,
   userId,
@@ -422,6 +426,44 @@ export function TaskDetail({
             <p className="text-surface-500 dark:text-surface-400">Unassigned</p>
           )}
         </div>
+
+        {/* Skill */}
+        {skill && (
+          <div>
+            <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">
+              Skill
+            </h4>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-surface-900 dark:text-surface-100">
+                  {skill.name}
+                </p>
+                <p className="text-xs text-surface-500 dark:text-surface-400 truncate">
+                  {skill.description || skill.category}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Agent Execution */}
+        {accountId && userId && task.assignedToType === 'agent' && (
+          <div className="p-4 rounded-lg bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20 border border-primary-200 dark:border-primary-800">
+            <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
+              Agent Execution
+            </h4>
+            <ExecutionPanel
+              task={task}
+              agent={agent}
+              skill={skill}
+              accountId={accountId}
+              userId={userId}
+            />
+          </div>
+        )}
 
         {/* Dates */}
         <div className="grid grid-cols-2 gap-4">

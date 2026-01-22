@@ -248,6 +248,7 @@ export interface Task extends BaseEntity {
   projectId?: string
   parentTaskId?: string
   milestoneId?: string
+  skillId?: string
   relatedEntityId?: string
   relatedEntityType?: string
 
@@ -865,6 +866,11 @@ export interface Skill {
   sourcePath?: string
   sourceBranch: string
   sourceSha?: string
+
+  // Categorization
+  category?: string
+  icon?: string
+  slug?: string
 
   // Status
   isEnabled: boolean

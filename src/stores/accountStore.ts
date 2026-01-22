@@ -134,13 +134,20 @@ export const useAccountStore = create<AccountState>()(
 
         try {
           // Ensure user has at least one account
-          const account = await ensureUserHasAccount()
+          await ensureUserHasAccount()
 
-          // Refresh the accounts list
+          // Refresh the accounts list - this preserves currentAccountId if valid
           await get().fetchAccounts()
 
-          // Select the account
-          set({ currentAccountId: account.id })
+          // Only set account if none selected (fetchAccounts already handles this)
+          const { currentAccountId, accounts } = get()
+          if (!currentAccountId || !accounts.some((a) => a.id === currentAccountId)) {
+            // Fallback to first account if persisted one is invalid
+            const firstAccount = accounts[0]
+            if (firstAccount) {
+              set({ currentAccountId: firstAccount.id })
+            }
+          }
         } catch (error) {
           set({
             isLoading: false,
