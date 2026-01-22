@@ -14,6 +14,7 @@ interface TaskFilters {
 interface TaskState {
   // State
   tasks: Task[]
+  blockedTasks: Map<string, number> // taskId -> number of incomplete blockers
   selectedTaskId: string | null
   isLoading: boolean
   error: string | null
@@ -21,6 +22,7 @@ interface TaskState {
 
   // Actions
   fetchTasks: (accountId: string, projectId?: string) => Promise<void>
+  fetchBlockedTasks: (accountId: string) => Promise<void>
   selectTask: (id: string | null) => void
   getTask: (id: string) => Task | undefined
   getSelectedTask: () => Task | null
@@ -63,6 +65,7 @@ const defaultFilters: TaskFilters = {
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
+  blockedTasks: new Map(),
   selectedTaskId: null,
   isLoading: false,
   error: null,
@@ -72,12 +75,24 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const tasks = await db.fetchTasks(accountId, projectId)
-      set({ tasks, isLoading: false })
+      // Also fetch blocked status
+      const blockedTasks = await db.fetchBlockedTasks(accountId, tasks)
+      set({ tasks, blockedTasks, isLoading: false })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to fetch tasks',
         isLoading: false,
       })
+    }
+  },
+
+  fetchBlockedTasks: async (accountId) => {
+    const { tasks } = get()
+    try {
+      const blockedTasks = await db.fetchBlockedTasks(accountId, tasks)
+      set({ blockedTasks })
+    } catch (err) {
+      console.error('Failed to fetch blocked tasks:', err)
     }
   },
 
@@ -285,6 +300,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   clearTasks: () => {
     set({
       tasks: [],
+      blockedTasks: new Map(),
       selectedTaskId: null,
       isLoading: false,
       error: null,

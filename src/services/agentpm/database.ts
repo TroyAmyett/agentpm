@@ -8,6 +8,11 @@ import type {
   Task,
   AgentAction,
   Review,
+  Milestone,
+  TaskDependency,
+  KnowledgeEntry,
+  ProjectLinkedItem,
+  TimeEntry,
   CreateEntity,
   UpdateEntity,
 } from '@/types/agentpm'
@@ -451,6 +456,320 @@ export async function updateReview(id: string, updates: UpdateEntity<Review>): P
 
   if (error) throw error
   return toCamelCaseKeys<Review>(data)
+}
+
+// =============================================================================
+// MILESTONES
+// =============================================================================
+
+export async function fetchMilestones(projectId: string): Promise<Milestone[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('milestones')
+    .select('*')
+    .eq('project_id', projectId)
+    .is('deleted_at', null)
+    .order('sort_order', { ascending: true })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<Milestone>(row))
+}
+
+export async function createMilestone(milestone: CreateEntity<Milestone>): Promise<Milestone> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('milestones')
+    .insert(toSnakeCaseKeys(milestone as Record<string, unknown>))
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<Milestone>(data)
+}
+
+export async function updateMilestone(id: string, updates: UpdateEntity<Milestone>): Promise<Milestone> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('milestones')
+    .update(toSnakeCaseKeys(updates as Record<string, unknown>))
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<Milestone>(data)
+}
+
+export async function deleteMilestone(id: string, deletedBy: string, deletedByType: 'user' | 'agent'): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('milestones')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: deletedBy,
+      deleted_by_type: deletedByType,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// =============================================================================
+// TASK DEPENDENCIES
+// =============================================================================
+
+export async function fetchTaskDependencies(taskId: string): Promise<TaskDependency[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('task_dependencies')
+    .select('*')
+    .eq('task_id', taskId)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<TaskDependency>(row))
+}
+
+export async function fetchTaskDependents(taskId: string): Promise<TaskDependency[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // Tasks that depend on this task
+  const { data, error } = await supabase
+    .from('task_dependencies')
+    .select('*')
+    .eq('depends_on_task_id', taskId)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<TaskDependency>(row))
+}
+
+export async function createTaskDependency(dependency: Omit<TaskDependency, 'id' | 'createdAt'>): Promise<TaskDependency> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('task_dependencies')
+    .insert(toSnakeCaseKeys(dependency as Record<string, unknown>))
+    .select()
+    .single()
+
+  if (error) {
+    // Check for circular dependency error
+    if (error.message?.includes('Circular dependency')) {
+      throw new Error('Cannot create dependency: this would create a circular dependency')
+    }
+    throw error
+  }
+  return toCamelCaseKeys<TaskDependency>(data)
+}
+
+export async function deleteTaskDependency(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('task_dependencies')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+/**
+ * Fetch all task dependencies for an account and compute which tasks are blocked
+ * Returns a map of taskId -> number of incomplete blockers
+ */
+export async function fetchBlockedTasks(accountId: string, tasks: Task[]): Promise<Map<string, number>> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  // Create a set of completed/cancelled task IDs (these don't block)
+  const completedTaskIds = new Set(
+    tasks
+      .filter((t) => t.status === 'completed' || t.status === 'cancelled')
+      .map((t) => t.id)
+  )
+
+  // Get all task IDs for this account
+  const taskIds = tasks.map((t) => t.id)
+
+  // Fetch all dependencies where the task is in our list
+  const { data, error } = await supabase
+    .from('task_dependencies')
+    .select('task_id, depends_on_task_id')
+    .in('task_id', taskIds)
+
+  if (error) throw error
+
+  // Count incomplete blockers for each task
+  const blockedMap = new Map<string, number>()
+  for (const dep of data || []) {
+    // If the blocker is not completed, count it
+    if (!completedTaskIds.has(dep.depends_on_task_id)) {
+      const current = blockedMap.get(dep.task_id) || 0
+      blockedMap.set(dep.task_id, current + 1)
+    }
+  }
+
+  return blockedMap
+}
+
+// =============================================================================
+// KNOWLEDGE ENTRIES
+// =============================================================================
+
+export async function fetchKnowledgeEntries(projectId: string): Promise<KnowledgeEntry[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('knowledge_entries')
+    .select('*')
+    .eq('project_id', projectId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<KnowledgeEntry>(row))
+}
+
+export async function createKnowledgeEntry(entry: CreateEntity<KnowledgeEntry>): Promise<KnowledgeEntry> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('knowledge_entries')
+    .insert(toSnakeCaseKeys(entry as Record<string, unknown>))
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<KnowledgeEntry>(data)
+}
+
+export async function updateKnowledgeEntry(id: string, updates: UpdateEntity<KnowledgeEntry>): Promise<KnowledgeEntry> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('knowledge_entries')
+    .update(toSnakeCaseKeys(updates as Record<string, unknown>))
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<KnowledgeEntry>(data)
+}
+
+export async function deleteKnowledgeEntry(id: string, deletedBy: string, deletedByType: 'user' | 'agent'): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('knowledge_entries')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: deletedBy,
+      deleted_by_type: deletedByType,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// =============================================================================
+// PROJECT LINKED ITEMS
+// =============================================================================
+
+export async function fetchProjectLinkedItems(projectId: string): Promise<ProjectLinkedItem[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('project_linked_items')
+    .select('*')
+    .eq('project_id', projectId)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<ProjectLinkedItem>(row))
+}
+
+export async function linkItemToProject(
+  accountId: string,
+  projectId: string,
+  itemType: 'folder' | 'note',
+  itemId: string,
+  addedBy: string,
+  addedByType: 'user' | 'agent' = 'user'
+): Promise<ProjectLinkedItem> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('project_linked_items')
+    .insert({
+      account_id: accountId,
+      project_id: projectId,
+      item_type: itemType,
+      item_id: itemId,
+      added_by: addedBy,
+      added_by_type: addedByType,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<ProjectLinkedItem>(data)
+}
+
+export async function unlinkItemFromProject(projectId: string, itemType: 'folder' | 'note', itemId: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('project_linked_items')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('item_type', itemType)
+    .eq('item_id', itemId)
+
+  if (error) throw error
+}
+
+// =============================================================================
+// TIME ENTRIES
+// =============================================================================
+
+export async function fetchTimeEntries(taskId: string): Promise<TimeEntry[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('*')
+    .eq('task_id', taskId)
+    .order('entry_date', { ascending: false })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<TimeEntry>(row))
+}
+
+export async function createTimeEntry(entry: Omit<TimeEntry, 'id' | 'createdAt'>): Promise<TimeEntry> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('time_entries')
+    .insert(toSnakeCaseKeys(entry as Record<string, unknown>))
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<TimeEntry>(data)
+}
+
+export async function deleteTimeEntry(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase
+    .from('time_entries')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
 
 // =============================================================================

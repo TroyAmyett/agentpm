@@ -13,6 +13,7 @@ import { TaskCard } from './TaskCard'
 interface TaskListProps {
   tasks: Task[]
   agents?: Map<string, string> // agentId -> agentName
+  blockedTasks?: Map<string, number> // taskId -> number of blockers
   selectedTaskId?: string | null
   onSelectTask?: (taskId: string) => void
   onCreateTask?: () => void
@@ -50,6 +51,7 @@ const priorityOrder: Record<TaskPriority, number> = {
 export function TaskList({
   tasks,
   agents,
+  blockedTasks,
   selectedTaskId,
   onSelectTask,
   onCreateTask,
@@ -243,15 +245,20 @@ export function TaskList({
           </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {sortedTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                agentName={task.assignedTo ? agents?.get(task.assignedTo) : undefined}
-                selected={selectedTaskId === task.id}
-                onClick={onSelectTask}
-              />
-            ))}
+            {sortedTasks.map((task) => {
+              const blockedByCount = blockedTasks?.get(task.id)
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  agentName={task.assignedTo ? agents?.get(task.assignedTo) : undefined}
+                  selected={selectedTaskId === task.id}
+                  onClick={onSelectTask}
+                  isBlocked={blockedByCount !== undefined && blockedByCount > 0}
+                  blockedByCount={blockedByCount}
+                />
+              )
+            })}
           </AnimatePresence>
         )}
       </div>

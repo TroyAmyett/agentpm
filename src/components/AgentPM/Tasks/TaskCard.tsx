@@ -1,7 +1,7 @@
 // Task Card - Individual task display
 
 import { motion } from 'framer-motion'
-import { Calendar, User, Bot, Clock, ChevronRight } from 'lucide-react'
+import { Calendar, User, Bot, Clock, ChevronRight, Link2, AlertTriangle } from 'lucide-react'
 import type { Task } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
@@ -11,9 +11,11 @@ interface TaskCardProps {
   agentName?: string
   selected?: boolean
   onClick?: (taskId: string) => void
+  isBlocked?: boolean
+  blockedByCount?: number
 }
 
-export function TaskCard({ task, agentName, selected, onClick }: TaskCardProps) {
+export function TaskCard({ task, agentName, selected, onClick, isBlocked, blockedByCount }: TaskCardProps) {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null
     const date = new Date(dateStr)
@@ -67,6 +69,15 @@ export function TaskCard({ task, agentName, selected, onClick }: TaskCardProps) 
       <div className="flex items-center gap-2 mb-3">
         <TaskStatusBadge status={task.status} size="sm" />
         <TaskPriorityBadge priority={task.priority} size="sm" />
+        {isBlocked && (
+          <span
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+            title={blockedByCount ? `Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}` : 'Blocked'}
+          >
+            <AlertTriangle size={12} />
+            Blocked
+          </span>
+        )}
       </div>
 
       {/* Meta Info */}

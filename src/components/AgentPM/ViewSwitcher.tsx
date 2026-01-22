@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, List, Bot, ChevronDown, Check } from 'lucide-react'
+import { LayoutGrid, List, Bot, ChevronDown, Check, GitBranch } from 'lucide-react'
 import type { TaskViewMode } from '@/stores/uiStore'
 
 interface ViewOption {
@@ -30,6 +30,12 @@ const VIEW_OPTIONS: ViewOption[] = [
     label: 'Agent Tasks',
     icon: <Bot size={16} />,
     description: 'Grouped by agent',
+  },
+  {
+    id: 'graph',
+    label: 'Dependencies',
+    icon: <GitBranch size={16} />,
+    description: 'Network graph of task dependencies',
   },
 ]
 

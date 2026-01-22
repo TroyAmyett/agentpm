@@ -90,7 +90,7 @@ export interface Account extends BaseEntity {
 }
 
 // =============================================================================
-// PROJECT
+// PROJECT (Project Space)
 // =============================================================================
 
 export interface Project extends BaseEntity {
@@ -104,11 +104,36 @@ export interface Project extends BaseEntity {
 
   defaultAgentId?: string
 
+  // Repository configuration (for Forge)
+  repositoryUrl?: string
+  repositoryPath?: string
+  baseBranch: string
+  testCommand?: string
+  buildCommand?: string
+
+  // Defaults
+  defaultPriority: TaskPriority
+
   stats?: {
     totalTasks: number
     completedTasks: number
     progress: number
   }
+}
+
+// =============================================================================
+// PROJECT LINKED ITEM (Many-to-Many: Projects <-> Folders/Notes)
+// =============================================================================
+
+export interface ProjectLinkedItem {
+  id: string
+  accountId: string
+  projectId: string
+  itemType: 'folder' | 'note'
+  itemId: string
+  addedAt: string
+  addedBy: string
+  addedByType: 'user' | 'agent'
 }
 
 // =============================================================================
@@ -222,6 +247,7 @@ export interface Task extends BaseEntity {
   // Relationships
   projectId?: string
   parentTaskId?: string
+  milestoneId?: string
   relatedEntityId?: string
   relatedEntityType?: string
 
@@ -239,10 +265,30 @@ export interface Task extends BaseEntity {
   status: TaskStatus
   statusHistory: StatusHistoryEntry[]
 
+  // Estimation
+  estimatedHours?: number
+  storyPoints?: number
+  actualHours?: number
+
+  // Calculated dates (from dependencies)
+  scheduledStartDate?: string
+  scheduledEndDate?: string
+  calculatedStartDate?: string
+  calculatedEndDate?: string
+
+  // Source tracking (which note/section generated this task)
+  sourceNoteId?: string
+  sourceSection?: string
+
   // Context
   input?: Record<string, unknown>
   output?: Record<string, unknown>
   error?: TaskError
+
+  // Computed dependency info (from view)
+  blockedBy?: string[]
+  blocks?: string[]
+  isBlocked?: boolean
 }
 
 // =============================================================================
@@ -445,7 +491,7 @@ export interface ProjectContact {
 }
 
 // =============================================================================
-// MILESTONE (Optional Grouping)
+// MILESTONE
 // =============================================================================
 
 export type MilestoneStatus = 'not_started' | 'in_progress' | 'completed'
@@ -461,6 +507,95 @@ export interface Milestone extends BaseEntity {
 
   dueDate?: string
   completedAt?: string
+}
+
+// =============================================================================
+// TASK DEPENDENCY
+// =============================================================================
+
+// Dependency types (standard PM terminology)
+// FS = Finish-to-Start (most common: B can't start until A finishes)
+// SS = Start-to-Start (B can't start until A starts)
+// FF = Finish-to-Finish (B can't finish until A finishes)
+// SF = Start-to-Finish (B can't finish until A starts, rare)
+export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF'
+
+export interface TaskDependency {
+  id: string
+  accountId: string
+
+  // The task that has the dependency
+  taskId: string
+
+  // The task it depends on
+  dependsOnTaskId: string
+
+  // Dependency type
+  dependencyType: DependencyType
+
+  // Lag time in days (positive = delay, negative = overlap)
+  lagDays?: number
+
+  // Audit
+  createdAt: string
+  createdBy: string
+  createdByType: 'user' | 'agent'
+}
+
+// =============================================================================
+// KNOWLEDGE ENTRY
+// =============================================================================
+
+export type KnowledgeType =
+  | 'fact'        // "API uses REST, not GraphQL"
+  | 'decision'    // "We chose Tailwind over CSS modules"
+  | 'constraint'  // "Must support IE11"
+  | 'reference'   // "Brand guidelines at /docs/brand.md"
+  | 'glossary'    // "PRD = Product Requirements Document"
+
+export interface KnowledgeEntry extends BaseEntity {
+  projectId: string
+
+  knowledgeType: KnowledgeType
+  content: string
+
+  // Source tracking
+  sourceNoteId?: string
+  sourceTaskId?: string
+  extractedAt?: string
+  extractedBy?: string  // AI model name or user ID
+
+  // Validation
+  isVerified: boolean
+  verifiedBy?: string
+  verifiedAt?: string
+
+  // Relevance
+  relatedEntityIds?: string[]
+}
+
+// =============================================================================
+// TIME ENTRY
+// =============================================================================
+
+export interface TimeEntry {
+  id: string
+  accountId: string
+  taskId: string
+
+  // Who logged time
+  userId?: string
+  agentId?: string
+
+  // Time logged
+  hours: number
+  description?: string
+  entryDate: string
+
+  // Audit
+  createdAt: string
+  createdBy: string
+  createdByType: 'user' | 'agent'
 }
 
 // =============================================================================

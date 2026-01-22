@@ -12,6 +12,7 @@ import {
   FileText,
   Bot,
   Hammer,
+  FolderKanban,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -20,7 +21,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useUIStore } from '@/stores/uiStore'
 import { AgentDashboard } from './Dashboard'
-import { TaskList, TaskDetail } from './Tasks'
+import { TaskList, TaskDetail, DependencyGraph } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
 import { OrgChart } from './OrgChart'
@@ -28,12 +29,13 @@ import { KanbanView } from './Kanban'
 import { ViewSwitcher } from './ViewSwitcher'
 import { SkillsPage } from './Skills'
 import { AgentsPage } from './Agents'
+import { ProjectsPage } from './Projects'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills' | 'forge'
+type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills' | 'forge'
 
 interface Tab {
   id: TabId
@@ -43,6 +45,7 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+  { id: 'projects', label: 'Projects', icon: <FolderKanban size={18} /> },
   { id: 'tasks', label: 'Tasks', icon: <ListTodo size={18} /> },
   { id: 'forge', label: 'Forge', icon: <Hammer size={18} /> },
   { id: 'agents', label: 'Agents', icon: <Bot size={18} /> },
@@ -69,6 +72,7 @@ export function AgentPMPage() {
   const { taskViewMode, setTaskViewMode } = useUIStore()
   const {
     tasks,
+    blockedTasks,
     fetchTasks,
     createTask,
     updateTask,
@@ -360,6 +364,8 @@ export function AgentPMPage() {
           />
         )}
 
+        {activeTab === 'projects' && <ProjectsPage />}
+
         {activeTab === 'tasks' && (
           <div className="flex flex-col h-full">
             {/* View Switcher Bar */}
@@ -394,6 +400,7 @@ export function AgentPMPage() {
                     <TaskList
                       tasks={tasks}
                       agents={agentNameMap}
+                      blockedTasks={blockedTasks}
                       selectedTaskId={selectedTaskId}
                       onSelectTask={setSelectedTaskId}
                       onCreateTask={() => setIsCreateTaskOpen(true)}
@@ -408,10 +415,14 @@ export function AgentPMPage() {
                           key={selectedTask.id}
                           task={selectedTask}
                           agent={selectedTaskAgent}
+                          allTasks={tasks}
+                          accountId={accountId}
+                          userId={userId}
                           onClose={() => setSelectedTaskId(null)}
                           onUpdateStatus={handleUpdateStatus}
                           onDelete={() => handleDeleteTask(selectedTask.id)}
                           onEdit={() => setEditingTask(selectedTask)}
+                          onDependencyChange={() => fetchTasks(accountId)}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full text-surface-500">
@@ -426,6 +437,14 @@ export function AgentPMPage() {
                   </div>
                 </div>
               )}
+
+              {taskViewMode === 'graph' && (
+                <DependencyGraph
+                  tasks={tasks}
+                  accountId={accountId}
+                  onTaskClick={setSelectedTaskId}
+                />
+              )}
             </div>
 
             {/* Task Detail Sidebar for Kanban View */}
@@ -434,10 +453,14 @@ export function AgentPMPage() {
                 <TaskDetail
                   task={selectedTask}
                   agent={selectedTaskAgent}
+                  allTasks={tasks}
+                  accountId={accountId}
+                  userId={userId}
                   onClose={() => setSelectedTaskId(null)}
                   onUpdateStatus={handleUpdateStatus}
                   onDelete={() => handleDeleteTask(selectedTask.id)}
                   onEdit={() => setEditingTask(selectedTask)}
+                  onDependencyChange={() => fetchTasks(accountId)}
                 />
               </div>
             )}

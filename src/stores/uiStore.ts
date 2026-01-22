@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type TaskViewMode = 'kanban' | 'list' | 'agent-tasks'
+export type TaskViewMode = 'kanban' | 'list' | 'agent-tasks' | 'graph'
 
 interface UIState {
   sidebarOpen: boolean

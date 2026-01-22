@@ -24,23 +24,32 @@ import {
 import type { Task, TaskStatus, AgentPersona } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
+import { TaskDependencies } from './TaskDependencies'
 
 interface TaskDetailProps {
   task: Task
   agent?: AgentPersona
+  allTasks?: Task[]
+  accountId?: string
+  userId?: string
   onClose?: () => void
   onUpdateStatus?: (taskId: string, status: TaskStatus, note?: string) => void
   onDelete?: (taskId: string) => void
   onEdit?: (taskId: string) => void
+  onDependencyChange?: () => void
 }
 
 export function TaskDetail({
   task,
   agent,
+  allTasks = [],
+  accountId,
+  userId,
   onClose,
   onUpdateStatus,
   onDelete,
   onEdit,
+  onDependencyChange,
 }: TaskDetailProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [statusNote, setStatusNote] = useState('')
@@ -435,6 +444,22 @@ export function TaskDetail({
             </div>
           </div>
         </div>
+
+        {/* Dependencies */}
+        {accountId && userId && allTasks.length > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
+              Dependencies
+            </h4>
+            <TaskDependencies
+              task={task}
+              allTasks={allTasks}
+              accountId={accountId}
+              userId={userId}
+              onDependencyChange={onDependencyChange}
+            />
+          </div>
+        )}
 
         {/* Output */}
         {task.output && Object.keys(task.output).length > 0 && (
