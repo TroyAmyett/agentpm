@@ -264,11 +264,18 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         console.error('Failed to update execution:', updateError)
       }
 
-      // Update task status to in_progress if it was pending
-      if (result.success && task.status === 'pending') {
+      // Update task status based on execution result
+      if (result.success) {
+        // Move to review when execution completes successfully
         await supabase
           .from('tasks')
-          .update({ status: 'in_progress' })
+          .update({ status: 'review' })
+          .eq('id', task.id)
+      } else {
+        // Move back to queued on failure so it can be retried
+        await supabase
+          .from('tasks')
+          .update({ status: 'queued' })
           .eq('id', task.id)
       }
 
