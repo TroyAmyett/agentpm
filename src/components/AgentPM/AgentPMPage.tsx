@@ -5,7 +5,6 @@ import { AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
   ListTodo,
-  GitBranch,
   Bell,
   Settings,
   Plus,
@@ -26,7 +25,6 @@ import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail, DependencyGraph } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
-import { OrgChart } from './OrgChart'
 import { KanbanView } from './Kanban'
 import { ViewSwitcher } from './ViewSwitcher'
 import { SkillsPage } from './Skills'
@@ -38,7 +36,7 @@ import { ForgeTaskModal } from './Forge'
 import { routeTask } from '@/services/agents/dispatcher'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills' | 'forge'
+type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge'
 
 interface Tab {
   id: TabId
@@ -52,7 +50,6 @@ const tabs: Tab[] = [
   { id: 'tasks', label: 'Tasks', icon: <ListTodo size={18} /> },
   { id: 'forge', label: 'Forge', icon: <Hammer size={18} /> },
   { id: 'agents', label: 'Agents', icon: <Bot size={18} /> },
-  { id: 'org-chart', label: 'Org Chart', icon: <GitBranch size={18} /> },
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
   { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
 ]
@@ -548,24 +545,6 @@ export function AgentPMPage() {
                 />
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === 'org-chart' && (
-          <div className="h-full overflow-auto bg-white dark:bg-surface-800">
-            <OrgChart
-              agents={agents}
-              currentUserId={userId}
-              currentUserName={user?.email?.split('@')[0] || 'You'}
-              onAgentClick={(agentId) => {
-                const agent = agents.find(a => a.id === agentId)
-                if (agent) setSelectedAgent(agent)
-              }}
-              onAssignTask={(agentId) => {
-                setPreselectedAgentId(agentId)
-                setIsCreateTaskOpen(true)
-              }}
-            />
           </div>
         )}
 

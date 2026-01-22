@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Search, Bot, Grid3X3, List } from 'lucide-react'
+import { Plus, Search, Bot, Grid3X3, List, GitBranch } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -10,15 +10,16 @@ import { AgentCard } from './AgentCard'
 import { AgentCardCompact } from './AgentCardCompact'
 import { CreateAgentModal } from './CreateAgentModal'
 import { EditAgentModal } from './EditAgentModal'
+import { OrgChart } from '../OrgChart'
 import type { AgentPersona } from '@/types/agentpm'
 
-type ViewMode = 'grid' | 'list'
+type ViewMode = 'org-chart' | 'grid' | 'list'
 
 export function AgentsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<AgentPersona | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>('org-chart')
 
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
@@ -116,6 +117,17 @@ export function AgentsPage() {
 
           <div className="flex items-center gap-1 p-1 bg-surface-100 dark:bg-surface-800 rounded-lg">
             <button
+              onClick={() => setViewMode('org-chart')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'org-chart'
+                  ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                  : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+              }`}
+              title="Org Chart"
+            >
+              <GitBranch size={18} />
+            </button>
+            <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded-md transition-colors ${
                 viewMode === 'grid'
@@ -170,6 +182,14 @@ export function AgentsPage() {
               </button>
             )}
           </div>
+        ) : viewMode === 'org-chart' ? (
+          <OrgChart
+            agents={sortedAgents}
+            currentUserId={userId}
+            currentUserName={user?.email?.split('@')[0] || 'You'}
+            onAgentClick={handleConfigure}
+            onAssignTask={handleAssignTask}
+          />
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <AnimatePresence mode="popLayout">

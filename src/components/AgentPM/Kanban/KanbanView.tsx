@@ -142,8 +142,8 @@ export function KanbanView({
   }
 
   return (
-    <div className="flex h-full overflow-x-auto" style={{ background: '#0a0a0f' }}>
-      <div className="flex gap-4 p-4 min-w-max">
+    <div className="h-full w-full overflow-x-auto" style={{ background: '#0a0a0f' }}>
+      <div className="flex gap-3 p-4 h-full min-w-fit">
         {DEFAULT_COLUMNS.map((column) => {
           const columnTasks = tasksByColumn[column.id] || []
           const isDropTarget = dragOverColumn === column.id
@@ -151,7 +151,7 @@ export function KanbanView({
           return (
             <div
               key={column.id}
-              className={`flex flex-col w-80 rounded-lg border transition-all ${
+              className={`flex flex-col flex-1 min-w-[200px] max-w-[320px] rounded-lg border transition-all ${
                 isDropTarget
                   ? 'border-primary-500 shadow-[0_0_0_2px_rgba(14,165,233,0.2)]'
                   : 'border-surface-700'
