@@ -198,6 +198,17 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
     ]
   }, [taskCounts])
 
+  // Calculate per-agent task counts from real task data
+  const agentTaskCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    tasks.forEach((task) => {
+      if (task.assignedTo && task.assignedToType === 'agent') {
+        counts.set(task.assignedTo, (counts.get(task.assignedTo) || 0) + 1)
+      }
+    })
+    return counts
+  }, [tasks])
+
   return (
     <div
       className="flex flex-col h-full overflow-auto"
@@ -217,18 +228,18 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         }}
       />
 
-      <div className="relative z-10 max-w-[1400px] mx-auto w-full p-6">
+      <div className="relative z-10 max-w-[1400px] mx-auto w-full p-4 md:p-6">
         {/* Header */}
-        <header className="flex justify-between items-center mb-8">
+        <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-2xl font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
+            <h1 className="text-xl md:text-2xl font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
               AgentPM Dashboard
             </h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+            <p className="text-xs md:text-sm mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
               Manage your AI agents and tasks
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <button
               onClick={handleRefresh}
               disabled={isLoading}
@@ -255,7 +266,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         </header>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
           {stats.map((stat, i) => {
             const kpi = stat.kpiStatus ? kpiColors[stat.kpiStatus] : kpiColors.neutral
             return (
@@ -313,10 +324,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         </div>
 
         {/* Main Grid */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           {/* Activity Chart */}
           <div
-            className="col-span-2 rounded-xl p-5"
+            className="lg:col-span-2 rounded-xl p-4 md:p-5"
             style={{
               background: 'rgba(255, 255, 255, 0.05)',
               backdropFilter: 'blur(12px)',
@@ -540,7 +551,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
                           {agent.alias}
                         </p>
                         <p className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
-                          {agent.stats?.tasksCompleted || 0} tasks
+                          {agentTaskCounts.get(agent.id) || 0} tasks
                         </p>
                       </div>
                       <div
@@ -577,10 +588,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask }: AgentDashboa
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           <button
             onClick={onCreateTask}
-            className="flex items-center gap-4 p-5 rounded-xl text-left transition-all hover:scale-[1.02]"
+            className="flex items-center gap-3 md:gap-4 p-4 md:p-5 rounded-xl text-left transition-all hover:scale-[1.02]"
             style={{
               background: 'rgba(14, 165, 233, 0.1)',
               backdropFilter: 'blur(12px)',

@@ -28,15 +28,14 @@ const COLUMN_TO_STATUS: Record<string, TaskStatus> = {
 interface Column {
   id: string
   title: string
-  wipLimit?: number
 }
 
 const DEFAULT_COLUMNS: Column[] = [
   { id: 'inbox', title: 'Inbox' },
   { id: 'ready', title: 'Ready' },
-  { id: 'queued', title: 'Queued', wipLimit: 10 },
-  { id: 'in_progress', title: 'In Progress', wipLimit: 5 },
-  { id: 'review', title: 'Review', wipLimit: 3 },
+  { id: 'queued', title: 'Queued' },
+  { id: 'in_progress', title: 'In Progress' },
+  { id: 'review', title: 'Review' },
   { id: 'done', title: 'Done' },
 ]
 
@@ -147,8 +146,6 @@ export function KanbanView({
       <div className="flex gap-4 p-4 min-w-max">
         {DEFAULT_COLUMNS.map((column) => {
           const columnTasks = tasksByColumn[column.id] || []
-          const isOverLimit = column.wipLimit !== undefined && columnTasks.length > column.wipLimit
-          const isAtLimit = column.wipLimit !== undefined && columnTasks.length === column.wipLimit
           const isDropTarget = dragOverColumn === column.id
 
           return (
@@ -168,22 +165,10 @@ export function KanbanView({
               <div className="p-3 border-b border-surface-700">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-white">{column.title}</h3>
-                  <span
-                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                      isOverLimit
-                        ? 'bg-red-500/20 text-red-400'
-                        : isAtLimit
-                          ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-surface-700 text-surface-400'
-                    }`}
-                  >
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-surface-700 text-surface-400">
                     {columnTasks.length}
-                    {column.wipLimit !== undefined && `/${column.wipLimit}`}
                   </span>
                 </div>
-                {isOverLimit && (
-                  <span className="text-xs text-red-400 mt-1 block">Over WIP limit!</span>
-                )}
               </div>
 
               {/* Card List */}
