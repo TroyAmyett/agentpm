@@ -218,8 +218,9 @@ export interface AgentStats {
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
 
 export type TaskStatus =
-  | 'pending'
-  | 'queued'
+  | 'draft'       // Inbox - safe zone for tasks being created/refined
+  | 'pending'     // Ready - approved for work, will be auto-routed
+  | 'queued'      // Assigned to agent, waiting for execution
   | 'in_progress'
   | 'review'
   | 'completed'

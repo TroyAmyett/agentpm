@@ -21,6 +21,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useSkillStore } from '@/stores/skillStore'
+import { useExecutionStore } from '@/stores/executionStore'
 import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail, DependencyGraph } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
@@ -34,6 +35,7 @@ import { ProjectsPage } from './Projects'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
+import { routeTask } from '@/services/agents/dispatcher'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
 type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'org-chart' | 'reviews' | 'skills' | 'forge'
@@ -72,6 +74,7 @@ export function AgentPMPage() {
   const { projects, fetchProjects } = useProjectStore()
   const { taskViewMode, setTaskViewMode } = useUIStore()
   const { skills, fetchSkills } = useSkillStore()
+  const { runTask, isExecuting } = useExecutionStore()
   const {
     tasks,
     blockedTasks,
@@ -126,7 +129,33 @@ export function AgentPMPage() {
     }
   }, [accountId, subscribeToAgents, subscribeToTasks])
 
-  // Handle task creation
+  // Queue watcher - auto-process queued tasks with assigned agents
+  useEffect(() => {
+    if (isExecuting) return // Don't process while already executing
+
+    // Find the first queued task with an assigned agent
+    const queuedTask = tasks.find(
+      (t) => t.status === 'queued' && t.assignedTo && t.assignedToType === 'agent'
+    )
+
+    if (queuedTask) {
+      const agent = agents.find((a) => a.id === queuedTask.assignedTo)
+      if (agent) {
+        const skill = queuedTask.skillId
+          ? skills.find((s) => s.id === queuedTask.skillId)
+          : undefined
+
+        // Start execution
+        updateTaskStatus(queuedTask.id, 'in_progress', userId, 'Auto-started from queue')
+          .then(() => {
+            runTask(queuedTask, agent, skill, accountId, userId)
+          })
+          .catch((err) => console.error('Failed to start queued task:', err))
+      }
+    }
+  }, [tasks, agents, skills, isExecuting, updateTaskStatus, runTask, accountId, userId])
+
+  // Handle task creation - new tasks go to Inbox (draft) by default
   const handleCreateTask = useCallback(
     async (taskData: {
       title: string
@@ -139,10 +168,12 @@ export function AgentPMPage() {
       skillId?: string
       input?: ForgeTaskInput
     }) => {
+      // New tasks start in draft (Inbox) - no auto-routing on create
+      // Auto-routing happens when moved to 'pending' (Ready column)
       await createTask({
         ...taskData,
         accountId,
-        status: taskData.assignedTo && taskData.assignedToType === 'agent' ? 'queued' : 'pending',
+        status: 'draft', // Safe zone - no automation until moved to Ready
         createdBy: userId,
         createdByType: 'user',
         updatedBy: userId,
@@ -182,26 +213,71 @@ export function AgentPMPage() {
     [accountId, userId, createTask]
   )
 
-  // Handle status update
+  // Handle status update - auto-route when moving to Ready, auto-execute when queued
   const handleUpdateStatus = useCallback(
     async (taskId: string, status: TaskStatus, note?: string) => {
+      const task = getTask(taskId)
+      if (!task) return
+
+      // SMART ROUTING: When moving to 'pending' (Ready column), auto-route to best agent
+      if (status === 'pending' && (!task.assignedTo || task.assignedToType !== 'agent')) {
+        const routingDecision = await routeTask({ task, agents })
+        if (routingDecision) {
+          console.log(`Dispatch routed task to ${routingDecision.agentAlias}: ${routingDecision.reasoning}`)
+          // Assign agent and move directly to queued
+          await assignTask(taskId, routingDecision.agentId, 'agent', userId)
+          await updateTaskStatus(taskId, 'queued', userId, `Dispatch assigned to ${routingDecision.agentAlias}`)
+          // The queue watcher will pick it up
+          return
+        }
+      }
+
+      // Normal status update
       await updateTaskStatus(taskId, status, userId, note)
+
+      // Auto-execute when task is queued or in_progress and assigned to an agent
+      if ((status === 'queued' || status === 'in_progress') && !isExecuting) {
+        const updatedTask = getTask(taskId)
+        if (updatedTask?.assignedTo && updatedTask.assignedToType === 'agent') {
+          const agent = agents.find((a) => a.id === updatedTask.assignedTo)
+          const skill = updatedTask.skillId ? skills.find((s) => s.id === updatedTask.skillId) : undefined
+          if (agent) {
+            // Move to in_progress first, then run
+            if (status === 'queued') {
+              await updateTaskStatus(taskId, 'in_progress', userId, 'Auto-started from queue')
+            }
+            runTask(updatedTask, agent, skill, accountId, userId)
+          }
+        }
+      }
     },
-    [userId, updateTaskStatus]
+    [userId, updateTaskStatus, isExecuting, getTask, agents, skills, runTask, accountId, assignTask]
   )
 
-  // Handle agent assignment
+  // Handle agent assignment - auto-execute immediately
   const handleAssignAgent = useCallback(
     async (agentId: string) => {
       if (!assignAgentTask) return
       await assignTask(assignAgentTask.id, agentId, 'agent', userId)
-      // Also update status to queued if it was pending
-      if (assignAgentTask.status === 'pending') {
-        await updateTaskStatus(assignAgentTask.id, 'queued', userId, 'Agent assigned')
+
+      const agent = agents.find((a) => a.id === agentId)
+      if (!agent || isExecuting) {
+        setAssignAgentTask(null)
+        return
       }
+
+      // Move to in_progress and execute immediately
+      await updateTaskStatus(assignAgentTask.id, 'in_progress', userId, 'Agent assigned - auto-starting')
+
+      const skill = assignAgentTask.skillId
+        ? skills.find((s) => s.id === assignAgentTask.skillId)
+        : undefined
+      const updatedTask = { ...assignAgentTask, assignedTo: agentId, assignedToType: 'agent' as const }
+      runTask(updatedTask, agent, skill, accountId, userId)
+
       setAssignAgentTask(null)
     },
-    [assignAgentTask, assignTask, updateTaskStatus, userId]
+    [assignAgentTask, assignTask, updateTaskStatus, userId, agents, isExecuting, skills, runTask, accountId]
   )
 
   // Handle task deletion

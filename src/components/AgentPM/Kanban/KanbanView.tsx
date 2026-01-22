@@ -6,17 +6,19 @@ import type { Task, TaskStatus } from '@/types/agentpm'
 
 // Status to column mapping
 const STATUS_TO_COLUMN: Record<TaskStatus, string> = {
-  pending: 'backlog',
+  draft: 'inbox',
+  pending: 'ready',
   queued: 'queued',
   in_progress: 'in_progress',
   review: 'review',
   completed: 'done',
-  failed: 'backlog',
-  cancelled: 'backlog',
+  failed: 'inbox',
+  cancelled: 'inbox',
 }
 
 const COLUMN_TO_STATUS: Record<string, TaskStatus> = {
-  backlog: 'pending',
+  inbox: 'draft',
+  ready: 'pending',
   queued: 'queued',
   in_progress: 'in_progress',
   review: 'review',
@@ -30,7 +32,8 @@ interface Column {
 }
 
 const DEFAULT_COLUMNS: Column[] = [
-  { id: 'backlog', title: 'Backlog' },
+  { id: 'inbox', title: 'Inbox' },
+  { id: 'ready', title: 'Ready' },
   { id: 'queued', title: 'Queued', wipLimit: 10 },
   { id: 'in_progress', title: 'In Progress', wipLimit: 5 },
   { id: 'review', title: 'Review', wipLimit: 3 },
@@ -66,7 +69,8 @@ export function KanbanView({
   // Group tasks by column
   const tasksByColumn = useMemo(() => {
     const grouped: Record<string, Task[]> = {
-      backlog: [],
+      inbox: [],
+      ready: [],
       queued: [],
       in_progress: [],
       review: [],
@@ -74,7 +78,7 @@ export function KanbanView({
     }
 
     tasks.forEach((task) => {
-      const columnId = STATUS_TO_COLUMN[task.status] || 'backlog'
+      const columnId = STATUS_TO_COLUMN[task.status] || 'inbox'
       if (grouped[columnId]) {
         grouped[columnId].push(task)
       }

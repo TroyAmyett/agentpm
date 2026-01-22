@@ -8,10 +8,15 @@ interface TaskStatusBadgeProps {
 }
 
 const statusConfig: Record<TaskStatus, { color: string; bgColor: string; label: string }> = {
+  draft: {
+    color: 'text-purple-600 dark:text-purple-400',
+    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    label: 'Inbox',
+  },
   pending: {
-    color: 'text-surface-600 dark:text-surface-400',
-    bgColor: 'bg-surface-100 dark:bg-surface-700',
-    label: 'Pending',
+    color: 'text-indigo-600 dark:text-indigo-400',
+    bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    label: 'Ready',
   },
   queued: {
     color: 'text-blue-600 dark:text-blue-400',
