@@ -94,8 +94,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
 
   // Calculate stats with trends
   const stats = useMemo(() => {
-    const activeAgents = agents.filter((a) => a.isActive && !a.pausedAt).length
-    const totalAgents = agents.length
+    // Only count agents that should be shown on dashboard
+    const dashboardAgents = agents.filter((a) => a.showOnDashboard)
+    const activeAgents = dashboardAgents.filter((a) => a.isActive && !a.pausedAt).length
+    const totalAgents = dashboardAgents.length
     const completedToday = tasks.filter(t => {
       const today = new Date()
       const taskDate = new Date(t.updatedAt)
