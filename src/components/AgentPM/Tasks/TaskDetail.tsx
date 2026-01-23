@@ -134,9 +134,12 @@ export function TaskDetail({
   }
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete "${task.title}"? This action cannot be undone.`)) {
-      onDelete?.(task.id)
-    }
+    // Defer confirm to next frame to avoid blocking INP
+    requestAnimationFrame(() => {
+      if (window.confirm(`Are you sure you want to delete "${task.title}"? This action cannot be undone.`)) {
+        onDelete?.(task.id)
+      }
+    })
   }
 
   const copyToClipboard = async (text: string, fieldName: string) => {
