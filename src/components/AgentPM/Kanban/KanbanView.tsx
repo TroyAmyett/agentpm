@@ -2,7 +2,6 @@
 // Supports multi-select: Ctrl/Cmd+click to select multiple, then drag all at once
 
 import { useState, useMemo, useCallback } from 'react'
-import { motion } from 'framer-motion'
 import type { Task, TaskStatus } from '@/types/agentpm'
 
 // Status to column mapping
@@ -66,6 +65,8 @@ export function KanbanView({
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const [isDragging, setIsDragging] = useState(false) // Track if actual drag occurred
+  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null)
 
   // Group tasks by column
   const tasksByColumn = useMemo(() => {
@@ -98,8 +99,84 @@ export function KanbanView({
     return grouped
   }, [tasks])
 
-  // Handle task selection (Ctrl/Cmd+click for multi-select)
+  // Track mousedown position to detect clicks vs drags
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setMouseDownPos({ x: e.clientX, y: e.clientY })
+  }, [])
+
+  // Handle task click via mouseup - more reliable than onClick with draggable
+  const handleTaskMouseUp = useCallback((e: React.MouseEvent, task: Task) => {
+    // If a drag occurred, don't process as click
+    if (isDragging) {
+      return
+    }
+
+    // Check if mouse moved significantly (indicating drag intent)
+    if (mouseDownPos) {
+      const dx = Math.abs(e.clientX - mouseDownPos.x)
+      const dy = Math.abs(e.clientY - mouseDownPos.y)
+      if (dx > 5 || dy > 5) {
+        // Mouse moved - this was a drag, not a click
+        setMouseDownPos(null)
+        return
+      }
+    }
+    setMouseDownPos(null)
+
+    e.stopPropagation()
+
+    const isMultiSelect = e.ctrlKey || e.metaKey
+    const isShiftSelect = e.shiftKey
+
+    if (isMultiSelect) {
+      // Toggle selection
+      setSelectedTaskIds((prev) => {
+        const newSet = new Set(prev)
+        if (newSet.has(task.id)) {
+          newSet.delete(task.id)
+        } else {
+          newSet.add(task.id)
+        }
+        return newSet
+      })
+    } else if (isShiftSelect && selectedTaskIds.size > 0) {
+      // Range select within same column
+      const columnId = STATUS_TO_COLUMN[task.status]
+      const columnTasks = tasks.filter((t) => STATUS_TO_COLUMN[t.status] === columnId)
+      const taskIds = columnTasks.map((t) => t.id)
+      const lastSelected = Array.from(selectedTaskIds).pop()
+      if (lastSelected) {
+        const lastIdx = taskIds.indexOf(lastSelected)
+        const currentIdx = taskIds.indexOf(task.id)
+        if (lastIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(lastIdx, currentIdx)
+          const end = Math.max(lastIdx, currentIdx)
+          const rangeIds = taskIds.slice(start, end + 1)
+          setSelectedTaskIds((prev) => {
+            const newSet = new Set(prev)
+            rangeIds.forEach((id) => newSet.add(id))
+            return newSet
+          })
+        }
+      }
+    } else {
+      // Regular click - clear selection and open task detail
+      setSelectedTaskIds(new Set())
+      onTaskClick(task.id)
+    }
+  }, [isDragging, mouseDownPos, selectedTaskIds, tasks, onTaskClick])
+
+  // Legacy click handler kept as fallback (some browsers might not fire mouseup properly)
   const handleTaskSelect = useCallback((e: React.MouseEvent, task: Task) => {
+    // If a drag just ended, don't process the click
+    if (isDragging) {
+      return
+    }
+    // If mouseup already handled this, skip
+    if (!mouseDownPos) {
+      return
+    }
+
     const isMultiSelect = e.ctrlKey || e.metaKey
     const isShiftSelect = e.shiftKey
 
@@ -141,7 +218,8 @@ export function KanbanView({
       setSelectedTaskIds(new Set())
       onTaskClick(task.id)
     }
-  }, [selectedTaskIds, tasks, onTaskClick])
+    setMouseDownPos(null)
+  }, [isDragging, mouseDownPos, selectedTaskIds, tasks, onTaskClick])
 
   // Clear selection when clicking outside
   const handleBackgroundClick = useCallback(() => {
@@ -151,6 +229,8 @@ export function KanbanView({
   }, [selectedTaskIds])
 
   const handleDragStart = useCallback((e: React.DragEvent, task: Task) => {
+    console.log('[Kanban] Drag started:', task.title)
+    setIsDragging(true) // Mark that a drag started
     // If dragging a selected task, drag all selected
     // If dragging an unselected task, just drag that one
     if (selectedTaskIds.has(task.id) && selectedTaskIds.size > 1) {
@@ -159,17 +239,21 @@ export function KanbanView({
       e.dataTransfer.setData('text/plain', JSON.stringify(selectedTasks.map((t) => t.id)))
       e.dataTransfer.effectAllowed = 'move'
       setDraggedTask(task) // Use first task as visual reference
+      console.log('[Kanban] Multi-drag:', selectedTasks.length, 'tasks')
     } else {
       // Single drag
       setDraggedTask(task)
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/plain', task.id)
+      console.log('[Kanban] Single drag:', task.id)
     }
   }, [selectedTaskIds, tasks])
 
   const handleDragEnd = useCallback(() => {
     setDraggedTask(null)
     setDragOverColumn(null)
+    // Reset isDragging after a short delay to allow click to check it
+    setTimeout(() => setIsDragging(false), 50)
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent, columnId: string) => {
@@ -184,13 +268,20 @@ export function KanbanView({
 
   const handleDrop = useCallback(
     (e: React.DragEvent, columnId: string) => {
+      console.log('[Kanban] Drop on column:', columnId, 'draggedTask:', draggedTask?.title)
       e.preventDefault()
       setDragOverColumn(null)
 
-      if (!draggedTask) return
+      if (!draggedTask) {
+        console.log('[Kanban] Drop cancelled - no draggedTask')
+        return
+      }
 
       const newStatus = COLUMN_TO_STATUS[columnId]
-      if (!newStatus) return
+      if (!newStatus) {
+        console.log('[Kanban] Drop cancelled - invalid column:', columnId)
+        return
+      }
 
       // Check if this is a multi-drag
       const dataStr = e.dataTransfer.getData('text/plain')
@@ -211,12 +302,17 @@ export function KanbanView({
 
       // Move all tasks to the new column
       const tasksToMove = tasks.filter((t) => taskIdsToMove.includes(t.id))
-      console.log(`[Kanban] Moving ${tasksToMove.length} tasks to ${columnId}`)
+      console.log(`[Kanban] Moving ${tasksToMove.length} tasks to ${columnId}, newStatus: ${newStatus}`)
 
       // Fire all status changes in parallel for SIZZLE
       tasksToMove.forEach((task) => {
-        if (STATUS_TO_COLUMN[task.status] !== columnId) {
+        const currentColumn = STATUS_TO_COLUMN[task.status]
+        console.log(`[Kanban] Task "${task.title}" current column: ${currentColumn}, target: ${columnId}`)
+        if (currentColumn !== columnId) {
+          console.log(`[Kanban] Calling onStatusChange for task ${task.id} to ${newStatus}`)
           onStatusChange(task.id, newStatus)
+        } else {
+          console.log(`[Kanban] Task already in target column, skipping`)
         }
       })
 
@@ -286,27 +382,26 @@ export function KanbanView({
                   const isAgent = task.assignedToType === 'agent'
                   const assigneeName = task.assignedTo ? agents.get(task.assignedTo) : null
                   const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'completed'
-                  const isDragging = draggedTask?.id === task.id
+                  const isBeingDragged = draggedTask?.id === task.id
                   const isSelected = selectedTaskIds.has(task.id)
 
                   return (
-                    <motion.div
+                    <div
                       key={task.id}
-                      layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
                       draggable
-                      onDragStart={(e) => handleDragStart(e as unknown as React.DragEvent, task)}
+                      onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
+                      onMouseDown={handleMouseDown}
+                      onMouseUp={(e) => handleTaskMouseUp(e, task)}
                       onClick={(e) => {
                         e.stopPropagation()
                         handleTaskSelect(e, task)
                       }}
-                      className={`p-3 rounded-md cursor-pointer transition-all border relative ${
+                      className={`p-3 rounded-md cursor-grab active:cursor-grabbing transition-all border relative ${
                         isSelected
                           ? 'border-primary-500 ring-2 ring-primary-500/30 bg-primary-500/10'
                           : 'hover:border-primary-500 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.3)]'
-                      }`}
+                      } ${isBeingDragged ? 'opacity-50' : ''}`}
                       style={{
                         background: isSelected ? '#1a2a3a' : '#1a1a24',
                         borderColor: isSelected ? '#0ea5e9' : '#2a2a3a',
@@ -347,7 +442,7 @@ export function KanbanView({
                         )}
                         {!task.dueAt && <span />}
                       </div>
-                    </motion.div>
+                    </div>
                   )
                 })}
 

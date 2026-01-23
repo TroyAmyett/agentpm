@@ -64,6 +64,7 @@ export function AgentPMPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentPersona | null>(null)
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
   const [isForgeTaskOpen, setIsForgeTaskOpen] = useState(false)
+  const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all')
 
   const { user } = useAuthStore()
   const { accounts, currentAccountId, currentAccount, fetchAccounts, initializeUserAccounts } = useAccountStore()
@@ -588,6 +589,22 @@ export function AgentPMPage() {
             accountId={accountId}
             userId={userId}
             onCreateTask={() => setIsCreateTaskOpen(true)}
+            onKpiClick={(target) => {
+              // Map KPI target to task status filter and navigate
+              if (target === 'active_agents') {
+                setActiveTab('agents')
+              } else {
+                const statusMap: Record<string, TaskStatus | 'all'> = {
+                  completed: 'completed',
+                  in_progress: 'in_progress',
+                  review: 'review',
+                }
+                setTaskStatusFilter(statusMap[target] || 'all')
+                setActiveTab('tasks')
+                // Switch to list view for filtered viewing
+                setTaskViewMode('list')
+              }
+            }}
           />
         )}
 
@@ -631,6 +648,7 @@ export function AgentPMPage() {
                       selectedTaskId={selectedTaskId}
                       onSelectTask={setSelectedTaskId}
                       onCreateTask={() => setIsCreateTaskOpen(true)}
+                      initialStatusFilter={taskStatusFilter}
                     />
                   </div>
 

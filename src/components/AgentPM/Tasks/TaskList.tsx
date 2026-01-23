@@ -1,6 +1,6 @@
 // Task List - Filterable list of tasks
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   Search,
@@ -18,6 +18,7 @@ interface TaskListProps {
   onSelectTask?: (taskId: string) => void
   onCreateTask?: () => void
   isLoading?: boolean
+  initialStatusFilter?: TaskStatus | 'all'
 }
 
 type SortField = 'created' | 'updated' | 'priority' | 'due'
@@ -56,13 +57,22 @@ export function TaskList({
   onSelectTask,
   onCreateTask,
   isLoading,
+  initialStatusFilter = 'all',
 }: TaskListProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>(initialStatusFilter)
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
   const [sortField, setSortField] = useState<SortField>('created')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [showFilters, setShowFilters] = useState(false)
+
+  // Sync filter when parent changes it (e.g., from dashboard KPI click)
+  useEffect(() => {
+    setStatusFilter(initialStatusFilter)
+    if (initialStatusFilter !== 'all') {
+      setShowFilters(true)
+    }
+  }, [initialStatusFilter])
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
