@@ -14,10 +14,21 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Download,
+  FileCode,
+  FileText,
+  Image,
+  File,
 } from 'lucide-react'
 import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { useExecutionStore } from '@/stores/executionStore'
 import { isExecutionConfigured } from '@/services/agents/executor'
+import {
+  fetchAttachments,
+  getDownloadUrl,
+  formatFileSize,
+  type Attachment,
+} from '@/services/attachments/attachmentService'
 
 interface ExecutionPanelProps {
   task: Task
@@ -46,6 +57,8 @@ export function ExecutionPanel({
 
   const [showHistory, setShowHistory] = useState(false)
   const [copiedContent, setCopiedContent] = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
 
   // Fetch execution history for this task
   useEffect(() => {
@@ -53,6 +66,28 @@ export function ExecutionPanel({
       fetchExecutions(accountId, task.id)
     }
   }, [accountId, task.id, fetchExecutions])
+
+  // Filter executions to only show those for the current task
+  // This prevents race conditions when switching between tasks quickly
+  const taskExecutions = executions.filter(e => e.taskId === task.id)
+
+  // Get the latest execution to display
+  const displayExecution = currentExecution?.taskId === task.id ? currentExecution : taskExecutions[0]
+
+  // Fetch attachments when execution changes
+  useEffect(() => {
+    if (displayExecution?.id) {
+      // First check if execution has attachments in memory
+      if (displayExecution.attachments && displayExecution.attachments.length > 0) {
+        setAttachments(displayExecution.attachments)
+      } else {
+        // Fetch from database
+        fetchAttachments('execution', displayExecution.id).then(setAttachments)
+      }
+    } else {
+      setAttachments([])
+    }
+  }, [displayExecution?.id, displayExecution?.attachments])
 
   const canRun = agent && !isExecuting && isExecutionConfigured()
 
@@ -107,8 +142,42 @@ export function ExecutionPanel({
     })
   }
 
-  // Get the latest execution to display
-  const displayExecution = currentExecution?.taskId === task.id ? currentExecution : executions[0]
+  // Get file icon based on type
+  const getFileIcon = (fileType: string) => {
+    switch (fileType) {
+      case 'html':
+      case 'css':
+      case 'js':
+        return <FileCode size={16} className="text-blue-500" />
+      case 'image':
+        return <Image size={16} className="text-purple-500" />
+      case 'text':
+      case 'md':
+        return <FileText size={16} className="text-green-500" />
+      default:
+        return <File size={16} className="text-surface-400" />
+    }
+  }
+
+  // Handle file download
+  const handleDownload = async (attachment: Attachment) => {
+    setDownloadingFile(attachment.id)
+    try {
+      const url = await getDownloadUrl(attachment)
+      if (url) {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = attachment.fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    } catch (error) {
+      console.error('Download failed:', error)
+    } finally {
+      setDownloadingFile(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -258,6 +327,43 @@ export function ExecutionPanel({
               </div>
             )}
 
+            {/* Generated Files / Attachments */}
+            {attachments.length > 0 && (
+              <div className="px-4 pb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Download size={14} className="text-surface-500" />
+                  <span className="text-xs font-medium text-surface-500 uppercase tracking-wider">
+                    Generated Files ({attachments.length})
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {attachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      onClick={() => handleDownload(attachment)}
+                      disabled={downloadingFile === attachment.id}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors text-left"
+                    >
+                      {getFileIcon(attachment.fileType)}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {attachment.fileName}
+                        </div>
+                        <div className="text-xs text-surface-500">
+                          {formatFileSize(attachment.fileSize)}
+                        </div>
+                      </div>
+                      {downloadingFile === attachment.id ? (
+                        <Loader2 size={16} className="animate-spin text-primary-500" />
+                      ) : (
+                        <Download size={16} className="text-surface-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Error Message */}
             {displayExecution.errorMessage && (
               <div className="px-4 pb-4">
@@ -273,14 +379,14 @@ export function ExecutionPanel({
       </AnimatePresence>
 
       {/* Execution History */}
-      {executions.length > 1 && (
+      {taskExecutions.length > 1 && (
         <div>
           <button
             onClick={() => setShowHistory(!showHistory)}
             className="flex items-center justify-between w-full text-left py-2"
           >
             <span className="text-xs font-medium text-surface-500 uppercase tracking-wider">
-              Previous Executions ({executions.length - 1})
+              Previous Executions ({taskExecutions.length - 1})
             </span>
             {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
@@ -293,7 +399,7 @@ export function ExecutionPanel({
                 exit={{ opacity: 0, height: 0 }}
                 className="space-y-2 overflow-hidden"
               >
-                {executions.slice(1).map((exec) => (
+                {taskExecutions.slice(1).map((exec) => (
                   <div
                     key={exec.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-surface-50 dark:bg-surface-900/50"

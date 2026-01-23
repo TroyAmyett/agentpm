@@ -194,6 +194,16 @@ aside {
   @apply w-4 h-4 rounded border-2 border-surface-300 dark:border-surface-600
          cursor-pointer accent-primary-500
          checked:bg-primary-500 checked:border-primary-500;
+  /* Fix white background in dark mode */
+  background-color: transparent;
+}
+
+.dark .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  background-color: transparent;
+}
+
+.dark .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background-color: #0ea5e9;
 }
 
 .tiptap ul[data-type="taskList"] li > div {

@@ -183,8 +183,11 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      addFolder({ parent_id: folder.id, name: 'New Folder' })
-                      if (!isExpanded) toggleFolderExpanded(folder.id)
+                      const folderName = prompt('Enter subfolder name:')
+                      if (folderName && folderName.trim()) {
+                        addFolder({ parent_id: folder.id, name: folderName.trim() })
+                        if (!isExpanded) toggleFolderExpanded(folder.id)
+                      }
                       setMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
@@ -424,8 +427,8 @@ export function FolderTree({ onExportFolder }: FolderTreeProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <FileText size={16} className="text-surface-500" />
-        <span className="text-sm font-medium">All Notes</span>
+        <Folder size={16} className="text-surface-500" />
+        <span className="text-sm font-medium">All Folders</span>
       </div>
 
       <div className="h-px bg-surface-200 dark:bg-surface-700 mx-2 my-1" />

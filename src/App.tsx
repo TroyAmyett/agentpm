@@ -20,7 +20,6 @@ import { RadarPage } from '@/components/Radar'
 // AcceptInvitation component available at: @/components/Auth/AcceptInvitation
 import { Loader2 } from 'lucide-react'
 import {
-  PanelLeftClose,
   PanelLeftOpen,
   Moon,
   Sun,
@@ -437,14 +436,17 @@ function App() {
         <div className="flex items-center gap-1">
           {currentView === 'notes' && (
             <>
-              <button
-                onClick={toggleSidebar}
-                title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-                className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-                style={{ color: 'var(--fl-color-text-secondary)' }}
-              >
-                {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-              </button>
+              {/* Only show open sidebar button when sidebar is closed */}
+              {!sidebarOpen && (
+                <button
+                  onClick={toggleSidebar}
+                  title="Open sidebar"
+                  className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+                  style={{ color: 'var(--fl-color-text-secondary)' }}
+                >
+                  <PanelLeftOpen size={18} />
+                </button>
+              )}
               <TemplateMenu />
               <ExportMenu />
               <button

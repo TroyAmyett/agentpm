@@ -8,7 +8,9 @@ import {
   Search,
   FolderPlus,
   X,
+  PanelLeftClose,
 } from 'lucide-react'
+import { useUIStore } from '@/stores/uiStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Note } from '@/types'
 
@@ -24,6 +26,8 @@ export function NotesList() {
     getAllDescendantNotes,
     getFolderPath,
   } = useNotesStore()
+
+  const { toggleSidebar } = useUIStore()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Note[]>([])
@@ -45,7 +49,10 @@ export function NotesList() {
   }
 
   const handleNewFolder = () => {
-    addFolder({ name: 'New Folder' })
+    const folderName = prompt('Enter folder name:')
+    if (folderName && folderName.trim()) {
+      addFolder({ name: folderName.trim() })
+    }
   }
 
   const handleExportFolder = async (folderId: string) => {
@@ -111,9 +118,18 @@ export function NotesList() {
       {/* Header */}
       <div className="p-4 border-b border-surface-200 dark:border-surface-700">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
-            Notes
-          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+              title="Close sidebar"
+            >
+              <PanelLeftClose size={18} className="text-surface-500" />
+            </button>
+            <h1 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+              Notes
+            </h1>
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={handleNewFolder}

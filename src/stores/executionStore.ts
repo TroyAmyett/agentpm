@@ -4,6 +4,8 @@ import { create } from 'zustand'
 import { supabase } from '@/services/supabase/client'
 import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { executeTask, type ExecutionResult, type ExecutionStatusCallback } from '@/services/agents/executor'
+import { parseAgentOutput } from '@/services/agents/outputParser'
+import { uploadAgentOutputFiles, type Attachment } from '@/services/attachments/attachmentService'
 
 export type ExecutionStatus =
   | 'pending'
@@ -45,6 +47,8 @@ export interface TaskExecution {
   createdAt: string
   triggeredBy: string
   triggeredByType: 'user' | 'agent' | 'schedule'
+  // Attachments generated from agent output
+  attachments?: Attachment[]
 }
 
 interface ExecutionState {
@@ -314,6 +318,22 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         }
       }
 
+      // Parse agent output for files and upload to storage
+      let attachments: Attachment[] = []
+      if (result.success && result.content) {
+        const parsedOutput = parseAgentOutput(result.content)
+        if (parsedOutput.hasFiles) {
+          console.log(`[Execution] Found ${parsedOutput.files.length} files in output, uploading...`)
+          attachments = await uploadAgentOutputFiles(
+            parsedOutput.files,
+            accountId,
+            executionId,
+            userId
+          )
+          console.log(`[Execution] Uploaded ${attachments.length} files as attachments`)
+        }
+      }
+
       // Build final execution object
       const finalExecution: TaskExecution = {
         id: executionId,
@@ -337,6 +357,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         completedAt: new Date().toISOString(),
         triggeredBy: userId,
         triggeredByType: 'user',
+        attachments,
       }
 
       // Remove from active executions
