@@ -50,8 +50,9 @@ export interface TaskExecution {
 interface ExecutionState {
   executions: TaskExecution[]
   currentExecution: TaskExecution | null
+  activeExecutions: Map<string, TaskExecution> // taskId -> execution for parallel
   isLoading: boolean
-  isExecuting: boolean
+  isExecuting: boolean // true if ANY task is executing
   executionStatus: 'idle' | 'building_prompt' | 'calling_api' | 'processing'
   error: string | null
 
@@ -65,6 +66,13 @@ interface ExecutionState {
     accountId: string,
     userId: string
   ) => Promise<TaskExecution | null>
+  runTasksParallel: (
+    tasks: Array<{ task: Task; agent: AgentPersona; skill?: Skill }>,
+    accountId: string,
+    userId: string
+  ) => Promise<TaskExecution[]>
+  isTaskExecuting: (taskId: string) => boolean
+  getActiveCount: () => number
   cancelExecution: (executionId: string) => Promise<void>
   clearCurrentExecution: () => void
 }
@@ -72,6 +80,7 @@ interface ExecutionState {
 export const useExecutionStore = create<ExecutionState>((set, get) => ({
   executions: [],
   currentExecution: null,
+  activeExecutions: new Map(),
   isLoading: false,
   isExecuting: false,
   executionStatus: 'idle',
@@ -180,7 +189,11 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       return null
     }
 
-    set({ isExecuting: true, executionStatus: 'idle', error: null })
+    // Check if this specific task is already executing
+    if (get().activeExecutions.has(task.id)) {
+      console.log(`[Execution] Task ${task.id} already executing, skipping`)
+      return null
+    }
 
     try {
       // Create execution record
@@ -209,28 +222,39 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       const executionId = execData.id
 
-      // Update current execution in state
-      set({
-        currentExecution: {
-          id: executionId,
-          taskId: task.id,
-          agentId: agent.id,
-          accountId,
-          skillId: skill?.id,
-          status: 'running',
-          inputContext: {
-            taskTitle: task.title,
-            taskDescription: task.description,
-            agentAlias: agent.alias,
-            skillName: skill?.name,
-          },
-          requiresApproval: false,
-          createdAt: new Date().toISOString(),
-          startedAt: new Date().toISOString(),
-          triggeredBy: userId,
-          triggeredByType: 'user',
+      // Create execution object
+      const execution: TaskExecution = {
+        id: executionId,
+        taskId: task.id,
+        agentId: agent.id,
+        accountId,
+        skillId: skill?.id,
+        status: 'running',
+        inputContext: {
+          taskTitle: task.title,
+          taskDescription: task.description,
+          agentAlias: agent.alias,
+          skillName: skill?.name,
         },
+        requiresApproval: false,
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        triggeredBy: userId,
+        triggeredByType: 'user',
+      }
+
+      // Track this execution in activeExecutions
+      const newActive = new Map(get().activeExecutions)
+      newActive.set(task.id, execution)
+      set({
+        activeExecutions: newActive,
+        isExecuting: true,
+        executionStatus: 'idle',
+        error: null,
+        currentExecution: execution,
       })
+
+      console.log(`[Execution] Started task "${task.title}" (${get().activeExecutions.size} active)`)
 
       // Status callback
       const onStatusChange: ExecutionStatusCallback = (status) => {
@@ -265,18 +289,29 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       }
 
       // Update task status based on execution result
+      console.log(`[Execution] Task "${task.title}" completed. Success: ${result.success}`)
       if (result.success) {
         // Move to review when execution completes successfully
-        await supabase
+        console.log(`[Execution] Moving task ${task.id} to review...`)
+        const { error: taskUpdateError } = await supabase
           .from('tasks')
           .update({ status: 'review' })
           .eq('id', task.id)
+        if (taskUpdateError) {
+          console.error('[Execution] Failed to update task to review:', taskUpdateError)
+        } else {
+          console.log(`[Execution] Task "${task.title}" moved to review`)
+        }
       } else {
         // Move back to queued on failure so it can be retried
-        await supabase
+        console.log(`[Execution] Task failed, moving back to queued. Error: ${result.error}`)
+        const { error: taskUpdateError } = await supabase
           .from('tasks')
           .update({ status: 'queued' })
           .eq('id', task.id)
+        if (taskUpdateError) {
+          console.error('[Execution] Failed to update task to queued:', taskUpdateError)
+        }
       }
 
       // Build final execution object
@@ -304,10 +339,17 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         triggeredByType: 'user',
       }
 
+      // Remove from active executions
+      const updatedActive = new Map(get().activeExecutions)
+      updatedActive.delete(task.id)
+
+      console.log(`[Execution] Finished task "${task.title}" (${updatedActive.size} still active)`)
+
       set({
+        activeExecutions: updatedActive,
         currentExecution: finalExecution,
-        isExecuting: false,
-        executionStatus: 'idle',
+        isExecuting: updatedActive.size > 0,
+        executionStatus: updatedActive.size > 0 ? get().executionStatus : 'idle',
       })
 
       // Refresh executions list
@@ -315,13 +357,45 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       return finalExecution
     } catch (error) {
+      // Remove from active on error too
+      const updatedActive = new Map(get().activeExecutions)
+      updatedActive.delete(task.id)
+
       set({
-        isExecuting: false,
+        activeExecutions: updatedActive,
+        isExecuting: updatedActive.size > 0,
         executionStatus: 'idle',
         error: error instanceof Error ? error.message : 'Execution failed',
       })
       return null
     }
+  },
+
+  isTaskExecuting: (taskId: string) => {
+    return get().activeExecutions.has(taskId)
+  },
+
+  getActiveCount: () => {
+    return get().activeExecutions.size
+  },
+
+  runTasksParallel: async (tasks, accountId, userId) => {
+    if (!supabase) {
+      set({ error: 'Database not configured' })
+      return []
+    }
+
+    console.log(`[Parallel Execution] Starting ${tasks.length} tasks in parallel`)
+
+    // Run all tasks concurrently
+    const results = await Promise.all(
+      tasks.map(({ task, agent, skill }) =>
+        get().runTask(task, agent, skill, accountId, userId)
+      )
+    )
+
+    console.log(`[Parallel Execution] Completed ${results.filter(r => r !== null).length}/${tasks.length} tasks`)
+    return results.filter((r): r is TaskExecution => r !== null)
   },
 
   cancelExecution: async (executionId: string) => {

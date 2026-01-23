@@ -3,6 +3,7 @@
 // Supports multi-step task decomposition for complex workflows
 
 import type { Task, AgentPersona } from '@/types/agentpm'
+import { fetchWithRetry } from './apiRetry'
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 
@@ -113,21 +114,24 @@ Description: ${task.description || 'No description'}
 Priority: ${task.priority}
 ${task.input ? `Additional Context: ${JSON.stringify(task.input)}` : ''}`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    })
+    const response = await fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
+      }
+    )
 
     if (!response.ok) {
       console.error('Routing API error:', response.status)
@@ -222,6 +226,7 @@ export async function analyzeTaskForDecomposition(
 ): Promise<DecompositionResult> {
   // Quick check: if task is very short and simple, skip decomposition
   const taskText = `${task.title} ${task.description || ''}`.toLowerCase()
+  console.log(`[Decomposition] Analyzing: "${taskText}"`)
 
   // Heuristic: Look for multi-step indicators
   const multiStepIndicators = [
@@ -230,11 +235,18 @@ export async function analyzeTaskForDecomposition(
     'create', 'generate', 'post', 'publish', 'send'
   ]
 
-  const hasMultipleIndicators = multiStepIndicators.filter(i => taskText.includes(i)).length >= 2
-  const hasMultipleActions = (taskText.match(/\b(create|write|generate|make|build|post|publish|send|research|analyze)\b/g) || []).length > 1
+  const matchedIndicators = multiStepIndicators.filter(i => taskText.includes(i))
+  const matchedActions = taskText.match(/\b(create|write|generate|make|build|post|publish|send|research|analyze)\b/g) || []
+  const hasMultipleIndicators = matchedIndicators.length >= 2
+  const hasMultipleActions = matchedActions.length > 1
+
+  console.log(`[Decomposition] Matched indicators (${matchedIndicators.length}):`, matchedIndicators)
+  console.log(`[Decomposition] Matched actions (${matchedActions.length}):`, matchedActions)
+  console.log(`[Decomposition] hasMultipleIndicators: ${hasMultipleIndicators}, hasMultipleActions: ${hasMultipleActions}`)
 
   // If no indicators, return as single-step
   if (!hasMultipleIndicators && !hasMultipleActions) {
+    console.log(`[Decomposition] Skipping - no multi-step indicators found`)
     return {
       isMultiStep: false,
       steps: [],
@@ -295,21 +307,24 @@ Rules:
 Title: ${task.title}
 Description: ${task.description || 'No description'}`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    })
+    const response = await fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
+      }
+    )
 
     if (!response.ok) {
       console.error('Decomposition API error:', response.status)
@@ -355,6 +370,7 @@ Description: ${task.description || 'No description'}`
 function fallbackDecomposition(task: Task, agents: AgentPersona[]): DecompositionResult {
   const text = `${task.title} ${task.description || ''}`.toLowerCase()
   const steps: TaskStep[] = []
+  console.log(`[Decomposition Fallback] Analyzing: "${text}"`)
 
   // Pattern detection
   const hasWriting = /\b(write|create|draft|compose)\s+(a\s+)?(blog|article|post|content|copy)/i.test(text)
@@ -362,6 +378,7 @@ function fallbackDecomposition(task: Task, agents: AgentPersona[]): Decompositio
   const hasResearch = /\b(research|investigate|analyze|find|gather)/i.test(text)
   const hasPublish = /\b(post|publish|send|deploy|upload)\s+(to|on)/i.test(text)
   const hasCode = /\b(code|develop|implement|build|fix)/i.test(text)
+  console.log(`[Decomposition Fallback] Patterns: writing=${hasWriting}, image=${hasImage}, research=${hasResearch}, publish=${hasPublish}, code=${hasCode}`)
 
   // Build steps in logical order
   if (hasResearch) {
@@ -425,13 +442,15 @@ function fallbackDecomposition(task: Task, agents: AgentPersona[]): Decompositio
     }
   }
 
-  return {
+  const result = {
     isMultiStep: steps.length > 1,
     steps,
     reasoning: steps.length > 1
       ? `Detected ${steps.length} distinct phases: ${steps.map((s) => s.title).join(' → ')}`
       : 'Single-step task or unable to decompose',
   }
+  console.log(`[Decomposition Fallback] Result: ${steps.length} steps, isMultiStep=${result.isMultiStep}`)
+  return result
 }
 
 // Helper to extract relevant context for a step

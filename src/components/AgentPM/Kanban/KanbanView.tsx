@@ -1,4 +1,5 @@
 // Kanban View - Kanban board for AgentPM tasks
+// Supports multi-select: Ctrl/Cmd+click to select multiple, then drag all at once
 
 import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
@@ -64,6 +65,7 @@ export function KanbanView({
 }: KanbanViewProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
 
   // Group tasks by column
   const tasksByColumn = useMemo(() => {
@@ -96,11 +98,74 @@ export function KanbanView({
     return grouped
   }, [tasks])
 
+  // Handle task selection (Ctrl/Cmd+click for multi-select)
+  const handleTaskSelect = useCallback((e: React.MouseEvent, task: Task) => {
+    const isMultiSelect = e.ctrlKey || e.metaKey
+    const isShiftSelect = e.shiftKey
+
+    if (isMultiSelect) {
+      // Toggle selection
+      setSelectedTaskIds((prev) => {
+        const newSet = new Set(prev)
+        if (newSet.has(task.id)) {
+          newSet.delete(task.id)
+        } else {
+          newSet.add(task.id)
+        }
+        return newSet
+      })
+      e.stopPropagation()
+    } else if (isShiftSelect && selectedTaskIds.size > 0) {
+      // Range select within same column
+      const columnId = STATUS_TO_COLUMN[task.status]
+      const columnTasks = tasks.filter((t) => STATUS_TO_COLUMN[t.status] === columnId)
+      const taskIds = columnTasks.map((t) => t.id)
+      const lastSelected = Array.from(selectedTaskIds).pop()
+      if (lastSelected) {
+        const lastIdx = taskIds.indexOf(lastSelected)
+        const currentIdx = taskIds.indexOf(task.id)
+        if (lastIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(lastIdx, currentIdx)
+          const end = Math.max(lastIdx, currentIdx)
+          const rangeIds = taskIds.slice(start, end + 1)
+          setSelectedTaskIds((prev) => {
+            const newSet = new Set(prev)
+            rangeIds.forEach((id) => newSet.add(id))
+            return newSet
+          })
+        }
+      }
+      e.stopPropagation()
+    } else {
+      // Regular click - clear selection and open task detail
+      setSelectedTaskIds(new Set())
+      onTaskClick(task.id)
+    }
+  }, [selectedTaskIds, tasks, onTaskClick])
+
+  // Clear selection when clicking outside
+  const handleBackgroundClick = useCallback(() => {
+    if (selectedTaskIds.size > 0) {
+      setSelectedTaskIds(new Set())
+    }
+  }, [selectedTaskIds])
+
   const handleDragStart = useCallback((e: React.DragEvent, task: Task) => {
-    setDraggedTask(task)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', task.id)
-  }, [])
+    // If dragging a selected task, drag all selected
+    // If dragging an unselected task, just drag that one
+    if (selectedTaskIds.has(task.id) && selectedTaskIds.size > 1) {
+      // Multi-drag
+      const selectedTasks = tasks.filter((t) => selectedTaskIds.has(t.id))
+      e.dataTransfer.setData('text/plain', JSON.stringify(selectedTasks.map((t) => t.id)))
+      e.dataTransfer.effectAllowed = 'move'
+      setDraggedTask(task) // Use first task as visual reference
+    } else {
+      // Single drag
+      setDraggedTask(task)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', task.id)
+    }
+  }, [selectedTaskIds, tasks])
 
   const handleDragEnd = useCallback(() => {
     setDraggedTask(null)
@@ -124,15 +189,41 @@ export function KanbanView({
 
       if (!draggedTask) return
 
-      const currentColumnId = STATUS_TO_COLUMN[draggedTask.status]
-      if (currentColumnId === columnId) return
-
       const newStatus = COLUMN_TO_STATUS[columnId]
-      if (newStatus) {
-        onStatusChange(draggedTask.id, newStatus)
+      if (!newStatus) return
+
+      // Check if this is a multi-drag
+      const dataStr = e.dataTransfer.getData('text/plain')
+      let taskIdsToMove: string[] = []
+
+      try {
+        // Try to parse as JSON array (multi-select)
+        const parsed = JSON.parse(dataStr)
+        if (Array.isArray(parsed)) {
+          taskIdsToMove = parsed
+        } else {
+          taskIdsToMove = [draggedTask.id]
+        }
+      } catch {
+        // Single task drag
+        taskIdsToMove = [draggedTask.id]
       }
+
+      // Move all tasks to the new column
+      const tasksToMove = tasks.filter((t) => taskIdsToMove.includes(t.id))
+      console.log(`[Kanban] Moving ${tasksToMove.length} tasks to ${columnId}`)
+
+      // Fire all status changes in parallel for SIZZLE
+      tasksToMove.forEach((task) => {
+        if (STATUS_TO_COLUMN[task.status] !== columnId) {
+          onStatusChange(task.id, newStatus)
+        }
+      })
+
+      // Clear selection after drop
+      setSelectedTaskIds(new Set())
     },
-    [draggedTask, onStatusChange]
+    [draggedTask, onStatusChange, tasks]
   )
 
   const formatDate = (dateStr?: string) => {
@@ -142,7 +233,23 @@ export function KanbanView({
   }
 
   return (
-    <div className="h-full w-full overflow-x-auto" style={{ background: '#0a0a0f' }}>
+    <div className="h-full w-full overflow-x-auto relative" style={{ background: '#0a0a0f' }} onClick={handleBackgroundClick}>
+      {/* Multi-select indicator */}
+      {selectedTaskIds.size > 0 && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-full shadow-lg flex items-center gap-2">
+          <span>{selectedTaskIds.size} tasks selected</span>
+          <span className="text-primary-200">• Drag to move all</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setSelectedTaskIds(new Set())
+            }}
+            className="ml-2 hover:bg-primary-500 rounded px-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex gap-3 p-4 h-full min-w-fit">
         {DEFAULT_COLUMNS.map((column) => {
           const columnTasks = tasksByColumn[column.id] || []
@@ -160,6 +267,7 @@ export function KanbanView({
               onDragOver={(e) => handleDragOver(e, column.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, column.id)}
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Column Header */}
               <div className="p-3 border-b border-surface-700">
@@ -179,6 +287,7 @@ export function KanbanView({
                   const assigneeName = task.assignedTo ? agents.get(task.assignedTo) : null
                   const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'completed'
                   const isDragging = draggedTask?.id === task.id
+                  const isSelected = selectedTaskIds.has(task.id)
 
                   return (
                     <motion.div
@@ -189,13 +298,27 @@ export function KanbanView({
                       draggable
                       onDragStart={(e) => handleDragStart(e as unknown as React.DragEvent, task)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => onTaskClick(task.id)}
-                      className="p-3 rounded-md cursor-pointer transition-all border hover:border-primary-500 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.3)]"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleTaskSelect(e, task)
+                      }}
+                      className={`p-3 rounded-md cursor-pointer transition-all border relative ${
+                        isSelected
+                          ? 'border-primary-500 ring-2 ring-primary-500/30 bg-primary-500/10'
+                          : 'hover:border-primary-500 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.3)]'
+                      }`}
                       style={{
-                        background: '#1a1a24',
-                        borderColor: '#2a2a3a',
+                        background: isSelected ? '#1a2a3a' : '#1a1a24',
+                        borderColor: isSelected ? '#0ea5e9' : '#2a2a3a',
                       }}
                     >
+                      {/* Selection indicator */}
+                      {isSelected && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                          ✓
+                        </div>
+                      )}
+
                       {/* Title */}
                       <h4 className="text-sm font-medium text-white line-clamp-2 mb-2">
                         {task.title}

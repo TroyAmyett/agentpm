@@ -71,7 +71,7 @@ export function AgentPMPage() {
   const { projects, fetchProjects } = useProjectStore()
   const { taskViewMode, setTaskViewMode } = useUIStore()
   const { skills, fetchSkills } = useSkillStore()
-  const { runTask, isExecuting } = useExecutionStore()
+  const { runTask, isTaskExecuting, getActiveCount } = useExecutionStore()
   const {
     tasks,
     blockedTasks,
@@ -128,31 +128,48 @@ export function AgentPMPage() {
     }
   }, [accountId, subscribeToAgents, subscribeToTasks])
 
-  // Queue watcher - auto-process queued tasks with assigned agents
+  // Queue watcher - auto-process queued tasks with assigned agents (PARALLEL for sizzle!)
+  const MAX_PARALLEL_TASKS = 3 // Process up to 3 tasks simultaneously
   useEffect(() => {
-    if (isExecuting) return // Don't process while already executing
+    const activeCount = getActiveCount()
+    const availableSlots = MAX_PARALLEL_TASKS - activeCount
 
-    // Find the first queued task with an assigned agent
-    const queuedTask = tasks.find(
-      (t) => t.status === 'queued' && t.assignedTo && t.assignedToType === 'agent'
+    if (availableSlots <= 0) {
+      console.log(`[Queue Watcher] At capacity (${activeCount}/${MAX_PARALLEL_TASKS} running)`)
+      return
+    }
+
+    // Find ALL queued tasks with assigned agents (not already executing)
+    const queuedTasks = tasks.filter(
+      (t) => t.status === 'queued' &&
+             t.assignedTo &&
+             t.assignedToType === 'agent' &&
+             !isTaskExecuting(t.id)
     )
 
-    if (queuedTask) {
-      const agent = agents.find((a) => a.id === queuedTask.assignedTo)
-      if (agent) {
-        const skill = queuedTask.skillId
-          ? skills.find((s) => s.id === queuedTask.skillId)
-          : undefined
+    if (queuedTasks.length === 0) return
 
-        // Start execution
-        updateTaskStatus(queuedTask.id, 'in_progress', userId, 'Auto-started from queue')
-          .then(() => {
-            runTask(queuedTask, agent, skill, accountId, userId)
-          })
-          .catch((err) => console.error('Failed to start queued task:', err))
+    // Take up to availableSlots tasks
+    const tasksToStart = queuedTasks.slice(0, availableSlots)
+    console.log(`[Queue Watcher] Starting ${tasksToStart.length} tasks in parallel (${activeCount} already running)`)
+
+    // Start all tasks in parallel for SIZZLE 🔥
+    tasksToStart.forEach((queuedTask) => {
+      const agent = agents.find((a) => a.id === queuedTask.assignedTo)
+      if (!agent) {
+        console.log(`[Queue Watcher] Task "${queuedTask.title}" has no matching agent`)
+        return
       }
-    }
-  }, [tasks, agents, skills, isExecuting, updateTaskStatus, runTask, accountId, userId])
+
+      console.log(`[Queue Watcher] Starting: "${queuedTask.title}" → ${agent.alias}`)
+      const skill = queuedTask.skillId ? skills.find((s) => s.id === queuedTask.skillId) : undefined
+
+      // Start execution (don't await - fire and forget for parallel execution)
+      updateTaskStatus(queuedTask.id, 'in_progress', userId, 'Auto-started from queue')
+        .then(() => runTask(queuedTask, agent, skill, accountId, userId))
+        .catch((err) => console.error(`[Queue Watcher] Failed to start "${queuedTask.title}":`, err))
+    })
+  }, [tasks, agents, skills, getActiveCount, isTaskExecuting, updateTaskStatus, runTask, accountId, userId])
 
   // Sub-task chaining - when a sub-task completes, queue unblocked dependents
   useEffect(() => {
@@ -269,10 +286,14 @@ export function AgentPMPage() {
 
       // SMART ROUTING: When moving to 'pending' (Ready column), analyze and route
       if (status === 'pending' && (!task.assignedTo || task.assignedToType !== 'agent')) {
+        console.log(`[Dispatch] Task "${task.title}" moved to Ready - analyzing for decomposition...`)
+        console.log(`[Dispatch] Task has assignedTo: ${task.assignedTo}, type: ${task.assignedToType}, parentTaskId: ${task.parentTaskId}`)
+
         // Check if this is a multi-step task that needs decomposition
         // Only decompose root tasks (no parentTaskId) to avoid recursive decomposition
         if (!task.parentTaskId) {
           const decomposition = await analyzeTaskForDecomposition(task, agents)
+          console.log(`[Dispatch] Decomposition result:`, decomposition)
 
           if (decomposition.isMultiStep && decomposition.steps.length > 1) {
             console.log(`Dispatch decomposing task into ${decomposition.steps.length} steps: ${decomposition.reasoning}`)
@@ -357,7 +378,7 @@ export function AgentPMPage() {
       await updateTaskStatus(taskId, status, userId, note)
 
       // Auto-execute when task is queued or in_progress and assigned to an agent
-      if ((status === 'queued' || status === 'in_progress') && !isExecuting) {
+      if ((status === 'queued' || status === 'in_progress') && !isTaskExecuting(taskId)) {
         const updatedTask = getTask(taskId)
         if (updatedTask?.assignedTo && updatedTask.assignedToType === 'agent') {
           const agent = agents.find((a) => a.id === updatedTask.assignedTo)
@@ -372,7 +393,7 @@ export function AgentPMPage() {
         }
       }
     },
-    [userId, updateTaskStatus, isExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask]
+    [userId, updateTaskStatus, isTaskExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask]
   )
 
   // Handle agent assignment - auto-execute immediately
@@ -382,7 +403,7 @@ export function AgentPMPage() {
       await assignTask(assignAgentTask.id, agentId, 'agent', userId)
 
       const agent = agents.find((a) => a.id === agentId)
-      if (!agent || isExecuting) {
+      if (!agent || isTaskExecuting(assignAgentTask.id)) {
         setAssignAgentTask(null)
         return
       }
@@ -398,7 +419,7 @@ export function AgentPMPage() {
 
       setAssignAgentTask(null)
     },
-    [assignAgentTask, assignTask, updateTaskStatus, userId, agents, isExecuting, skills, runTask, accountId]
+    [assignAgentTask, assignTask, updateTaskStatus, userId, agents, isTaskExecuting, skills, runTask, accountId]
   )
 
   // Handle task deletion
