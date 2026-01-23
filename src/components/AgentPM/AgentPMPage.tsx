@@ -172,6 +172,64 @@ export function AgentPMPage() {
     })
   }, [tasks, agents, skills, getActiveCount, isTaskExecuting, updateTaskStatus, runTask, accountId, userId])
 
+  // Auto-queue pending tasks that already have agents assigned
+  // This catches tasks where routing assigned an agent but failed to move to queued
+  useEffect(() => {
+    const pendingWithAgents = tasks.filter(
+      (t) => t.status === 'pending' &&
+             t.assignedTo &&
+             t.assignedToType === 'agent' &&
+             !isTaskBlocked(t.id)
+    )
+
+    if (pendingWithAgents.length === 0) return
+
+    console.log(`[Auto-Queue] Found ${pendingWithAgents.length} pending tasks with agents, moving to queued`)
+
+    pendingWithAgents.forEach((task) => {
+      const agent = agents.find((a) => a.id === task.assignedTo)
+      updateTaskStatus(
+        task.id,
+        'queued',
+        userId,
+        `Auto-queued: already assigned to ${agent?.alias || 'agent'}`
+      ).catch((err) => console.error(`[Auto-Queue] Failed to queue "${task.title}":`, err))
+    })
+  }, [tasks, agents, updateTaskStatus, userId, isTaskBlocked])
+
+  // Stale task detector - reset stuck in_progress tasks back to queued for retry
+  // A task is stale if it's been in_progress for >1 hour without active execution
+  useEffect(() => {
+    const ONE_HOUR = 60 * 60 * 1000
+
+    const staleInProgressTasks = tasks.filter((t) => {
+      if (t.status !== 'in_progress') return false
+      if (!t.assignedTo || t.assignedToType !== 'agent') return false
+      if (isTaskExecuting(t.id)) return false // Currently running, not stale
+
+      // Check last status update time
+      const lastUpdate = t.statusHistory?.[t.statusHistory.length - 1]
+      if (!lastUpdate) return false
+
+      const timeSinceUpdate = Date.now() - new Date(lastUpdate.changedAt).getTime()
+      return timeSinceUpdate > ONE_HOUR
+    })
+
+    if (staleInProgressTasks.length === 0) return
+
+    console.log(`[Stale Detector] Found ${staleInProgressTasks.length} stale in_progress tasks`)
+
+    staleInProgressTasks.forEach((task) => {
+      console.log(`[Stale Detector] Resetting stale task "${task.title}" back to queued for retry`)
+      updateTaskStatus(
+        task.id,
+        'queued',
+        userId,
+        'Auto-reset: task was stuck in_progress for over 1 hour'
+      ).catch((err) => console.error(`[Stale Detector] Failed to reset "${task.title}":`, err))
+    })
+  }, [tasks, updateTaskStatus, userId, isTaskExecuting])
+
   // Sub-task chaining - when a sub-task completes, queue unblocked dependents
   useEffect(() => {
     // Find completed sub-tasks that might have dependents waiting
