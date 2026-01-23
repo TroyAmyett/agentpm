@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, AlertTriangle, Plus, RefreshCw, User } from 'lucide-react'
+import { X, Bot, AlertTriangle, Plus, RefreshCw } from 'lucide-react'
 import { useAgentStore } from '@/stores/agentStore'
 import { useAuthStore } from '@/stores/authStore'
 import type { AgentPersona, AgentType, AutonomyLevel } from '@/types/agentpm'
@@ -390,83 +390,26 @@ export function EditAgentModal({
                     </label>
                   </div>
 
-                  {/* Reports To */}
+                  {/* Reports To - Compact dropdown */}
                   <div>
                     <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                       Reports To
                     </label>
-                    <p className="text-xs text-surface-500 mb-2">
-                      Determines hierarchy in org chart. Orchestrators typically report to humans, other agents report to orchestrators.
-                    </p>
-                    <div className="space-y-2">
-                      {/* Human option */}
-                      <label
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          reportsToId === 'user'
-                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="reportsTo"
-                          value="user"
-                          checked={reportsToId === 'user'}
-                          onChange={() => setReportsToId('user')}
-                          className="sr-only"
-                        />
-                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                          <User size={16} className="text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-surface-900 dark:text-surface-100">
-                            {user?.email?.split('@')[0] || 'You'} (Human)
-                          </p>
-                          <p className="text-xs text-surface-500">Reports directly to you</p>
-                        </div>
-                      </label>
-
-                      {/* Agent options */}
+                    <select
+                      value={reportsToId}
+                      onChange={(e) => setReportsToId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="user">
+                        {user?.email?.split('@')[0] || 'You'} (Human)
+                      </option>
                       {availableManagers.map((managerAgent) => (
-                        <label
-                          key={managerAgent.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                            reportsToId === managerAgent.id
-                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="reportsTo"
-                            value={managerAgent.id}
-                            checked={reportsToId === managerAgent.id}
-                            onChange={() => setReportsToId(managerAgent.id)}
-                            className="sr-only"
-                          />
-                          <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
-                            {managerAgent.avatar ? (
-                              <img
-                                src={managerAgent.avatar}
-                                alt={managerAgent.alias}
-                                className="w-full h-full rounded-full object-cover"
-                              />
-                            ) : (
-                              <Bot size={16} className="text-primary-600 dark:text-primary-400" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-surface-900 dark:text-surface-100">
-                              {managerAgent.alias}
-                            </p>
-                            <p className="text-xs text-surface-500 truncate">
-                              {managerAgent.agentType}
-                              {managerAgent.agentType === 'orchestrator' && ' (Recommended for worker agents)'}
-                            </p>
-                          </div>
-                        </label>
+                        <option key={managerAgent.id} value={managerAgent.id}>
+                          {managerAgent.alias} ({managerAgent.agentType})
+                          {managerAgent.agentType === 'orchestrator' && ' - Recommended'}
+                        </option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                 </div>
 
