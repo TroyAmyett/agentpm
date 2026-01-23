@@ -170,8 +170,6 @@ export function DependencyGraph({ tasks, onTaskClick }: DependencyGraphProps) {
       // Calculate bounds of all nodes
       const minX = Math.min(...nodes.map((n) => n.x))
       const minY = Math.min(...nodes.map((n) => n.y))
-      const maxX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH))
-      const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT))
 
       // Shift content so topmost node starts at Y=80 (below the info badge)
       // and leftmost node starts at X=50 (with padding)

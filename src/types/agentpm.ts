@@ -720,7 +720,7 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     showOnDashboard: true,
     showInOrgChart: true,
     sortOrder: 1,
-    reportsTo: { type: 'user' },
+    reportsTo: { type: 'user', id: 'user' },
   },
   // Workers report to orchestrator
   {

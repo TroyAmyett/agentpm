@@ -66,7 +66,7 @@ export function AgentPMPage() {
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
   const [isForgeTaskOpen, setIsForgeTaskOpen] = useState(false)
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all')
-  const [isPending, startTransition] = useTransition()
+  const [_isPending, startTransition] = useTransition()
 
   const { user } = useAuthStore()
   const { accounts, currentAccountId, currentAccount, fetchAccounts, initializeUserAccounts } = useAccountStore()
