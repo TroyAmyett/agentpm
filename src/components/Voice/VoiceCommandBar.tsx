@@ -31,17 +31,26 @@ function parseVoiceCommand(
 ): ParsedVoiceCommand {
   const lowerText = text.toLowerCase()
 
-  // Create task patterns
+  // Create task patterns - explicit "task" commands
   const taskPatterns = [
     /add (?:a )?task (?:to (?:the )?)?(.+?)(?:project)? (?:to |for )?(.+)/i,
     /create (?:a )?task (?:to |for )?(.+)/i,
     /new task[:\s]+(.+)/i,
   ]
 
+  // Implicit task patterns - actions that imply a task
+  const implicitTaskPatterns = [
+    /(?:create|write|make) (?:a |an )?(?:blog ?post|article|post) (?:about |on |for )?(.+)/i,
+    /(?:write|draft) (?:a |an )?(.+)/i,
+    /(?:create|make|generate|design) (?:a |an )?(?:image|graphic|visual|logo|banner) (?:of |for |about )?(.+)/i,
+    /(?:research|investigate|look into|find out about) (.+)/i,
+    /(?:analyze|review|audit) (.+)/i,
+  ]
+
+  // Check explicit task patterns first
   for (const pattern of taskPatterns) {
     const match = text.match(pattern)
     if (match) {
-      // Try to match project name
       let projectName: string | undefined
       for (const project of projects) {
         if (lowerText.includes(project.name.toLowerCase())) {
@@ -50,7 +59,6 @@ function parseVoiceCommand(
         }
       }
 
-      // Determine task type from content
       let taskType = 'generic'
       if (lowerText.includes('blog') || lowerText.includes('write') || lowerText.includes('article')) {
         taskType = 'blog_post'
@@ -65,6 +73,40 @@ function parseVoiceCommand(
         project: projectName,
         taskType,
         title: match[match.length - 1]?.trim(),
+        rawText: text,
+      }
+    }
+  }
+
+  // Check implicit task patterns (e.g., "create a blog post about...")
+  for (const pattern of implicitTaskPatterns) {
+    const match = text.match(pattern)
+    if (match) {
+      let projectName: string | undefined
+      for (const project of projects) {
+        if (lowerText.includes(project.name.toLowerCase())) {
+          projectName = project.name
+          break
+        }
+      }
+
+      let taskType = 'generic'
+      if (lowerText.includes('blog') || lowerText.includes('article') || lowerText.includes('post')) {
+        taskType = 'blog_post'
+      } else if (lowerText.includes('image') || lowerText.includes('visual') || lowerText.includes('graphic') || lowerText.includes('logo') || lowerText.includes('banner')) {
+        taskType = 'image'
+      } else if (lowerText.includes('research') || lowerText.includes('investigate') || lowerText.includes('find out')) {
+        taskType = 'research'
+      } else if (lowerText.includes('analyze') || lowerText.includes('review') || lowerText.includes('audit')) {
+        taskType = 'analysis'
+      }
+
+      // Use the full text as title for implicit commands
+      return {
+        intent: 'create_task',
+        project: projectName,
+        taskType,
+        title: text.trim(),
         rawText: text,
       }
     }
