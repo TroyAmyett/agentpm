@@ -346,8 +346,10 @@ export function AgentPMPage() {
   // Handle voice commands
   const handleVoiceCommand = useCallback(
     (command: ParsedVoiceCommand) => {
+      console.log('Voice command received:', command)
       switch (command.intent) {
         case 'create_task':
+          console.log('Creating task with title:', command.title || command.rawText)
           setVoiceTaskTitle(command.title || command.rawText)
           setIsCreateTaskOpen(true)
           break
