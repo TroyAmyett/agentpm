@@ -102,8 +102,8 @@ export function EditAgentModal({
     setReportsToId(agent.reportsTo?.type === 'agent' ? agent.reportsTo.id : 'user')
   }, [agent])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!alias.trim()) {
       setError('Agent name is required')
       return
@@ -136,7 +136,7 @@ export function EditAgentModal({
         }
       }
 
-      await updateAgent(agent.id, {
+      const updates = {
         agentType: finalAgentType,
         alias: alias.trim(),
         tagline: tagline.trim() || undefined,
@@ -147,11 +147,16 @@ export function EditAgentModal({
         showOnDashboard,
         reportsTo,
         updatedBy: userId,
-        updatedByType: 'user',
-      })
+        updatedByType: 'user' as const,
+      }
+
+      console.log('Updating agent:', agent.id, updates)
+      await updateAgent(agent.id, updates)
+      console.log('Agent updated successfully')
 
       onClose()
     } catch (err) {
+      console.error('Failed to update agent:', err)
       setError(err instanceof Error ? err.message : 'Failed to update agent')
     } finally {
       setIsSubmitting(false)
@@ -236,12 +241,22 @@ export function EditAgentModal({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500 transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !alias.trim()}
+                  className="px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Form */}
