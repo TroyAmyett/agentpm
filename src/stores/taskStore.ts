@@ -1,7 +1,7 @@
 // Task Store - Zustand store for AgentPM tasks
 
 import { create } from 'zustand'
-import type { Task, TaskStatus, TaskPriority, UpdateEntity } from '@/types/agentpm'
+import type { Task, TaskStatus, TaskPriority, UpdateEntity, TaskDependency } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
 
 interface TaskFilters {
@@ -32,6 +32,10 @@ interface TaskState {
   updateTaskStatus: (id: string, status: TaskStatus, userId: string, note?: string) => Promise<void>
   assignTask: (id: string, assignedTo: string, assignedToType: 'user' | 'agent', userId: string) => Promise<void>
   deleteTask: (id: string, userId: string) => Promise<void>
+
+  // Dependencies
+  createTaskDependency: (taskId: string, dependsOnTaskId: string, accountId: string, createdBy: string) => Promise<TaskDependency>
+  isTaskBlocked: (taskId: string) => boolean
 
   // Filters
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void
@@ -216,6 +220,36 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
+  createTaskDependency: async (taskId, dependsOnTaskId, accountId, createdBy) => {
+    const dependency = await db.createTaskDependency({
+      accountId,
+      taskId,
+      dependsOnTaskId,
+      dependencyType: 'FS', // Finish-to-Start (most common)
+      createdBy,
+      createdByType: 'agent',
+    })
+
+    // Update blocked tasks map
+    const { tasks, blockedTasks } = get()
+    const newBlockedTasks = new Map(blockedTasks)
+    const currentCount = newBlockedTasks.get(taskId) || 0
+    newBlockedTasks.set(taskId, currentCount + 1)
+    set({ blockedTasks: newBlockedTasks })
+
+    // Refresh blocked tasks to ensure accuracy
+    db.fetchBlockedTasks(accountId, tasks).then((refreshedBlocked) => {
+      set({ blockedTasks: refreshedBlocked })
+    })
+
+    return dependency
+  },
+
+  isTaskBlocked: (taskId) => {
+    const { blockedTasks } = get()
+    return (blockedTasks.get(taskId) || 0) > 0
+  },
+
   setFilter: (key, value) => {
     set((state) => ({
       filters: { ...state.filters, [key]: value },
@@ -258,6 +292,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   handleRemoteTaskChange: (remoteTask) => {
+    const prevTask = get().tasks.find((t) => t.id === remoteTask.id)
+    const statusChanged = prevTask && prevTask.status !== remoteTask.status
+    const taskCompleted = statusChanged && (remoteTask.status === 'completed' || remoteTask.status === 'cancelled')
+
     set((state) => {
       // If the task has been soft-deleted, remove it from the active list
       if (remoteTask.deletedAt) {
@@ -278,6 +316,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return { tasks: [remoteTask, ...state.tasks] }
       }
     })
+
+    // If a task was completed/cancelled, refresh blocked tasks to unblock dependents
+    if (taskCompleted) {
+      const { tasks } = get()
+      const accountId = remoteTask.accountId
+      db.fetchBlockedTasks(accountId, tasks).then((refreshedBlocked) => {
+        set({ blockedTasks: refreshedBlocked })
+      }).catch((err) => {
+        console.error('Failed to refresh blocked tasks:', err)
+      })
+    }
   },
 
   handleRemoteTaskDelete: (id) => {

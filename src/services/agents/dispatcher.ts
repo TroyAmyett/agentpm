@@ -1,5 +1,6 @@
 // Dispatcher Service - Smart task routing to agents
 // Analyzes tasks and assigns to the best-suited agent based on capabilities
+// Supports multi-step task decomposition for complex workflows
 
 import type { Task, AgentPersona } from '@/types/agentpm'
 
@@ -15,6 +16,20 @@ export interface RoutingDecision {
 export interface RoutingInput {
   task: Task
   agents: AgentPersona[]
+}
+
+// Multi-step task decomposition
+export interface TaskStep {
+  title: string
+  description: string
+  agentType: string
+  dependsOnIndex?: number // Index of step this depends on (0-based)
+}
+
+export interface DecompositionResult {
+  isMultiStep: boolean
+  steps: TaskStep[]
+  reasoning: string
 }
 
 // Build agent descriptions for the routing prompt
@@ -198,4 +213,242 @@ function fallbackRouting(task: Task, agents: AgentPersona[]): RoutingDecision {
 // Check if dispatcher is configured
 export function isDispatcherConfigured(): boolean {
   return !!ANTHROPIC_API_KEY
+}
+
+// Analyze a task to determine if it needs to be decomposed into multiple steps
+export async function analyzeTaskForDecomposition(
+  task: Task,
+  agents: AgentPersona[]
+): Promise<DecompositionResult> {
+  // Quick check: if task is very short and simple, skip decomposition
+  const taskText = `${task.title} ${task.description || ''}`.toLowerCase()
+
+  // Heuristic: Look for multi-step indicators
+  const multiStepIndicators = [
+    ' and ', ' then ', ', then ', ' after that', ' followed by',
+    ' also ', ' plus ', ' additionally ', ' as well as',
+    'create', 'generate', 'post', 'publish', 'send'
+  ]
+
+  const hasMultipleIndicators = multiStepIndicators.filter(i => taskText.includes(i)).length >= 2
+  const hasMultipleActions = (taskText.match(/\b(create|write|generate|make|build|post|publish|send|research|analyze)\b/g) || []).length > 1
+
+  // If no indicators, return as single-step
+  if (!hasMultipleIndicators && !hasMultipleActions) {
+    return {
+      isMultiStep: false,
+      steps: [],
+      reasoning: 'Task appears to be a single-step task',
+    }
+  }
+
+  // If no API key, use fallback decomposition
+  if (!ANTHROPIC_API_KEY) {
+    return fallbackDecomposition(task, agents)
+  }
+
+  try {
+    const availableAgentTypes = [...new Set(
+      agents
+        .filter((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
+        .map((a) => a.agentType)
+    )]
+
+    const systemPrompt = `You are Dispatch, an AI orchestrator that analyzes tasks to determine if they should be broken into multiple steps.
+
+Your job is to:
+1. Analyze if the task contains multiple distinct actions that should be done by different agents
+2. If yes, break it into ordered steps with dependencies
+3. Assign each step to the appropriate agent type
+
+Available agent types: ${availableAgentTypes.join(', ')}
+
+Agent type guidelines:
+- content-writer: Writing blog posts, articles, copy, emails
+- image-generator: Creating images, graphics, visuals
+- researcher: Research, data gathering, analysis
+- forge: Code development, technical implementation
+- qa-tester: Testing, quality assurance
+
+Respond with ONLY valid JSON:
+{
+  "isMultiStep": true/false,
+  "steps": [
+    {
+      "title": "Short step title",
+      "description": "What this step should accomplish",
+      "agentType": "content-writer|image-generator|researcher|forge|etc",
+      "dependsOnIndex": null or 0-based index of prerequisite step
+    }
+  ],
+  "reasoning": "Why this decomposition was chosen"
+}
+
+Rules:
+- Only decompose if the task clearly has multiple distinct deliverables
+- Steps should be in logical execution order
+- Each step should be assignable to a single agent
+- Use dependsOnIndex when one step needs output from another`
+
+    const userPrompt = `Analyze this task for multi-step decomposition:
+
+Title: ${task.title}
+Description: ${task.description || 'No description'}`
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Decomposition API error:', response.status)
+      return fallbackDecomposition(task, agents)
+    }
+
+    const data = await response.json()
+    const content = data.content?.[0]?.text || ''
+
+    // Parse JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('Could not parse decomposition response')
+      return fallbackDecomposition(task, agents)
+    }
+
+    const result = JSON.parse(jsonMatch[0]) as DecompositionResult
+
+    // Validate agent types exist
+    if (result.isMultiStep && result.steps.length > 0) {
+      for (const step of result.steps) {
+        const hasAgent = agents.some(
+          (a) => a.agentType === step.agentType && a.isActive && !a.pausedAt
+        )
+        if (!hasAgent) {
+          // Try to find a similar agent
+          const fallbackAgent = agents.find((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
+          if (fallbackAgent) {
+            step.agentType = fallbackAgent.agentType
+          }
+        }
+      }
+    }
+
+    return result
+  } catch (error) {
+    console.error('Decomposition error:', error)
+    return fallbackDecomposition(task, agents)
+  }
+}
+
+// Fallback decomposition using pattern matching
+function fallbackDecomposition(task: Task, agents: AgentPersona[]): DecompositionResult {
+  const text = `${task.title} ${task.description || ''}`.toLowerCase()
+  const steps: TaskStep[] = []
+
+  // Pattern detection
+  const hasWriting = /\b(write|create|draft|compose)\s+(a\s+)?(blog|article|post|content|copy)/i.test(text)
+  const hasImage = /\b(create|generate|make|design)\s+(a\s+)?(image|graphic|visual|illustration|logo|banner)/i.test(text)
+  const hasResearch = /\b(research|investigate|analyze|find|gather)/i.test(text)
+  const hasPublish = /\b(post|publish|send|deploy|upload)\s+(to|on)/i.test(text)
+  const hasCode = /\b(code|develop|implement|build|fix)/i.test(text)
+
+  // Build steps in logical order
+  if (hasResearch) {
+    steps.push({
+      title: 'Research phase',
+      description: extractContext(text, 'research'),
+      agentType: 'researcher',
+    })
+  }
+
+  if (hasWriting) {
+    steps.push({
+      title: 'Create content',
+      description: extractContext(text, 'writing'),
+      agentType: 'content-writer',
+      dependsOnIndex: steps.length > 0 ? 0 : undefined,
+    })
+  }
+
+  if (hasImage) {
+    steps.push({
+      title: 'Generate image',
+      description: extractContext(text, 'image'),
+      agentType: 'image-generator',
+      dependsOnIndex: hasWriting ? steps.length - 1 : undefined,
+    })
+  }
+
+  if (hasCode) {
+    steps.push({
+      title: 'Development',
+      description: extractContext(text, 'code'),
+      agentType: 'forge',
+      dependsOnIndex: steps.length > 0 ? steps.length - 1 : undefined,
+    })
+  }
+
+  if (hasPublish && steps.length > 0) {
+    steps.push({
+      title: 'Publish/Deploy',
+      description: extractContext(text, 'publish'),
+      agentType: steps[steps.length - 1].agentType, // Same agent as last step
+      dependsOnIndex: steps.length - 1,
+    })
+  }
+
+  // Validate agent types exist
+  const availableTypes = new Set(
+    agents
+      .filter((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
+      .map((a) => a.agentType)
+  )
+
+  for (const step of steps) {
+    if (!availableTypes.has(step.agentType)) {
+      // Fall back to first available agent
+      const fallback = agents.find((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
+      if (fallback) {
+        step.agentType = fallback.agentType
+      }
+    }
+  }
+
+  return {
+    isMultiStep: steps.length > 1,
+    steps,
+    reasoning: steps.length > 1
+      ? `Detected ${steps.length} distinct phases: ${steps.map((s) => s.title).join(' → ')}`
+      : 'Single-step task or unable to decompose',
+  }
+}
+
+// Helper to extract relevant context for a step
+function extractContext(text: string, type: string): string {
+  // Simple extraction based on type - could be enhanced with NLP
+  switch (type) {
+    case 'research':
+      return 'Gather information and research relevant topics'
+    case 'writing':
+      return 'Write the content based on requirements'
+    case 'image':
+      return 'Create visual assets to accompany the content'
+    case 'code':
+      return 'Implement the technical requirements'
+    case 'publish':
+      return 'Publish or deploy the completed work'
+    default:
+      return text.slice(0, 200)
+  }
 }

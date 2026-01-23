@@ -120,15 +120,16 @@ export function CreateTaskModal({
             className="fixed inset-0 bg-black/50 z-50"
           />
 
-          {/* Modal */}
+          {/* Modal Container - Flexbox centering */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-surface-800 rounded-xl shadow-xl z-50"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
+            <div className="w-full max-w-lg max-h-[90vh] bg-white dark:bg-surface-800 rounded-xl shadow-xl flex flex-col overflow-hidden pointer-events-auto">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-surface-200 dark:border-surface-700">
+            <div className="flex items-center justify-between p-4 border-b border-surface-200 dark:border-surface-700 flex-shrink-0">
               <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
                 Create New Task
               </h2>
@@ -141,7 +142,7 @@ export function CreateTaskModal({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-4 space-y-4">
               {/* Error */}
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
@@ -328,6 +329,7 @@ export function CreateTaskModal({
                 </button>
               </div>
             </form>
+            </div>
           </motion.div>
         </>
       )}

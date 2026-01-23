@@ -1,9 +1,34 @@
 # PRD: Project Management & Automation System
 
 **Version:** 1.0
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2025-01-22
+**Updated:** 2025-01-22
 **Author:** Troy + Claude
+
+---
+
+## Implementation Progress
+
+### Completed (2025-01-22)
+- [x] Multi-step task decomposition in Dispatch
+  - Analyzes task descriptions for multiple actions
+  - Creates sub-tasks with proper parent-child relationships
+  - Routes each sub-task to appropriate agent type
+- [x] Sub-task chaining with TaskDependency integration
+  - Creates formal TaskDependency records (FS = Finish-to-Start)
+  - Uses `isTaskBlocked()` to check dependencies before queueing
+  - Automatically refreshes blocked status when tasks complete
+  - Marks parent task complete when all sub-tasks done
+- [x] TaskDependency infrastructure (from M2)
+  - Database table with circular dependency detection trigger
+  - `tasks_with_dependencies` view computes blocked_by, blocks, is_blocked
+  - `calculate_task_dates()` function for Gantt scheduling
+- [x] Modal positioning fixes (all modals use consistent flexbox centering)
+
+### In Progress
+- [ ] Task dependency visualization (Network view)
+- [ ] Knowledge extraction from notes
 
 ---
 
@@ -518,10 +543,10 @@ interface TimeEntry {
 - [ ] Git repository configuration
 
 ### M2: Task Dependencies
-- [ ] TaskDependency data model
+- [x] TaskDependency data model (task_dependencies table)
 - [ ] Create/edit dependencies UI
-- [ ] Circular dependency detection
-- [ ] Blocked status enforcement
+- [x] Circular dependency detection (database trigger)
+- [x] Blocked status enforcement (tasks_with_dependencies view + isTaskBlocked)
 - [ ] Network view (dependency graph)
 
 ### M3: Enhanced Views
@@ -537,8 +562,10 @@ interface TimeEntry {
 - [ ] Knowledge management UI
 
 ### M5: Agent Queue
-- [ ] Smart queue prioritization
-- [ ] Capability matching
+- [x] Smart queue prioritization (via Dispatch routing)
+- [x] Capability matching (agent type matching in decomposition)
+- [x] Multi-step task decomposition with TaskDependency integration
+- [x] Sub-task chaining (respects blocked status from dependencies)
 - [ ] Agent queue view
 - [ ] One-click execution
 

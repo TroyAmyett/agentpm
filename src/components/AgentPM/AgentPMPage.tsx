@@ -33,7 +33,7 @@ import { ProjectsPage } from './Projects'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
-import { routeTask } from '@/services/agents/dispatcher'
+import { routeTask, analyzeTaskForDecomposition } from '@/services/agents/dispatcher'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
 type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge'
@@ -84,6 +84,8 @@ export function AgentPMPage() {
     subscribeToTasks,
     getTask,
     getPendingReviewTasks,
+    createTaskDependency,
+    isTaskBlocked,
   } = useTaskStore()
 
   const userId = user?.id || 'demo-user'
@@ -152,6 +154,55 @@ export function AgentPMPage() {
     }
   }, [tasks, agents, skills, isExecuting, updateTaskStatus, runTask, accountId, userId])
 
+  // Sub-task chaining - when a sub-task completes, queue unblocked dependents
+  useEffect(() => {
+    // Find completed sub-tasks that might have dependents waiting
+    const completedSubTasks = tasks.filter(
+      (t) => (t.status === 'completed' || t.status === 'review') && t.parentTaskId
+    )
+
+    for (const completedTask of completedSubTasks) {
+      // Find sibling sub-tasks that are pending and assigned to an agent
+      const siblingTasks = tasks.filter(
+        (t) =>
+          t.parentTaskId === completedTask.parentTaskId &&
+          t.id !== completedTask.id &&
+          t.status === 'pending' &&
+          t.assignedTo &&
+          t.assignedToType === 'agent'
+      )
+
+      // Find tasks that are now unblocked (dependencies satisfied)
+      // Use blockedTasks map to check if task is still blocked
+      const unblockedTasks = siblingTasks.filter((t) => !isTaskBlocked(t.id))
+
+      // Queue the first unblocked task (by creation order)
+      const nextTask = unblockedTasks.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )[0]
+
+      if (nextTask) {
+        // Queue the next unblocked sub-task
+        console.log(`Sub-task "${completedTask.title}" completed, queueing unblocked: "${nextTask.title}"`)
+        updateTaskStatus(nextTask.id, 'queued', userId, `Dependencies satisfied: ${completedTask.title} completed`)
+          .catch((err) => console.error('Failed to queue next sub-task:', err))
+      }
+
+      // Check if all sub-tasks are complete - mark parent as complete
+      const allSiblings = tasks.filter((t) => t.parentTaskId === completedTask.parentTaskId)
+      const allComplete = allSiblings.every((t) => t.status === 'completed' || t.status === 'review')
+
+      if (allComplete && allSiblings.length > 0) {
+        const parentTask = tasks.find((t) => t.id === completedTask.parentTaskId)
+        if (parentTask && parentTask.status === 'in_progress') {
+          console.log(`All sub-tasks complete for "${parentTask.title}", marking parent as review`)
+          updateTaskStatus(parentTask.id, 'review', userId, 'All sub-tasks completed')
+            .catch((err) => console.error('Failed to complete parent task:', err))
+        }
+      }
+    }
+  }, [tasks, updateTaskStatus, userId, isTaskBlocked])
+
   // Handle task creation - new tasks go to Inbox (draft) by default
   const handleCreateTask = useCallback(
     async (taskData: {
@@ -216,8 +267,81 @@ export function AgentPMPage() {
       const task = getTask(taskId)
       if (!task) return
 
-      // SMART ROUTING: When moving to 'pending' (Ready column), auto-route to best agent
+      // SMART ROUTING: When moving to 'pending' (Ready column), analyze and route
       if (status === 'pending' && (!task.assignedTo || task.assignedToType !== 'agent')) {
+        // Check if this is a multi-step task that needs decomposition
+        // Only decompose root tasks (no parentTaskId) to avoid recursive decomposition
+        if (!task.parentTaskId) {
+          const decomposition = await analyzeTaskForDecomposition(task, agents)
+
+          if (decomposition.isMultiStep && decomposition.steps.length > 1) {
+            console.log(`Dispatch decomposing task into ${decomposition.steps.length} steps: ${decomposition.reasoning}`)
+
+            // Create sub-tasks for each step
+            const createdSubTaskIds: string[] = []
+
+            for (let i = 0; i < decomposition.steps.length; i++) {
+              const step = decomposition.steps[i]
+
+              // Find the appropriate agent for this step
+              const stepAgent = agents.find(
+                (a) => a.agentType === step.agentType && a.isActive && !a.pausedAt
+              ) || agents.find((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
+
+              if (!stepAgent) continue
+
+              // Determine if this step has a dependency
+              const hasDependency = step.dependsOnIndex !== undefined && step.dependsOnIndex >= 0
+
+              // Create the sub-task
+              const subTaskData = {
+                title: step.title,
+                description: `${step.description}\n\n---\nPart of: ${task.title}`,
+                priority: task.priority,
+                projectId: task.projectId,
+                parentTaskId: task.id,
+                accountId,
+                // First task (or task with no deps) goes to queued, others wait for dependencies
+                status: (i === 0 || !hasDependency) ? 'queued' as const : 'pending' as const,
+                assignedTo: stepAgent.id,
+                assignedToType: 'agent' as const,
+                createdBy: 'dispatch',
+                createdByType: 'agent' as const,
+                updatedBy: 'dispatch',
+                updatedByType: 'agent' as const,
+              }
+
+              const subTask = await createTask(subTaskData as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
+              if (subTask) {
+                createdSubTaskIds.push(subTask.id)
+                console.log(`Created sub-task ${i + 1}/${decomposition.steps.length}: "${step.title}" → ${stepAgent.alias}`)
+
+                // Create TaskDependency if this step depends on a previous step
+                if (hasDependency && step.dependsOnIndex! < createdSubTaskIds.length - 1) {
+                  const dependsOnTaskId = createdSubTaskIds[step.dependsOnIndex!]
+                  try {
+                    await createTaskDependency(subTask.id, dependsOnTaskId, accountId, 'dispatch')
+                    console.log(`Created dependency: "${step.title}" depends on step ${step.dependsOnIndex! + 1}`)
+                  } catch (depErr) {
+                    console.error('Failed to create task dependency:', depErr)
+                  }
+                }
+              }
+            }
+
+            // Mark parent task as in_progress (it's now being orchestrated)
+            await updateTaskStatus(
+              taskId,
+              'in_progress',
+              userId,
+              `Decomposed into ${createdSubTaskIds.length} sub-tasks by Dispatch`
+            )
+
+            return
+          }
+        }
+
+        // Single-step task: route directly to best agent
         const routingDecision = await routeTask({ task, agents })
         if (routingDecision) {
           console.log(`Dispatch routed task to ${routingDecision.agentAlias}: ${routingDecision.reasoning}`)
@@ -248,7 +372,7 @@ export function AgentPMPage() {
         }
       }
     },
-    [userId, updateTaskStatus, isExecuting, getTask, agents, skills, runTask, accountId, assignTask]
+    [userId, updateTaskStatus, isExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask]
   )
 
   // Handle agent assignment - auto-execute immediately
