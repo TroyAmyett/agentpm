@@ -19,6 +19,8 @@ import {
   FileText,
   Image,
   File,
+  Maximize2,
+  X,
 } from 'lucide-react'
 import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { useExecutionStore } from '@/stores/executionStore'
@@ -59,6 +61,7 @@ export function ExecutionPanel({
   const [copiedContent, setCopiedContent] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
+  const [showOutputModal, setShowOutputModal] = useState(false)
 
   // Fetch execution history for this task
   useEffect(() => {
@@ -288,19 +291,31 @@ export function ExecutionPanel({
                   <span className="text-xs font-medium text-surface-500 uppercase tracking-wider">
                     Output
                   </span>
-                  <button
-                    onClick={() => copyToClipboard(displayExecution.outputContent || '')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-surface-100 dark:hover:bg-surface-800"
-                  >
-                    {copiedContent ? (
-                      <Check size={12} className="text-green-500" />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                    Copy
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => copyToClipboard(displayExecution.outputContent || '')}
+                      className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-surface-100 dark:hover:bg-surface-800"
+                    >
+                      {copiedContent ? (
+                        <Check size={12} className="text-green-500" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => setShowOutputModal(true)}
+                      className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-surface-100 dark:hover:bg-surface-800"
+                    >
+                      <Maximize2 size={12} />
+                      Expand
+                    </button>
+                  </div>
                 </div>
-                <div className="p-4 rounded-lg bg-surface-50 dark:bg-surface-900 max-h-96 overflow-auto">
+                <div
+                  className="p-4 rounded-lg bg-surface-50 dark:bg-surface-900 max-h-64 overflow-auto cursor-pointer hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-600 transition-all"
+                  onClick={() => setShowOutputModal(true)}
+                >
                   <div className="prose prose-sm dark:prose-invert max-w-none">
                     {displayExecution.outputContent.split('\n').map((line, i) => {
                       const trimmedLine = line.trim()
@@ -425,6 +440,131 @@ export function ExecutionPanel({
           </AnimatePresence>
         </div>
       )}
+
+      {/* Output Modal - Full Screen View */}
+      <AnimatePresence>
+        {showOutputModal && displayExecution?.outputContent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowOutputModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-surface-900 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-700">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(displayExecution.status)}
+                  <span className={`font-medium ${getStatusColor(displayExecution.status)}`}>
+                    {displayExecution.status.charAt(0).toUpperCase() + displayExecution.status.slice(1)}
+                  </span>
+                  {displayExecution.outputMetadata?.durationMs && (
+                    <span className="text-sm text-surface-500">
+                      {formatDuration(displayExecution.outputMetadata.durationMs)}
+                    </span>
+                  )}
+                  <span className="text-sm text-surface-500">
+                    {formatDateTime(displayExecution.createdAt)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => copyToClipboard(displayExecution.outputContent || '')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800"
+                  >
+                    {copiedContent ? (
+                      <Check size={16} className="text-green-500" />
+                    ) : (
+                      <Copy size={16} />
+                    )}
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setShowOutputModal(false)}
+                    className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-auto p-6">
+                <div className="prose prose-lg dark:prose-invert max-w-none">
+                  {displayExecution.outputContent.split('\n').map((line, i) => {
+                    const trimmedLine = line.trim()
+                    if (!trimmedLine) return <br key={i} />
+                    if (trimmedLine.startsWith('# ')) {
+                      return <h1 key={i} className="text-2xl font-bold mt-6 mb-3">{trimmedLine.replace('# ', '')}</h1>
+                    }
+                    if (trimmedLine.startsWith('## ')) {
+                      return <h2 key={i} className="text-xl font-semibold mt-5 mb-2">{trimmedLine.replace('## ', '')}</h2>
+                    }
+                    if (trimmedLine.startsWith('### ')) {
+                      return <h3 key={i} className="text-lg font-semibold mt-4 mb-2">{trimmedLine.replace('### ', '')}</h3>
+                    }
+                    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+                      return <li key={i} className="ml-6 mb-1">{trimmedLine.replace(/^[-*] /, '')}</li>
+                    }
+                    if (trimmedLine.match(/^\d+\. /)) {
+                      return <li key={i} className="ml-6 mb-1 list-decimal">{trimmedLine.replace(/^\d+\. /, '')}</li>
+                    }
+                    // Code blocks
+                    if (trimmedLine.startsWith('```')) {
+                      return null // Skip markdown code fence markers
+                    }
+                    return <p key={i} className="mb-3 leading-relaxed">{trimmedLine}</p>
+                  })}
+                </div>
+              </div>
+
+              {/* Generated Files Section in Modal */}
+              {attachments.length > 0 && (
+                <div className="px-6 py-4 border-t border-surface-200 dark:border-surface-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Download size={16} className="text-surface-500" />
+                    <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
+                      Generated Files ({attachments.length})
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {attachments.map((attachment) => (
+                      <button
+                        key={attachment.id}
+                        onClick={() => handleDownload(attachment)}
+                        disabled={downloadingFile === attachment.id}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors text-left"
+                      >
+                        {getFileIcon(attachment.fileType)}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {attachment.fileName}
+                          </div>
+                          <div className="text-xs text-surface-500">
+                            {formatFileSize(attachment.fileSize)}
+                          </div>
+                        </div>
+                        {downloadingFile === attachment.id ? (
+                          <Loader2 size={16} className="animate-spin text-primary-500" />
+                        ) : (
+                          <Download size={16} className="text-surface-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
