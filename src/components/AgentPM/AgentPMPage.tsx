@@ -290,6 +290,9 @@ export function AgentPMPage() {
         console.log(`[Dispatch] Task "${task.title}" moved to Ready - analyzing for decomposition...`)
         console.log(`[Dispatch] Task has assignedTo: ${task.assignedTo}, type: ${task.assignedToType}, parentTaskId: ${task.parentTaskId}`)
 
+        // Find the Dispatch/orchestrator agent for createdBy attribution
+        const dispatchAgent = agents.find((a) => a.agentType === 'orchestrator' && a.isActive)
+
         // Check if this is a multi-step task that needs decomposition
         // Only decompose root tasks (no parentTaskId) to avoid recursive decomposition
         if (!task.parentTaskId) {
@@ -315,7 +318,10 @@ export function AgentPMPage() {
               // Determine if this step has a dependency
               const hasDependency = step.dependsOnIndex !== undefined && step.dependsOnIndex >= 0
 
-              // Create the sub-task
+              // Create the sub-task (use dispatchAgent.id for attribution, fallback to userId)
+              const creatorId = dispatchAgent?.id || userId
+              const creatorType = dispatchAgent ? 'agent' as const : 'user' as const
+
               const subTaskData = {
                 title: step.title,
                 description: `${step.description}\n\n---\nPart of: ${task.title}`,
@@ -327,10 +333,10 @@ export function AgentPMPage() {
                 status: (i === 0 || !hasDependency) ? 'queued' as const : 'pending' as const,
                 assignedTo: stepAgent.id,
                 assignedToType: 'agent' as const,
-                createdBy: 'dispatch',
-                createdByType: 'agent' as const,
-                updatedBy: 'dispatch',
-                updatedByType: 'agent' as const,
+                createdBy: creatorId,
+                createdByType: creatorType,
+                updatedBy: creatorId,
+                updatedByType: creatorType,
               }
 
               const subTask = await createTask(subTaskData as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
@@ -342,7 +348,7 @@ export function AgentPMPage() {
                 if (hasDependency && step.dependsOnIndex! < createdSubTaskIds.length - 1) {
                   const dependsOnTaskId = createdSubTaskIds[step.dependsOnIndex!]
                   try {
-                    await createTaskDependency(subTask.id, dependsOnTaskId, accountId, 'dispatch')
+                    await createTaskDependency(subTask.id, dependsOnTaskId, accountId, creatorId)
                     console.log(`Created dependency: "${step.title}" depends on step ${step.dependsOnIndex! + 1}`)
                   } catch (depErr) {
                     console.error('Failed to create task dependency:', depErr)
