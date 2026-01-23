@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Layout, Loader2 } from 'lucide-react'
+import type { UserTemplate } from '@/types'
 
 interface SaveAsTemplateModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (data: { name: string; description: string; icon: string; category: string }) => Promise<void>
   defaultName?: string
+  /** When provided, modal switches to edit mode */
+  template?: UserTemplate
 }
 
 const iconOptions = [
@@ -33,13 +36,26 @@ export function SaveAsTemplateModal({
   onClose,
   onSave,
   defaultName = '',
+  template,
 }: SaveAsTemplateModalProps) {
-  const [name, setName] = useState(defaultName)
-  const [description, setDescription] = useState('')
-  const [icon, setIcon] = useState('file-text')
-  const [category, setCategory] = useState('')
+  const isEditMode = !!template
+  const [name, setName] = useState(template?.name || defaultName)
+  const [description, setDescription] = useState(template?.description || '')
+  const [icon, setIcon] = useState(template?.icon || 'file-text')
+  const [category, setCategory] = useState(template?.category || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Reset form when template changes (switching between templates or create/edit modes)
+  useEffect(() => {
+    if (isOpen) {
+      setName(template?.name || defaultName)
+      setDescription(template?.description || '')
+      setIcon(template?.icon || 'file-text')
+      setCategory(template?.category || '')
+      setError(null)
+    }
+  }, [isOpen, template, defaultName])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -62,10 +78,6 @@ export function SaveAsTemplateModal({
   }
 
   const handleClose = () => {
-    setName(defaultName)
-    setDescription('')
-    setIcon('file-text')
-    setCategory('')
     setError(null)
     onClose()
   }
@@ -96,7 +108,7 @@ export function SaveAsTemplateModal({
               <div className="flex items-center gap-2">
                 <Layout size={20} className="text-primary-500" />
                 <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
-                  Save as Template
+                  {isEditMode ? 'Edit Template' : 'Save as Template'}
                 </h2>
               </div>
               <button
@@ -201,10 +213,10 @@ export function SaveAsTemplateModal({
                   {isSubmitting ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      Saving...
+                      {isEditMode ? 'Updating...' : 'Saving...'}
                     </>
                   ) : (
-                    'Save Template'
+                    isEditMode ? 'Update Template' : 'Save Template'
                   )}
                 </button>
               </div>

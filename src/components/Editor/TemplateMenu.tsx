@@ -16,7 +16,9 @@ import {
   Star,
   Trash2,
   User,
+  Pencil,
 } from 'lucide-react'
+import { SaveAsTemplateModal } from './SaveAsTemplateModal'
 import type { UserTemplate } from '@/types'
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -31,8 +33,9 @@ const iconMap: Record<string, React.ReactNode> = {
 
 export function TemplateMenu() {
   const [isOpen, setIsOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<UserTemplate | null>(null)
   const { addNote, setCurrentNote, userId, isAuthenticated } = useNotesStore()
-  const { templates: userTemplates, loadTemplates, deleteTemplate, toggleFavorite } = useTemplatesStore()
+  const { templates: userTemplates, loadTemplates, deleteTemplate, toggleFavorite, updateTemplate } = useTemplatesStore()
 
   // Load user templates when authenticated
   useEffect(() => {
@@ -74,6 +77,27 @@ export function TemplateMenu() {
   const handleToggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     await toggleFavorite(id)
+  }
+
+  const handleEditTemplate = (e: React.MouseEvent, template: UserTemplate) => {
+    e.stopPropagation()
+    setIsOpen(false)
+    setEditingTemplate(template)
+  }
+
+  const handleUpdateTemplate = async (data: {
+    name: string
+    description: string
+    icon: string
+    category: string
+  }) => {
+    if (!editingTemplate) return
+    await updateTemplate(editingTemplate.id, {
+      name: data.name,
+      description: data.description || null,
+      icon: data.icon,
+      category: data.category || null,
+    })
   }
 
   return (
@@ -168,6 +192,13 @@ export function TemplateMenu() {
                           )}
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => handleEditTemplate(e, template)}
+                            className="p-1 rounded hover:bg-black/10 text-gray-400"
+                            title="Edit template"
+                          >
+                            <Pencil size={14} />
+                          </button>
                           <button
                             onClick={(e) => handleToggleFavorite(e, template.id)}
                             className="p-1 rounded hover:bg-black/10"
@@ -278,6 +309,14 @@ export function TemplateMenu() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Edit Template Modal */}
+      <SaveAsTemplateModal
+        isOpen={!!editingTemplate}
+        onClose={() => setEditingTemplate(null)}
+        onSave={handleUpdateTemplate}
+        template={editingTemplate || undefined}
+      />
     </div>
   )
 }

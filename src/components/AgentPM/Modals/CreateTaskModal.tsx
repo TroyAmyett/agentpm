@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Bot, User, Calendar, AlertTriangle, Sparkles } from 'lucide-react'
-import type { TaskPriority, AgentPersona, Skill } from '@/types/agentpm'
+import type { TaskPriority, TaskStatus, AgentPersona, Skill } from '@/types/agentpm'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -17,6 +17,7 @@ interface CreateTaskModalProps {
     assignedToType?: 'user' | 'agent'
     projectId?: string
     skillId?: string
+    status?: TaskStatus
   }) => Promise<void>
   agents: AgentPersona[]
   skills?: Skill[]
@@ -25,6 +26,8 @@ interface CreateTaskModalProps {
   defaultTitle?: string
   currentUserId?: string
   currentUserName?: string
+  /** Initial status for the task (defaults to 'draft' for Inbox) */
+  initialStatus?: TaskStatus
 }
 
 export function CreateTaskModal({
@@ -38,6 +41,7 @@ export function CreateTaskModal({
   defaultTitle = '',
   currentUserId,
   currentUserName,
+  initialStatus,
 }: CreateTaskModalProps) {
   const [title, setTitle] = useState(defaultTitle)
   const [description, setDescription] = useState('')
@@ -82,6 +86,7 @@ export function CreateTaskModal({
         assignedToType: assignedTo ? assignedToType : undefined,
         projectId,
         skillId: skillId || undefined,
+        status: initialStatus,
       })
       handleClose()
     } catch (err) {

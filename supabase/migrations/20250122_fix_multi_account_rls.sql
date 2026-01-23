@@ -40,6 +40,7 @@ CREATE POLICY "Users can update tasks in their account"
 -- ============================================================================
 
 DROP POLICY IF EXISTS "Users can view their account" ON accounts;
+DROP POLICY IF EXISTS "Users can view their accounts" ON accounts;
 
 CREATE POLICY "Users can view their accounts"
   ON accounts FOR SELECT

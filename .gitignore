@@ -16,6 +16,9 @@ build
 .env.test.local
 .env.production.local
 
+# MCP config (contains tokens)
+.mcp.json
+
 # Editor directories
 .vscode/*
 !.vscode/extensions.json

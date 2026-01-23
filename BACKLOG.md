@@ -94,6 +94,29 @@
 
 ---
 
+## AgentPM Features
+
+### Workflow Rules (Task Automation)
+- [ ] Create `workflow_rules` table with account-level configuration
+  - trigger_type: 'keyword' | 'manual_flag'
+  - trigger_keywords: string[] (e.g., ["CMS", "publish", "blog"])
+  - action: 'skip_review' | 'auto_complete' | etc.
+  - apply_to_children: boolean
+- [ ] Add UI in AgentPM Settings to manage workflow rules
+- [ ] Add "Skip Review" checkbox in Create Task modal (manual flag)
+- [ ] Hook into task status transitions to apply rules automatically
+- [ ] Child tasks inherit parent's workflow flags
+- **Use case**: CMS/publishing tasks skip review since review happens in external CMS
+
+### Kanban Improvements
+- [ ] Speed up drag-and-drop (currently slow)
+- [ ] Subtask visual improvements
+
+### Notes Integration
+- [ ] Add image support in notes
+
+---
+
 ## Technical Debt
 
 - [ ] Add unit tests
@@ -125,4 +148,4 @@
 
 ---
 
-*Last updated: December 31, 2024*
+*Last updated: January 23, 2026*

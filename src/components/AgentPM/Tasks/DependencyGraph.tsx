@@ -43,6 +43,7 @@ export function DependencyGraph({ tasks, onTaskClick }: DependencyGraphProps) {
   const [pan, setPan] = useState({ x: 50, y: 50 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [hasInitializedView, setHasInitializedView] = useState(false)
 
   // Fetch all dependencies
   useEffect(() => {
@@ -163,6 +164,28 @@ export function DependencyGraph({ tasks, onTaskClick }: DependencyGraphProps) {
     return { nodes: Array.from(nodeMap.values()), edges }
   }, [tasks, dependencies])
 
+  // Auto-center view when nodes first load
+  useEffect(() => {
+    if (nodes.length > 0 && !hasInitializedView && !isLoading) {
+      // Calculate bounds of all nodes
+      const minX = Math.min(...nodes.map((n) => n.x))
+      const minY = Math.min(...nodes.map((n) => n.y))
+      const maxX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH))
+      const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT))
+
+      // Shift content so topmost node starts at Y=80 (below the info badge)
+      // and leftmost node starts at X=50 (with padding)
+      const paddingTop = 80
+      const paddingLeft = 50
+
+      setPan({
+        x: paddingLeft - minX,
+        y: paddingTop - minY
+      })
+      setHasInitializedView(true)
+    }
+  }, [nodes, hasInitializedView, isLoading])
+
   // Check if a node is blocked
   const isBlocked = (node: GraphNode) => {
     return node.dependencies.some((depId) => {
@@ -195,10 +218,18 @@ export function DependencyGraph({ tasks, onTaskClick }: DependencyGraphProps) {
   // Zoom handlers
   const handleZoomIn = () => setZoom((z) => Math.min(z + 0.2, 2))
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.2, 0.4))
-  const handleResetView = () => {
+  const handleResetView = useCallback(() => {
     setZoom(1)
-    setPan({ x: 50, y: 50 })
-  }
+    if (nodes.length > 0) {
+      const minY = Math.min(...nodes.map((n) => n.y))
+      const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT))
+      const centerY = (minY + maxY) / 2
+      const viewCenterY = 250
+      setPan({ x: 50, y: viewCenterY - centerY })
+    } else {
+      setPan({ x: 50, y: 50 })
+    }
+  }, [nodes])
 
   if (isLoading) {
     return (

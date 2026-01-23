@@ -37,11 +37,19 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Update active note title when panel opens or note changes
+  // Update active note title and clear chat when note changes
+  const prevNoteIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (chatPanelOpen) {
       const { currentNote } = getCurrentNoteContext()
       setActiveNoteTitle(currentNote?.title || null)
+
+      // Clear chat history when switching to a different note
+      if (prevNoteIdRef.current !== null && prevNoteIdRef.current !== currentNoteId) {
+        setMessages([])
+        setError(null)
+      }
+      prevNoteIdRef.current = currentNoteId
     }
   }, [chatPanelOpen, currentNoteId])
 
@@ -218,7 +226,7 @@ export function ChatPanel() {
               </div>
               <div>
                 <h2 className="font-semibold text-surface-900 dark:text-surface-100">
-                  {activeNoteTitle ? 'AI Assistant' : 'Chat with Notes'}
+                  {activeNoteTitle ? 'Note Assistant' : 'AI Chat'}
                 </h2>
                 {activeNoteTitle ? (
                   <div className="flex items-center gap-1 text-xs text-surface-500">
@@ -227,7 +235,7 @@ export function ChatPanel() {
                   </div>
                 ) : (
                   <p className="text-xs text-surface-500">
-                    Ask questions about your notes
+                    General assistant with web search
                   </p>
                 )}
               </div>
@@ -253,20 +261,41 @@ export function ChatPanel() {
                       Let's work on "{activeNoteTitle}"
                     </h3>
                     <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      I can brainstorm ideas, suggest features, and update your note directly. Just ask!
+                      I can brainstorm ideas, suggest features, search the web, and update your note directly. Just ask!
                     </p>
-                    <div className="flex items-center justify-center gap-1 mt-3 text-xs text-primary-600 dark:text-primary-400">
-                      <PenLine size={12} />
-                      <span>Can edit this note</span>
+                    <div className="flex items-center justify-center gap-2 mt-3 text-xs">
+                      <span className="flex items-center gap-1 text-primary-600 dark:text-primary-400">
+                        <PenLine size={12} />
+                        <span>Can edit</span>
+                      </span>
+                      <span className="text-surface-400">•</span>
+                      <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                        <Globe size={12} />
+                        <span>Web search</span>
+                      </span>
                     </div>
                   </>
                 ) : (
                   <>
                     <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
-                      Start a conversation
+                      General Assistant
                     </h3>
                     <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      Ask questions about your notes. I can also create new notes for you.
+                      Ask me anything! I can search the web and create new notes for you.
+                    </p>
+                    <div className="flex items-center justify-center gap-2 mt-3 text-xs">
+                      <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                        <Globe size={12} />
+                        <span>Web search</span>
+                      </span>
+                      <span className="text-surface-400">•</span>
+                      <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                        <FileText size={12} />
+                        <span>Create notes</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-surface-400 mt-2">
+                      Open a note to get note-specific help
                     </p>
                   </>
                 )}

@@ -2,6 +2,7 @@
 // Supports multi-select: Ctrl/Cmd+click to select multiple, then drag all at once
 
 import { useState, useMemo, useCallback } from 'react'
+import { Link2 } from 'lucide-react'
 import type { Task, TaskStatus } from '@/types/agentpm'
 
 // Status to column mapping
@@ -97,6 +98,15 @@ export function KanbanView({
     })
 
     return grouped
+  }, [tasks])
+
+  // Map of task IDs to titles for parent lookup
+  const taskTitleMap = useMemo(() => {
+    const map = new Map<string, string>()
+    tasks.forEach((task) => {
+      map.set(task.id, task.title)
+    })
+    return map
   }, [tasks])
 
   // Track mousedown position to detect clicks vs drags
@@ -411,6 +421,19 @@ export function KanbanView({
                       {isSelected && (
                         <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                           ✓
+                        </div>
+                      )}
+
+                      {/* Subtask indicator */}
+                      {task.parentTaskId && (
+                        <div
+                          className="flex items-center gap-1 text-xs text-purple-400 mb-1"
+                          title={`Subtask of: ${taskTitleMap.get(task.parentTaskId) || 'Parent task'}`}
+                        >
+                          <Link2 size={12} />
+                          <span className="truncate max-w-[180px] opacity-75">
+                            {taskTitleMap.get(task.parentTaskId) || 'Parent task'}
+                          </span>
                         </div>
                       )}
 

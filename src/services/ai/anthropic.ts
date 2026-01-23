@@ -256,18 +256,18 @@ export async function performAIAction(
 // Status callback type for chat progress updates
 export type ChatStatusCallback = (status: 'thinking' | 'searching' | 'updating-note') => void
 
-// Chat with notes - prioritizes the active note for context and can edit notes
+// Chat with notes - focuses on the active note only to minimize token usage
 export async function chatWithNotes(
   userMessage: string,
   activeNote: { title: string; content: string; id: string } | null,
-  otherNotesContext: string,
+  _otherNotesContext: string, // Deprecated - kept for API compatibility but not used
   chatHistory: AnthropicMessage[],
   onStatusChange?: ChatStatusCallback
 ): Promise<{ response: string; noteUpdated?: boolean; noteCreated?: boolean; webSearchUsed?: boolean }> {
   let systemPrompt: string
 
   if (activeNote) {
-    // User has a note open - focus on helping with that note
+    // User has a note open - focus on helping with that note only
     systemPrompt = `You are an AI assistant helping the user work on their note titled "${activeNote.title}".
 
 YOUR PRIMARY FOCUS: The user is currently working on the note below. Help them brainstorm ideas, expand on concepts, suggest features, answer questions about this content, or help in any way they need.
@@ -275,8 +275,6 @@ YOUR PRIMARY FOCUS: The user is currently working on the note below. Help them b
 == CURRENT NOTE: "${activeNote.title}" ==
 ${activeNote.content}
 == END OF CURRENT NOTE ==
-
-${otherNotesContext ? `You also have access to their other notes for additional context if needed:\n${otherNotesContext}` : ''}
 
 CAPABILITIES:
 - You CAN search the web using the web_search tool to find current information, tools, services, products, or anything requiring up-to-date knowledge
@@ -294,10 +292,9 @@ WHEN TO SEARCH:
 
 Be helpful, creative, and proactive. If they ask a general question, relate it back to what they're working on when relevant. Suggest ideas, point out potential improvements, and help them develop their thoughts.`
   } else {
-    // No active note - general notes assistant
-    systemPrompt = `You are an AI assistant that helps users understand and work with their notes.
-You have access to the user's notes for context. Answer questions based on the notes when relevant.
-Be helpful, concise, and accurate. If you don't know something or it's not in the notes, say so.
+    // No active note - general assistant mode
+    systemPrompt = `You are an AI assistant. The user doesn't have a note open right now.
+Be helpful, concise, and accurate.
 
 CAPABILITIES:
 - You CAN search the web using the web_search tool to find current information
@@ -309,8 +306,7 @@ WHEN TO SEARCH:
 - When asked to find or research something on the internet
 - When you don't have enough knowledge to answer accurately
 
-Here are the user's notes for context:
-${otherNotesContext}`
+To help with a specific note, ask the user to open it first.`
   }
 
   if (!ANTHROPIC_API_KEY) {

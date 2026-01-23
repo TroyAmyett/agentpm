@@ -1,6 +1,6 @@
 // AgentPM Page - Main page combining all AgentPM features
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useTransition } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -58,6 +58,7 @@ export function AgentPMPage() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false)
+  const [createTaskInitialStatus, setCreateTaskInitialStatus] = useState<Task['status'] | undefined>(undefined)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [assignAgentTask, setAssignAgentTask] = useState<Task | null>(null)
   const [preselectedAgentId, setPreselectedAgentId] = useState<string | undefined>(undefined)
@@ -65,6 +66,7 @@ export function AgentPMPage() {
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
   const [isForgeTaskOpen, setIsForgeTaskOpen] = useState(false)
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all')
+  const [isPending, startTransition] = useTransition()
 
   const { user } = useAuthStore()
   const { accounts, currentAccountId, currentAccount, fetchAccounts, initializeUserAccounts } = useAccountStore()
@@ -291,13 +293,14 @@ export function AgentPMPage() {
       projectId?: string
       skillId?: string
       input?: ForgeTaskInput
+      status?: Task['status']
     }) => {
-      // New tasks start in draft (Inbox) - no auto-routing on create
+      // Use provided status or default to draft (Inbox)
       // Auto-routing happens when moved to 'pending' (Ready column)
       await createTask({
         ...taskData,
         accountId,
-        status: 'draft', // Safe zone - no automation until moved to Ready
+        status: taskData.status || 'draft', // Default to Inbox if no status provided
         createdBy: userId,
         createdByType: 'user',
         updatedBy: userId,
@@ -353,11 +356,16 @@ export function AgentPMPage() {
 
         // Check if this is a multi-step task that needs decomposition
         // Only decompose root tasks (no parentTaskId) to avoid recursive decomposition
-        if (!task.parentTaskId) {
+        // Also check if subtasks already exist (prevents duplicate decomposition on re-renders)
+        const existingSubtasks = tasks.filter(t => t.parentTaskId === task.id)
+        if (!task.parentTaskId && existingSubtasks.length === 0) {
           const decomposition = await analyzeTaskForDecomposition(task, agents)
           console.log(`[Dispatch] Decomposition result:`, decomposition)
 
           if (decomposition.isMultiStep && decomposition.steps.length > 1) {
+            // Mark parent as in_progress IMMEDIATELY to prevent race conditions
+            // (otherwise a re-render could trigger decomposition again while creating subtasks)
+            await updateTaskStatus(taskId, 'in_progress', userId, 'Decomposing into sub-tasks...')
             console.log(`Dispatch decomposing task into ${decomposition.steps.length} steps: ${decomposition.reasoning}`)
 
             // Create sub-tasks for each step
@@ -415,13 +423,9 @@ export function AgentPMPage() {
               }
             }
 
-            // Mark parent task as in_progress (it's now being orchestrated)
-            await updateTaskStatus(
-              taskId,
-              'in_progress',
-              userId,
-              `Decomposed into ${createdSubTaskIds.length} sub-tasks by Dispatch`
-            )
+            // Update the status note to show decomposition is complete
+            // (task was already marked in_progress above to prevent race conditions)
+            console.log(`[Dispatch] Decomposed "${task.title}" into ${createdSubTaskIds.length} sub-tasks`)
 
             return
           }
@@ -458,7 +462,7 @@ export function AgentPMPage() {
         }
       }
     },
-    [userId, updateTaskStatus, isTaskExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask]
+    [userId, updateTaskStatus, isTaskExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask, tasks]
   )
 
   // Handle agent assignment - auto-execute immediately
@@ -627,7 +631,7 @@ export function AgentPMPage() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => startTransition(() => setActiveTab(tab.id))}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-600 dark:text-primary-400'
@@ -694,7 +698,8 @@ export function AgentPMPage() {
                   tasks={tasks}
                   agents={agentNameMap}
                   onTaskClick={setSelectedTaskId}
-                  onAddTask={() => {
+                  onAddTask={(columnStatus) => {
+                    setCreateTaskInitialStatus(columnStatus as Task['status'])
                     setIsCreateTaskOpen(true)
                   }}
                   onStatusChange={(taskId, status) => handleUpdateStatus(taskId, status)}
@@ -957,6 +962,7 @@ export function AgentPMPage() {
           setIsCreateTaskOpen(false)
           setPreselectedAgentId(undefined)
           setVoiceTaskTitle('')
+          setCreateTaskInitialStatus(undefined)
         }}
         onSubmit={handleCreateTask}
         agents={agents}
@@ -965,6 +971,7 @@ export function AgentPMPage() {
         defaultTitle={voiceTaskTitle}
         currentUserId={userId}
         currentUserName={user?.email?.split('@')[0] || 'Me'}
+        initialStatus={createTaskInitialStatus}
       />
 
       {editingTask && (

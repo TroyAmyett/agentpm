@@ -1,6 +1,7 @@
 -- Project Spaces Migration
 -- Extends projects with repository config, knowledge, dependencies
 -- Date: 2025-01-22
+-- NOTE: This migration is idempotent - safe to run multiple times
 
 -- =============================================================================
 -- EXTEND PROJECTS TABLE (Project Spaces)
@@ -12,7 +13,16 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS repository_path TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS base_branch TEXT DEFAULT 'main';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS test_command TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS build_command TEXT;
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS default_priority TEXT DEFAULT 'medium' CHECK (default_priority IN ('critical', 'high', 'medium', 'low'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS default_priority TEXT DEFAULT 'medium';
+
+-- Add check constraint if not exists (drop first to be safe)
+DO $$
+BEGIN
+  ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_default_priority_check;
+  ALTER TABLE projects ADD CONSTRAINT projects_default_priority_check
+    CHECK (default_priority IN ('critical', 'high', 'medium', 'low'));
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- =============================================================================
 -- PROJECT LINKED ITEMS (Many-to-Many: Projects <-> Folders/Notes)
@@ -36,20 +46,23 @@ CREATE TABLE IF NOT EXISTS project_linked_items (
   UNIQUE(project_id, item_type, item_id)
 );
 
-CREATE INDEX idx_project_linked_items_project_id ON project_linked_items(project_id);
-CREATE INDEX idx_project_linked_items_item ON project_linked_items(item_type, item_id);
+CREATE INDEX IF NOT EXISTS idx_project_linked_items_project_id ON project_linked_items(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_linked_items_item ON project_linked_items(item_type, item_id);
 
 -- RLS for project_linked_items
 ALTER TABLE project_linked_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view linked items in their account" ON project_linked_items;
 CREATE POLICY "Users can view linked items in their account"
   ON project_linked_items FOR SELECT
   USING (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can insert linked items in their account" ON project_linked_items;
 CREATE POLICY "Users can insert linked items in their account"
   ON project_linked_items FOR INSERT
   WITH CHECK (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can delete linked items in their account" ON project_linked_items;
 CREATE POLICY "Users can delete linked items in their account"
   ON project_linked_items FOR DELETE
   USING (account_id = get_user_account_id());
@@ -91,10 +104,10 @@ CREATE TABLE IF NOT EXISTS milestones (
   deleted_by_type TEXT CHECK (deleted_by_type IN ('user', 'agent'))
 );
 
-CREATE INDEX idx_milestones_project_id ON milestones(project_id);
-CREATE INDEX idx_milestones_status ON milestones(status);
-CREATE INDEX idx_milestones_due_date ON milestones(due_date);
-CREATE INDEX idx_milestones_deleted_at ON milestones(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_milestones_project_id ON milestones(project_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_status ON milestones(status);
+CREATE INDEX IF NOT EXISTS idx_milestones_due_date ON milestones(due_date);
+CREATE INDEX IF NOT EXISTS idx_milestones_deleted_at ON milestones(deleted_at);
 
 -- Add milestone_id to tasks
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS milestone_id UUID REFERENCES milestones(id);
@@ -103,19 +116,23 @@ CREATE INDEX IF NOT EXISTS idx_tasks_milestone_id ON tasks(milestone_id);
 -- RLS for milestones
 ALTER TABLE milestones ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view milestones in their account" ON milestones;
 CREATE POLICY "Users can view milestones in their account"
   ON milestones FOR SELECT
   USING (account_id = get_user_account_id() AND deleted_at IS NULL);
 
+DROP POLICY IF EXISTS "Users can insert milestones in their account" ON milestones;
 CREATE POLICY "Users can insert milestones in their account"
   ON milestones FOR INSERT
   WITH CHECK (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can update milestones in their account" ON milestones;
 CREATE POLICY "Users can update milestones in their account"
   ON milestones FOR UPDATE
   USING (account_id = get_user_account_id() AND deleted_at IS NULL);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_milestones_updated_at ON milestones;
 CREATE TRIGGER update_milestones_updated_at
   BEFORE UPDATE ON milestones FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -155,20 +172,23 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
   CHECK (task_id != depends_on_task_id)
 );
 
-CREATE INDEX idx_task_dependencies_task_id ON task_dependencies(task_id);
-CREATE INDEX idx_task_dependencies_depends_on ON task_dependencies(depends_on_task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_task_id ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_task_id);
 
 -- RLS for task_dependencies
 ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view dependencies in their account" ON task_dependencies;
 CREATE POLICY "Users can view dependencies in their account"
   ON task_dependencies FOR SELECT
   USING (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can insert dependencies in their account" ON task_dependencies;
 CREATE POLICY "Users can insert dependencies in their account"
   ON task_dependencies FOR INSERT
   WITH CHECK (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can delete dependencies in their account" ON task_dependencies;
 CREATE POLICY "Users can delete dependencies in their account"
   ON task_dependencies FOR DELETE
   USING (account_id = get_user_account_id());
@@ -219,31 +239,35 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   deleted_by_type TEXT CHECK (deleted_by_type IN ('user', 'agent'))
 );
 
-CREATE INDEX idx_knowledge_entries_project_id ON knowledge_entries(project_id);
-CREATE INDEX idx_knowledge_entries_type ON knowledge_entries(knowledge_type);
-CREATE INDEX idx_knowledge_entries_source_note ON knowledge_entries(source_note_id);
-CREATE INDEX idx_knowledge_entries_tags ON knowledge_entries USING GIN(tags);
-CREATE INDEX idx_knowledge_entries_deleted_at ON knowledge_entries(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_project_id ON knowledge_entries(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_type ON knowledge_entries(knowledge_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_source_note ON knowledge_entries(source_note_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_tags ON knowledge_entries USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_deleted_at ON knowledge_entries(deleted_at);
 
 -- Full-text search on content
-CREATE INDEX idx_knowledge_entries_content_search ON knowledge_entries USING GIN(to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_content_search ON knowledge_entries USING GIN(to_tsvector('english', content));
 
 -- RLS for knowledge_entries
 ALTER TABLE knowledge_entries ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view knowledge in their account" ON knowledge_entries;
 CREATE POLICY "Users can view knowledge in their account"
   ON knowledge_entries FOR SELECT
   USING (account_id = get_user_account_id() AND deleted_at IS NULL);
 
+DROP POLICY IF EXISTS "Users can insert knowledge in their account" ON knowledge_entries;
 CREATE POLICY "Users can insert knowledge in their account"
   ON knowledge_entries FOR INSERT
   WITH CHECK (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can update knowledge in their account" ON knowledge_entries;
 CREATE POLICY "Users can update knowledge in their account"
   ON knowledge_entries FOR UPDATE
   USING (account_id = get_user_account_id() AND deleted_at IS NULL);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_knowledge_entries_updated_at ON knowledge_entries;
 CREATE TRIGGER update_knowledge_entries_updated_at
   BEFORE UPDATE ON knowledge_entries FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -295,22 +319,25 @@ CREATE TABLE IF NOT EXISTS time_entries (
   CHECK (user_id IS NOT NULL OR agent_id IS NOT NULL)
 );
 
-CREATE INDEX idx_time_entries_task_id ON time_entries(task_id);
-CREATE INDEX idx_time_entries_user_id ON time_entries(user_id);
-CREATE INDEX idx_time_entries_agent_id ON time_entries(agent_id);
-CREATE INDEX idx_time_entries_entry_date ON time_entries(entry_date);
+CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_agent_id ON time_entries(agent_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_entry_date ON time_entries(entry_date);
 
 -- RLS for time_entries
 ALTER TABLE time_entries ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view time entries in their account" ON time_entries;
 CREATE POLICY "Users can view time entries in their account"
   ON time_entries FOR SELECT
   USING (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can insert time entries in their account" ON time_entries;
 CREATE POLICY "Users can insert time entries in their account"
   ON time_entries FOR INSERT
   WITH CHECK (account_id = get_user_account_id());
 
+DROP POLICY IF EXISTS "Users can delete their own time entries" ON time_entries;
 CREATE POLICY "Users can delete their own time entries"
   ON time_entries FOR DELETE
   USING (account_id = get_user_account_id() AND user_id = auth.uid());
@@ -335,6 +362,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_task_actual_hours_on_entry ON time_entries;
 CREATE TRIGGER update_task_actual_hours_on_entry
   AFTER INSERT OR UPDATE OR DELETE ON time_entries
   FOR EACH ROW EXECUTE FUNCTION update_task_actual_hours();
@@ -373,6 +401,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS check_circular_dependency_on_insert ON task_dependencies;
 CREATE TRIGGER check_circular_dependency_on_insert
   BEFORE INSERT ON task_dependencies
   FOR EACH ROW EXECUTE FUNCTION check_circular_dependency();
@@ -488,22 +517,27 @@ $$ LANGUAGE plpgsql;
 -- SERVICE ROLE POLICIES
 -- =============================================================================
 
+DROP POLICY IF EXISTS "Service role full access to milestones" ON milestones;
 CREATE POLICY "Service role full access to milestones"
   ON milestones FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access to task_dependencies" ON task_dependencies;
 CREATE POLICY "Service role full access to task_dependencies"
   ON task_dependencies FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access to knowledge_entries" ON knowledge_entries;
 CREATE POLICY "Service role full access to knowledge_entries"
   ON knowledge_entries FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access to time_entries" ON time_entries;
 CREATE POLICY "Service role full access to time_entries"
   ON time_entries FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access to project_linked_items" ON project_linked_items;
 CREATE POLICY "Service role full access to project_linked_items"
   ON project_linked_items FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');

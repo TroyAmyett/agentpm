@@ -7,6 +7,8 @@ import { NotesList } from '@/components/Sidebar/NotesList'
 import { BlockEditor } from '@/components/Editor/BlockEditor'
 import { ExportMenu } from '@/components/Editor/ExportMenu'
 import { TemplateMenu } from '@/components/Editor/TemplateMenu'
+import { SaveAsTemplateModal } from '@/components/Editor/SaveAsTemplateModal'
+import { useTemplatesStore } from '@/stores/templatesStore'
 import { AIToolbar } from '@/components/AI/AIToolbar'
 import { ChatPanel } from '@/components/AI/ChatPanel'
 import { ResizeHandle } from '@/components/ResizeHandle'
@@ -31,6 +33,7 @@ import {
   Users,
   Settings,
   Radio,
+  Layout,
 } from 'lucide-react'
 
 // Helper to get app URLs based on environment
@@ -61,6 +64,33 @@ function getAppUrl(app: string): string {
 }
 
 type AppView = 'notes' | 'agentpm' | 'radar' | 'canvas' | 'leadgen' | 'settings'
+
+// URL hash to view mapping
+const HASH_TO_VIEW: Record<string, AppView> = {
+  '#notes': 'notes',
+  '#notetaker': 'notes',
+  '#agentpm': 'agentpm',
+  '#tasks': 'agentpm',
+  '#radar': 'radar',
+  '#canvas': 'canvas',
+  '#leadgen': 'leadgen',
+  '#settings': 'settings',
+}
+
+const VIEW_TO_HASH: Record<AppView, string> = {
+  notes: '#notetaker',
+  agentpm: '#agentpm',
+  radar: '#radar',
+  canvas: '#canvas',
+  leadgen: '#leadgen',
+  settings: '#settings',
+}
+
+// Get initial view from URL hash
+function getViewFromHash(): AppView {
+  const hash = window.location.hash.toLowerCase()
+  return HASH_TO_VIEW[hash] || 'agentpm'
+}
 
 interface Tool {
   id: string
@@ -223,7 +253,8 @@ function App() {
   const { initialized, isAuthenticated } = useAuth()
   useSyncQueue()
 
-  const [currentView, setCurrentView] = useState<AppView>('agentpm')
+  const [currentView, setCurrentView] = useState<AppView>(getViewFromHash)
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
 
   const {
     sidebarOpen,
@@ -235,7 +266,9 @@ function App() {
     sidebarWidth,
     setSidebarWidth,
   } = useUIStore()
-  const { notes, addNote } = useNotesStore()
+  const { notes, addNote, currentNoteId } = useNotesStore()
+  const { createTemplate } = useTemplatesStore()
+  const currentNote = notes.find(n => n.id === currentNoteId)
 
   const handleSidebarResize = useCallback((delta: number) => {
     setSidebarWidth(sidebarWidth + delta)
@@ -251,6 +284,30 @@ function App() {
       document.documentElement.classList.add('light')
     }
   }, [darkMode])
+
+  // Sync URL hash with current view
+  useEffect(() => {
+    const newHash = VIEW_TO_HASH[currentView]
+    if (window.location.hash !== newHash) {
+      window.history.pushState(null, '', newHash)
+    }
+  }, [currentView])
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const view = getViewFromHash()
+      setCurrentView(view)
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    window.addEventListener('popstate', handleHashChange)
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+      window.removeEventListener('popstate', handleHashChange)
+    }
+  }, [])
 
   // Create initial note if none exist and not authenticated
   useEffect(() => {
@@ -385,6 +442,26 @@ function App() {
     window.dispatchEvent(new CustomEvent('createTaskFromRadar', { detail: { title, description } }))
   }
 
+  // Handler for saving current note as a template
+  const handleSaveAsTemplate = async (data: {
+    name: string
+    description: string
+    icon: string
+    category: string
+  }) => {
+    if (!currentNote?.content) {
+      throw new Error('Note has no content')
+    }
+
+    await createTemplate({
+      name: data.name,
+      description: data.description || undefined,
+      icon: data.icon,
+      category: data.category || undefined,
+      content: currentNote.content,
+    })
+  }
+
   // Handler for saving content to notes from Radar
   const handleRadarSaveToNotes = (title: string, content: string) => {
     // Create a new note with the content
@@ -449,6 +526,16 @@ function App() {
               )}
               <TemplateMenu />
               <ExportMenu />
+              {currentNote?.content && (
+                <button
+                  onClick={() => setShowSaveTemplateModal(true)}
+                  title="Save as template"
+                  className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+                  style={{ color: 'var(--fl-color-text-secondary)' }}
+                >
+                  <Layout size={18} />
+                </button>
+              )}
               <button
                 onClick={toggleChatPanel}
                 title="Chat with notes"
@@ -529,6 +616,14 @@ function App() {
       {currentView === 'notes' && (
         <AIToolbar onInsert={handleAIInsert} onReplace={handleAIReplace} />
       )}
+
+      {/* Save as Template Modal */}
+      <SaveAsTemplateModal
+        isOpen={showSaveTemplateModal}
+        onClose={() => setShowSaveTemplateModal(false)}
+        onSave={handleSaveAsTemplate}
+        defaultName={currentNote?.title !== 'Untitled' ? `${currentNote?.title} Template` : ''}
+      />
     </div>
   )
 }

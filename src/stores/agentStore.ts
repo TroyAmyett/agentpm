@@ -2,19 +2,17 @@
 
 import { create } from 'zustand'
 import type { AgentPersona, UpdateEntity } from '@/types/agentpm'
-import { DEFAULT_AGENT_PERSONAS } from '@/types/agentpm'
+import { DEFAULT_AGENT_PERSONAS, DEMO_ORCHESTRATOR_ID } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
 
 // Fixed UUIDs for demo agents (deterministic so they persist across reloads)
+// Index 0 = orchestrator (Atlas), must match DEMO_ORCHESTRATOR_ID
 const DEMO_AGENT_UUIDS = [
-  '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000004',
-  '00000000-0000-0000-0000-000000000005',
-  '00000000-0000-0000-0000-000000000006',
-  '00000000-0000-0000-0000-000000000007',
-  '00000000-0000-0000-0000-000000000008',
+  DEMO_ORCHESTRATOR_ID, // Atlas (orchestrator)
+  '00000000-0000-0000-0000-000000000001', // Maverick
+  '00000000-0000-0000-0000-000000000002', // Pixel
+  '00000000-0000-0000-0000-000000000003', // Scout
+  '00000000-0000-0000-0000-000000000004', // Forge
 ]
 
 // Generate demo agents with full data for development
@@ -48,6 +46,7 @@ function createDemoAgents(accountId: string): AgentPersona[] {
     showOnDashboard: partial.showOnDashboard ?? true,
     showInOrgChart: partial.showInOrgChart ?? true,
     sortOrder: partial.sortOrder || index + 1,
+    reportsTo: partial.reportsTo,
     stats: {
       tasksCompleted: Math.floor(Math.random() * 50) + 5,
       tasksFailed: Math.floor(Math.random() * 5),

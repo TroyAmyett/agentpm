@@ -676,20 +676,16 @@ export function getCurrentNoteContext(): { currentNote: { id: string; title: str
   const currentNote = notes.find((n) => n.id === currentNoteId)
 
   if (!currentNote) {
-    return { currentNote: null, otherNotes: getAllNotesText() }
+    // No current note - return empty context
+    return { currentNote: null, otherNotes: '' }
   }
 
   const currentContent = extractTextFromContent(currentNote.content)
-  const otherNotes = notes
-    .filter((n) => n.id !== currentNoteId)
-    .map((note) => {
-      const content = extractTextFromContent(note.content)
-      return `## ${note.title}\n${content}`
-    })
-    .join('\n\n---\n\n')
 
+  // Note: otherNotes is kept for API compatibility but is now empty
+  // The chat now focuses only on the current note to reduce token usage
   return {
     currentNote: { id: currentNote.id, title: currentNote.title, content: currentContent },
-    otherNotes,
+    otherNotes: '',
   }
 }

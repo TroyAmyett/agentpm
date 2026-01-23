@@ -697,7 +697,32 @@ export interface AccountWithConfig extends Account {
 // DEFAULT AGENT PERSONAS
 // =============================================================================
 
+// Fixed demo agent UUIDs for hierarchy references
+export const DEMO_ORCHESTRATOR_ID = '00000000-0000-0000-0000-000000000005'
+
 export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
+  // Orchestrator first (index 0) - reports to user
+  {
+    agentType: 'orchestrator',
+    alias: 'Atlas',
+    tagline: 'Mission control',
+    capabilities: ['route-tasks', 'coordinate-agents', 'monitor'],
+    restrictions: ['write-content', 'publish'],
+    triggers: ['task-queue', 'schedule:hourly'],
+    autonomyLevel: 'semi-autonomous',
+    requiresApproval: ['spawn-agent'],
+    canSpawnAgents: true,
+    canModifySelf: false,
+    consecutiveFailures: 0,
+    maxConsecutiveFailures: 5,
+    healthStatus: 'healthy',
+    isActive: true,
+    showOnDashboard: true,
+    showInOrgChart: true,
+    sortOrder: 1,
+    reportsTo: { type: 'user' },
+  },
+  // Workers report to orchestrator
   {
     agentType: 'content-writer',
     alias: 'Maverick',
@@ -715,7 +740,8 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     isActive: true,
     showOnDashboard: true,
     showInOrgChart: true,
-    sortOrder: 1,
+    sortOrder: 2,
+    reportsTo: { type: 'agent', id: DEMO_ORCHESTRATOR_ID, name: 'Atlas' },
   },
   {
     agentType: 'image-generator',
@@ -734,7 +760,8 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     isActive: true,
     showOnDashboard: true,
     showInOrgChart: true,
-    sortOrder: 2,
+    sortOrder: 3,
+    reportsTo: { type: 'agent', id: DEMO_ORCHESTRATOR_ID, name: 'Atlas' },
   },
   {
     agentType: 'researcher',
@@ -753,45 +780,8 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     isActive: true,
     showOnDashboard: true,
     showInOrgChart: true,
-    sortOrder: 3,
-  },
-  {
-    agentType: 'qa-tester',
-    alias: 'Sentinel',
-    tagline: 'Quality guardian',
-    capabilities: ['test', 'validate', 'report-issues'],
-    restrictions: ['write-content', 'publish'],
-    triggers: ['manual', 'task-queue', 'schedule:daily'],
-    autonomyLevel: 'autonomous',
-    requiresApproval: [],
-    canSpawnAgents: false,
-    canModifySelf: false,
-    consecutiveFailures: 0,
-    maxConsecutiveFailures: 5,
-    healthStatus: 'healthy',
-    isActive: true,
-    showOnDashboard: true,
-    showInOrgChart: true,
     sortOrder: 4,
-  },
-  {
-    agentType: 'orchestrator',
-    alias: 'Dispatch',
-    tagline: 'Mission control',
-    capabilities: ['route-tasks', 'coordinate-agents', 'monitor'],
-    restrictions: ['write-content', 'publish'],
-    triggers: ['task-queue', 'schedule:hourly'],
-    autonomyLevel: 'semi-autonomous',
-    requiresApproval: ['spawn-agent'],
-    canSpawnAgents: false,
-    canModifySelf: false,
-    consecutiveFailures: 0,
-    maxConsecutiveFailures: 5,
-    healthStatus: 'healthy',
-    isActive: true,
-    showOnDashboard: true,
-    showInOrgChart: true,
-    sortOrder: 5,
+    reportsTo: { type: 'agent', id: DEMO_ORCHESTRATOR_ID, name: 'Atlas' },
   },
   {
     agentType: 'forge',
@@ -828,7 +818,8 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     isActive: true,
     showOnDashboard: true,
     showInOrgChart: true,
-    sortOrder: 6,
+    sortOrder: 5,
+    reportsTo: { type: 'agent', id: DEMO_ORCHESTRATOR_ID, name: 'Atlas' },
   },
 ]
 
