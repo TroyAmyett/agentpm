@@ -598,35 +598,26 @@ export function AgentPMPage() {
     <div className="flex flex-col h-full bg-surface-50 dark:bg-surface-900">
       {/* Tab Bar */}
       <div className="flex-shrink-0 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
-        <div className="flex items-center justify-between px-3">
-          <div className="flex items-center">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => startTransition(() => setActiveTab(tab.id))}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                    : 'border-transparent text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-                {tab.id === 'reviews' && pendingReviews.length > 0 && (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
-                    {pendingReviews.length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setIsCreateTaskOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <Plus size={16} />
-            New Task
-          </button>
+        <div className="flex items-center px-3">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => startTransition(() => setActiveTab(tab.id))}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.id === 'reviews' && pendingReviews.length > 0 && (
+                <span className="px-1.5 py-0.5 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                  {pendingReviews.length}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
