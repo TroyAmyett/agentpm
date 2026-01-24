@@ -32,6 +32,7 @@ import {
   Users,
   Settings,
   Layout,
+  Radio,
 } from 'lucide-react'
 
 // Helper to get app URLs based on environment
@@ -41,13 +42,15 @@ function getAppUrl(app: string): string {
   const devPorts: Record<string, number> = {
     agentpm: 3000,
     notetaker: 3000, // same as agentpm - it's the same app
-    canvas: 3003,
-    leadgen: 3004,
+    radar: 3001,
+    canvas: 3002,
+    leadgen: 3003,
   }
 
   const prodDomains: Record<string, string> = {
     agentpm: 'agentpm.funnelists.com',
     notetaker: 'notetaker.funnelists.com',
+    radar: 'radar.funnelists.com',
     canvas: 'canvas.funnelists.com',
     leadgen: 'leadgen.funnelists.com',
   }
@@ -59,7 +62,7 @@ function getAppUrl(app: string): string {
   return `https://${prodDomains[app] || 'funnelists.com'}`
 }
 
-type AppView = 'notes' | 'agentpm' | 'canvas' | 'leadgen' | 'settings'
+type AppView = 'notes' | 'agentpm' | 'settings'
 
 // URL hash to view mapping
 const HASH_TO_VIEW: Record<string, AppView> = {
@@ -67,16 +70,12 @@ const HASH_TO_VIEW: Record<string, AppView> = {
   '#notetaker': 'notes',
   '#agentpm': 'agentpm',
   '#tasks': 'agentpm',
-  '#canvas': 'canvas',
-  '#leadgen': 'leadgen',
   '#settings': 'settings',
 }
 
 const VIEW_TO_HASH: Record<AppView, string> = {
   notes: '#notetaker',
   agentpm: '#agentpm',
-  canvas: '#canvas',
-  leadgen: '#leadgen',
   settings: '#settings',
 }
 
@@ -98,8 +97,9 @@ interface Tool {
 const tools: Tool[] = [
   { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'AI project management' },
   { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'Brainstorming & ideation' },
+  { id: 'radar', name: 'Radar', icon: <Radio size={18} />, description: 'Content monitoring & insights', href: getAppUrl('radar') },
   { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, description: 'AI design & visuals', href: getAppUrl('canvas'), comingSoon: true },
-  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', href: getAppUrl('leadgen') },
+  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', href: getAppUrl('leadgen'), comingSoon: true },
 ]
 
 // Inline ToolSwitcher component
@@ -182,62 +182,6 @@ function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; acti
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-// Coming Soon Placeholder Component
-function ComingSoonPlaceholder({
-  name,
-  description,
-  onBack,
-}: {
-  name: string
-  description: string
-  onBack: () => void
-}) {
-  return (
-    <div
-      className="flex-1 flex flex-col items-center justify-center p-8"
-      style={{ background: 'var(--fl-color-bg-base)' }}
-    >
-      <div
-        className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6"
-        style={{
-          background: 'rgba(14, 165, 233, 0.15)',
-          border: '1px solid rgba(14, 165, 233, 0.3)',
-        }}
-      >
-        {name === 'Canvas' ? <Palette size={40} color="#0ea5e9" /> : <Users size={40} color="#0ea5e9" />}
-      </div>
-      <h2
-        className="text-2xl font-medium mb-2"
-        style={{ color: 'var(--fl-color-text-primary)' }}
-      >
-        {name}
-      </h2>
-      <p
-        className="text-center max-w-md mb-6"
-        style={{ color: 'var(--fl-color-text-muted)' }}
-      >
-        {description}
-      </p>
-      <span
-        className="px-4 py-2 rounded-full text-sm font-medium mb-6"
-        style={{
-          background: 'rgba(14, 165, 233, 0.15)',
-          color: '#0ea5e9',
-        }}
-      >
-        Coming Soon
-      </span>
-      <button
-        onClick={onBack}
-        className="px-4 py-2 rounded-lg text-sm transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-        style={{ color: 'var(--fl-color-text-secondary)' }}
-      >
-        ← Back to AgentPM
-      </button>
     </div>
   )
 }
@@ -416,8 +360,6 @@ function App() {
     const viewMap: Record<string, AppView> = {
       'notetaker': 'notes',
       'agentpm': 'agentpm',
-      'canvas': 'canvas',
-      'leadgen': 'leadgen',
       'settings': 'settings',
     }
     setCurrentView(viewMap[toolId] || 'notes')
@@ -550,17 +492,6 @@ function App() {
           {currentView === 'agentpm' && <AgentPMPage />}
           {currentView === 'settings' && (
             <SettingsPage onBack={() => setCurrentView('notes')} />
-          )}
-          {(currentView === 'canvas' || currentView === 'leadgen') && (
-            <ComingSoonPlaceholder
-              name={currentView === 'canvas' ? 'Canvas' : 'LeadGen'}
-              description={
-                currentView === 'canvas'
-                  ? 'AI-powered design and visual creation tools'
-                  : 'AI lead generation and outreach automation'
-              }
-              onBack={() => setCurrentView('notes')}
-            />
           )}
         </main>
 
