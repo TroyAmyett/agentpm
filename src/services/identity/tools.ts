@@ -110,14 +110,43 @@ async function hashString(str: string): Promise<string> {
  * Fetch all registered tools
  */
 export async function fetchTools(): Promise<ToolRegistration[]> {
-  if (!supabase) throw new Error('Supabase not configured')
+  if (!supabase) return [] // Fail gracefully if not configured
 
   const { data, error } = await supabase
     .from('tool_registrations')
     .select('*')
     .order('name')
 
-  if (error) throw error
+  if (error) {
+    // Handle auth errors gracefully
+    const authErrors = ['JWT expired', 'invalid claim', 'session', 'token', 'unauthorized']
+    const isAuthError = authErrors.some(e =>
+      error.message?.toLowerCase().includes(e.toLowerCase())
+    )
+
+    if (isAuthError) {
+      // Try to refresh session
+      const { error: refreshError } = await supabase.auth.refreshSession()
+      if (refreshError) {
+        console.warn('Session expired, please refresh the page or sign in again')
+        return []
+      }
+      // Retry after refresh
+      const { data: retryData, error: retryError } = await supabase
+        .from('tool_registrations')
+        .select('*')
+        .order('name')
+
+      if (retryError) return []
+
+      return (retryData || []).map((row) => {
+        const tool = toCamelCaseKeys<ToolRegistration>(row)
+        return tool
+      })
+    }
+
+    throw error
+  }
 
   return (data || []).map((row) => {
     const tool = toCamelCaseKeys<ToolRegistration>(row)

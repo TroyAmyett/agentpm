@@ -21,18 +21,18 @@
   --fl-z-tooltip: 300;
 }
 
-/* Dark mode theme */
+/* Dark mode theme - All black */
 .dark {
-  --fl-color-bg-base: #0a0a0f;
-  --fl-color-bg-elevated: #111118;
-  --fl-color-bg-surface: #1a1a24;
-  --fl-color-bg-overlay: #1a1a24;
-  --fl-color-border: #2a2a3a;
-  --fl-color-border-hover: #3a3a4a;
+  --fl-color-bg-base: #000000;
+  --fl-color-bg-elevated: #0a0a0a;
+  --fl-color-bg-surface: #121212;
+  --fl-color-bg-overlay: #121212;
+  --fl-color-border: #1f1f1f;
+  --fl-color-border-hover: #2a2a2a;
   --fl-color-text-primary: #ffffff;
   --fl-color-text-secondary: #a1a1aa;
   --fl-color-text-muted: #71717a;
-  --fl-color-text-inverse: #0a0a0f;
+  --fl-color-text-inverse: #000000;
   --fl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --fl-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
   --fl-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
@@ -244,103 +244,4 @@ aside {
 /* Smooth transitions */
 * {
   @apply transition-colors duration-150;
-}
-
-/* Radar glassmorphism utilities */
-@layer components {
-  .radar-glass {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .radar-glass-card {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    transition: all 0.2s ease;
-  }
-
-  .radar-glass-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-  }
-
-  .radar-glass-button {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-weight: 500;
-    transition: all 0.2s ease;
-  }
-
-  .radar-glass-button:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-
-  .radar-glass-input {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 10px 14px;
-    color: inherit;
-    transition: all 0.2s ease;
-  }
-
-  .radar-glass-input:focus {
-    outline: none;
-    border-color: #0ea5e9;
-    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
-  }
-
-  .radar-glass-input::placeholder {
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  /* Style select dropdowns */
-  select.radar-glass-input {
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 40px;
-  }
-
-  select.radar-glass-input option {
-    background: #1a1a24;
-    color: #fff;
-    padding: 10px;
-  }
-}
-
-/* Radar masonry grid */
-.radar-masonry-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1rem;
-}
-
-@media (max-width: 768px) {
-  .radar-masonry-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Radar accent color */
-.radar-accent {
-  color: #0ea5e9;
-}
-
-.radar-accent-bg {
-  background-color: #0ea5e9;
 }

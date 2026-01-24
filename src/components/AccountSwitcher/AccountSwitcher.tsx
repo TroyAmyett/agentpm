@@ -87,13 +87,14 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 transition-colors ${
-          compact ? 'min-w-0' : 'min-w-[180px]'
+          compact ? 'min-w-0' : 'min-w-[200px]'
         }`}
       >
         {isLoading ? (
           <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
         ) : current ? (
           <>
+            <span className="text-gray-400 text-sm">Account:</span>
             <span className="text-cyan-400">
               {accountTypeIcons[current.type || 'internal']}
             </span>

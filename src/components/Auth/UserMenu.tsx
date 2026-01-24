@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, LogOut, Loader2 } from 'lucide-react'
+import { User, LogOut, Loader2, Settings } from 'lucide-react'
 
 export function UserMenu() {
   const { user, signOut, loading } = useAuthStore()
@@ -77,6 +77,23 @@ export function UserMenu() {
 
               {/* Menu Items */}
               <div style={{ padding: 'var(--fl-spacing-xs) 0' }}>
+                <button
+                  onClick={() => {
+                    window.location.hash = '#settings'
+                    setMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-3 text-sm"
+                  style={{
+                    padding: 'var(--fl-spacing-sm) var(--fl-spacing-md)',
+                    color: 'var(--fl-color-text-secondary)',
+                    transition: 'var(--fl-transition-fast)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-elevated)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Settings size={16} />
+                  Settings
+                </button>
                 <button
                   onClick={handleSignOut}
                   disabled={loading}

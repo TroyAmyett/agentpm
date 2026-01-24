@@ -48,7 +48,8 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
 
   fetchKeys: async (userId: string) => {
     if (!supabase) {
-      set({ error: 'Supabase not configured' })
+      // No Supabase = just show empty state, don't error
+      set({ keys: [], isLoading: false, error: null })
       return
     }
 
@@ -62,7 +63,56 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        // Handle auth errors gracefully - just show empty state
+        const authErrors = ['JWT expired', 'invalid claim', 'session', 'token', 'unauthorized']
+        const isAuthError = authErrors.some(e =>
+          error.message?.toLowerCase().includes(e.toLowerCase())
+        )
+
+        if (isAuthError) {
+          // Try to refresh session
+          const { error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            // Session truly expired - show empty state, user will need to re-login
+            console.warn('Session expired, please refresh the page or sign in again')
+            set({ keys: [], isLoading: false, error: null })
+            return
+          }
+          // Retry the fetch after refresh
+          const { data: retryData, error: retryError } = await supabase
+            .from('user_api_keys')
+            .select('*')
+            .eq('user_id', userId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+
+          if (retryError) {
+            set({ keys: [], isLoading: false, error: null })
+            return
+          }
+
+          const keys: ApiKey[] = (retryData || []).map((row) => ({
+            id: row.id,
+            userId: row.user_id,
+            accountId: row.account_id,
+            provider: row.provider as Provider,
+            providerName: row.provider_name,
+            keyHint: row.key_hint,
+            isValid: row.is_valid,
+            lastValidatedAt: row.last_validated_at,
+            lastUsedAt: row.last_used_at,
+            usageCount: row.usage_count || 0,
+            scopes: row.scopes || [],
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          }))
+          set({ keys, isLoading: false })
+          return
+        }
+
+        throw error
+      }
 
       const keys: ApiKey[] = (data || []).map((row) => ({
         id: row.id,
@@ -82,7 +132,9 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
 
       set({ keys, isLoading: false })
     } catch (err) {
-      set({ error: (err as Error).message, isLoading: false })
+      // For any other errors, fail gracefully with empty state
+      console.error('Failed to fetch API keys:', err)
+      set({ keys: [], error: null, isLoading: false })
     }
   },
 
