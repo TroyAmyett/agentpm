@@ -15,9 +15,10 @@ import {
   Plus,
   Loader2,
 } from 'lucide-react'
-import type { Project } from '@/types/agentpm'
+import type { Project, Task } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
 import { useProjectStore } from '@/stores/projectStore'
+import { useTaskStore } from '@/stores/taskStore'
 
 type TabId = 'overview' | 'tasks' | 'milestones' | 'knowledge' | 'settings'
 
@@ -30,6 +31,17 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const { formatDate } = useTimezoneFunctions()
   const { updateProject } = useProjectStore()
+  const { tasks, getTasksByProject } = useTaskStore()
+
+  // Get tasks for this project
+  const projectTasks = getTasksByProject(project.id)
+
+  // Calculate real progress from tasks
+  const completedTasksCount = projectTasks.filter(t => t.status === 'completed').length
+  const totalTasksCount = projectTasks.length
+  const calculatedProgress = totalTasksCount > 0
+    ? Math.round((completedTasksCount / totalTasksCount) * 100)
+    : 0
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -64,9 +76,10 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     }
   }
 
-  const progress = project.stats?.progress || 0
-  const completedTasks = project.stats?.completedTasks || 0
-  const totalTasks = project.stats?.totalTasks || 0
+  // Use calculated progress from actual tasks (fallback to stats for backwards compat)
+  const progress = totalTasksCount > 0 ? calculatedProgress : (project.stats?.progress || 0)
+  const completedTasks = totalTasksCount > 0 ? completedTasksCount : (project.stats?.completedTasks || 0)
+  const totalTasks = totalTasksCount > 0 ? totalTasksCount : (project.stats?.totalTasks || 0)
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview', icon: <FolderKanban size={16} /> },
@@ -300,20 +313,64 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
-                Tasks
+                Tasks ({projectTasks.length})
               </h2>
               <button className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
                 <Plus size={14} />
                 Add Task
               </button>
             </div>
-            <div className="text-center py-16 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
-              <ListTodo size={48} className="mx-auto mb-4 text-surface-300 dark:text-surface-600" />
-              <p className="text-surface-500">No tasks in this project yet</p>
-              <p className="text-sm text-surface-400 mt-1">
-                Create tasks or extract them from PRD notes
-              </p>
-            </div>
+            {projectTasks.length === 0 ? (
+              <div className="text-center py-16 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+                <ListTodo size={48} className="mx-auto mb-4 text-surface-300 dark:text-surface-600" />
+                <p className="text-surface-500">No tasks in this project yet</p>
+                <p className="text-sm text-surface-400 mt-1">
+                  Create tasks or extract them from PRD notes
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700">
+                {projectTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-4 hover:bg-surface-50 dark:hover:bg-surface-750 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
+                        task.status === 'completed' ? 'bg-green-500' :
+                        task.status === 'in_progress' ? 'bg-blue-500' :
+                        task.status === 'pending' ? 'bg-yellow-500' :
+                        'bg-surface-400'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-surface-900 dark:text-surface-100 truncate">
+                          {task.title}
+                        </h3>
+                        {task.description && (
+                          <p className="text-sm text-surface-500 mt-0.5 line-clamp-1">
+                            {task.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 mt-2 text-xs text-surface-400">
+                          <span className={`px-1.5 py-0.5 rounded ${
+                            task.priority === 'critical' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                            task.priority === 'high' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
+                            task.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
+                            'bg-surface-100 dark:bg-surface-700 text-surface-500'
+                          }`}>
+                            {task.priority}
+                          </span>
+                          <span className="capitalize">{task.status.replace('_', ' ')}</span>
+                          {task.dueDate && (
+                            <span>Due {formatDate(task.dueDate, 'short')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -339,17 +396,52 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         )}
 
         {activeTab === 'knowledge' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
                 Project Knowledge
               </h2>
               <button className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
                 <Plus size={14} />
-                Add Knowledge
+                Add Entry
               </button>
             </div>
-            <div className="text-center py-16 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+
+            {/* Linked Folder */}
+            <div className="bg-white dark:bg-surface-800 rounded-xl p-6 border border-surface-200 dark:border-surface-700">
+              <h3 className="text-sm font-semibold text-surface-500 uppercase tracking-wide mb-4">
+                Knowledge Source
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Docs Folder Path
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={settingsForm.repositoryPath ? `${settingsForm.repositoryPath}/docs` : ''}
+                      placeholder="C:\dev\myproject\docs or linked from repo path"
+                      disabled
+                      className="flex-1 px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 text-surface-600 dark:text-surface-400 text-sm font-mono"
+                    />
+                    <button
+                      disabled
+                      className="px-4 py-2 bg-surface-200 dark:bg-surface-700 text-surface-500 text-sm font-medium rounded-lg cursor-not-allowed"
+                      title="Sync feature coming soon"
+                    >
+                      Sync
+                    </button>
+                  </div>
+                  <p className="text-xs text-surface-400 mt-1">
+                    Set the repository path in Settings to auto-link docs folder. Sync feature coming soon.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Knowledge Entries */}
+            <div className="text-center py-12 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
               <BookOpen size={48} className="mx-auto mb-4 text-surface-300 dark:text-surface-600" />
               <p className="text-surface-500">No knowledge entries yet</p>
               <p className="text-sm text-surface-400 mt-1">
