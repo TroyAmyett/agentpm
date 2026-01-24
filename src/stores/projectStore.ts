@@ -36,12 +36,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   error: null,
 
   fetchProjects: async (accountId) => {
-    set({ isLoading: true, error: null })
+    // Clear projects immediately to prevent showing stale data from previous account
+    set({ projects: [], isLoading: true, error: null })
+
     try {
+      console.log(`[ProjectStore] Fetching projects for account: ${accountId}`)
       const projects = await db.fetchProjects(accountId)
+      console.log(`[ProjectStore] Fetched ${projects.length} projects from database`)
       set({ projects, isLoading: false })
     } catch (err) {
+      console.error('[ProjectStore] Failed to fetch projects:', err)
       set({
+        projects: [],
         error: err instanceof Error ? err.message : 'Failed to fetch projects',
         isLoading: false,
       })

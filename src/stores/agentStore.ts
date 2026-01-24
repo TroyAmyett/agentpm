@@ -92,18 +92,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   error: null,
 
   fetchAgents: async (accountId) => {
-    set({ isLoading: true, error: null })
+    // Clear agents immediately to prevent showing stale data from previous account
+    set({ agents: [], isLoading: true, error: null })
+
     try {
+      console.log(`[AgentStore] Fetching agents for account: ${accountId}`)
       const agents = await db.fetchAgentPersonas(accountId)
+      console.log(`[AgentStore] Fetched ${agents.length} agents from database`)
+
       // If no agents in database, use demo agents for development
       if (agents.length === 0) {
+        console.log('[AgentStore] No agents found, using demo agents')
         set({ agents: createDemoAgents(accountId), isLoading: false })
       } else {
         set({ agents, isLoading: false })
       }
     } catch (err) {
       // On error (e.g. Supabase not configured), use demo agents
-      console.warn('Could not fetch agents, using demo data:', err)
+      console.warn('[AgentStore] Could not fetch agents, using demo data:', err)
       set({ agents: createDemoAgents(accountId), isLoading: false, error: null })
     }
   },

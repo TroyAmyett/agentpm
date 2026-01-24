@@ -76,14 +76,21 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   filters: defaultFilters,
 
   fetchTasks: async (accountId, projectId) => {
-    set({ isLoading: true, error: null })
+    // Clear tasks immediately to prevent showing stale data from previous account
+    set({ tasks: [], blockedTasks: new Map(), isLoading: true, error: null })
+
     try {
+      console.log(`[TaskStore] Fetching tasks for account: ${accountId}`)
       const tasks = await db.fetchTasks(accountId, projectId)
+      console.log(`[TaskStore] Fetched ${tasks.length} tasks from database`)
       // Also fetch blocked status
       const blockedTasks = await db.fetchBlockedTasks(accountId, tasks)
       set({ tasks, blockedTasks, isLoading: false })
     } catch (err) {
+      console.error('[TaskStore] Failed to fetch tasks:', err)
       set({
+        tasks: [],
+        blockedTasks: new Map(),
         error: err instanceof Error ? err.message : 'Failed to fetch tasks',
         isLoading: false,
       })

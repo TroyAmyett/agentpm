@@ -65,12 +65,18 @@ export const useSkillStore = create<SkillState>((set, get) => ({
   error: null,
 
   fetchSkills: async (accountId) => {
-    set({ isLoading: true, error: null })
+    // Clear skills immediately to prevent showing stale data from previous account
+    set({ skills: [], isLoading: true, error: null })
+
     try {
+      console.log(`[SkillStore] Fetching skills for account: ${accountId}`)
       const skills = await skillsService.fetchSkills(accountId)
+      console.log(`[SkillStore] Fetched ${skills.length} skills from database`)
       set({ skills, isLoading: false })
     } catch (err) {
+      console.error('[SkillStore] Failed to fetch skills:', err)
       set({
+        skills: [],
         error: err instanceof Error ? err.message : 'Failed to fetch skills',
         isLoading: false,
       })
