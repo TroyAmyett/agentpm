@@ -60,6 +60,9 @@ export function AuthPage() {
 
   const { signIn, signUp, resetPassword, loading, error, clearError } = useAuthStore()
 
+  // Get returnUrl from query params (for cross-app SSO)
+  const returnUrl = new URLSearchParams(window.location.search).get('returnUrl')
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
@@ -68,6 +71,11 @@ export function AuthPage() {
     try {
       if (mode === 'signin') {
         await signIn(email, password)
+        // If there's a returnUrl (SSO from another Funnelists app), redirect back
+        if (returnUrl) {
+          window.location.href = returnUrl
+          return
+        }
       } else if (mode === 'signup') {
         if (password !== confirmPassword) {
           return
@@ -126,9 +134,9 @@ export function AuthPage() {
           <div className="text-center" style={{ marginBottom: '32px' }}>
             <div
               className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center"
-              style={{ background: 'var(--fl-color-primary)', marginBottom: '16px' }}
+              style={{ background: 'linear-gradient(135deg, #0ea5e9, #14b8a6)', marginBottom: '16px' }}
             >
-              <span className="text-2xl text-white font-bold">N</span>
+              <span className="text-2xl text-white font-bold">F</span>
             </div>
             <h1
               className="text-2xl font-bold"
@@ -139,8 +147,8 @@ export function AuthPage() {
               {mode === 'reset' && 'Reset Password'}
             </h1>
             <p style={{ color: 'var(--fl-color-text-secondary)', marginTop: '8px' }}>
-              {mode === 'signin' && 'Sign in to sync your notes across devices'}
-              {mode === 'signup' && 'Start taking smarter notes today'}
+              {mode === 'signin' && (returnUrl ? 'Sign in to continue to your app' : 'Sign in to access Funnelists')}
+              {mode === 'signup' && 'Create your Funnelists account'}
               {mode === 'reset' && "We'll send you a reset link"}
             </p>
           </div>
@@ -270,7 +278,7 @@ export function AuthPage() {
           className="text-center text-sm"
           style={{ color: 'var(--fl-color-text-muted)', marginTop: '24px' }}
         >
-          NoteTaker - Your intelligent note-taking companion
+          Funnelists - AI-powered business tools
         </p>
       </motion.div>
     </div>
