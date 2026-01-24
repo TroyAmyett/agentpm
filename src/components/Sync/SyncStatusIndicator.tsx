@@ -2,7 +2,7 @@ import { useSyncStore } from '@/stores/syncStore'
 import { CloudOff, Loader2, AlertCircle, Check } from 'lucide-react'
 
 export function SyncStatusIndicator() {
-  const { status, queue, lastSyncedAt } = useSyncStore()
+  const { status, queue, lastSyncedAt, error } = useSyncStore()
 
   const statusConfig = {
     synced: {
@@ -48,11 +48,21 @@ export function SyncStatusIndicator() {
     return date.toLocaleDateString()
   }
 
+  const getTooltip = () => {
+    if (status === 'error' && error) {
+      return `Error: ${error}`
+    }
+    if (lastSyncedAt) {
+      return `Last synced: ${formatLastSynced()}`
+    }
+    return undefined
+  }
+
   return (
     <div className="flex items-center gap-2">
       <div
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${config.bgColor}`}
-        title={lastSyncedAt ? `Last synced: ${formatLastSynced()}` : undefined}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${config.bgColor} cursor-default`}
+        title={getTooltip()}
       >
         <Icon
           size={14}
