@@ -598,7 +598,7 @@ export function AgentPMPage() {
     <div className="flex flex-col h-full bg-surface-50 dark:bg-surface-900">
       {/* Tab Bar */}
       <div className="flex-shrink-0 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
-        <div className="flex items-center px-3">
+        <div className="flex items-center justify-center px-3">
           {tabs.map((tab) => (
             <button
               key={tab.id}

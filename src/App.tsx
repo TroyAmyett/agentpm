@@ -97,8 +97,8 @@ interface NavItemConfig {
 // Main nav items (shown as horizontal tabs)
 const mainNavItems: NavItemConfig[] = [
   { id: 'radar', name: 'Radar', icon: <Radio size={18} /> },
-  { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} /> },
-  { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} /> },
+  { id: 'notetaker', name: 'Plans', icon: <StickyNote size={18} /> },
+  { id: 'agentpm', name: 'Agents', icon: <Bot size={18} /> },
 ]
 
 // Tools dropdown items (coming soon add-ons)
@@ -441,7 +441,7 @@ function App() {
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
               <Bot size={18} className="text-white" />
             </div>
-            <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>AgentPM</span>
+            <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>Agents</span>
           </div>
           <AccountSwitcher />
         </div>
