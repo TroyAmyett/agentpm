@@ -28,6 +28,8 @@ interface CreateTaskModalProps {
   currentUserName?: string
   /** Initial status for the task (defaults to 'draft' for Inbox) */
   initialStatus?: TaskStatus
+  /** Whether a valid account is selected */
+  hasValidAccount?: boolean
 }
 
 export function CreateTaskModal({
@@ -42,6 +44,7 @@ export function CreateTaskModal({
   currentUserId,
   currentUserName,
   initialStatus,
+  hasValidAccount = true,
 }: CreateTaskModalProps) {
   const [title, setTitle] = useState(defaultTitle)
   const [description, setDescription] = useState('')
@@ -148,6 +151,14 @@ export function CreateTaskModal({
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-4 space-y-4">
+              {/* Account Warning */}
+              {!hasValidAccount && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                  <AlertTriangle size={16} />
+                  Please select a valid account before creating tasks. You may need to sign in or create an account.
+                </div>
+              )}
+
               {/* Error */}
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">

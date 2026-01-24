@@ -90,7 +90,8 @@ export function AgentPMPage() {
   } = useTaskStore()
 
   const userId = user?.id || 'demo-user'
-  const accountId = currentAccountId || 'demo-account-id'
+  const accountId = currentAccountId || ''
+  const hasValidAccount = Boolean(accountId && !accountId.startsWith('default-') && !accountId.startsWith('demo-'))
 
   // Create agent name map
   const agentNameMap = new Map<string, string>(
@@ -951,6 +952,7 @@ export function AgentPMPage() {
         currentUserId={userId}
         currentUserName={user?.email?.split('@')[0] || 'Me'}
         initialStatus={createTaskInitialStatus}
+        hasValidAccount={hasValidAccount}
       />
 
       {editingTask && (
