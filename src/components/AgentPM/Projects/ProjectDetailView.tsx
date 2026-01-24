@@ -13,9 +13,11 @@ import {
   CheckCircle2,
   Link2,
   Plus,
+  Loader2,
 } from 'lucide-react'
 import type { Project } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
+import { useProjectStore } from '@/stores/projectStore'
 
 type TabId = 'overview' | 'tasks' | 'milestones' | 'knowledge' | 'settings'
 
@@ -27,6 +29,40 @@ interface ProjectDetailViewProps {
 export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const { formatDate } = useTimezoneFunctions()
+  const { updateProject } = useProjectStore()
+
+  // Settings form state
+  const [settingsForm, setSettingsForm] = useState({
+    name: project.name,
+    description: project.description || '',
+    status: project.status,
+    repositoryUrl: project.repositoryUrl || '',
+    repositoryPath: project.repositoryPath || '',
+    baseBranch: project.baseBranch || 'main',
+  })
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true)
+    setSaveSuccess(false)
+    try {
+      await updateProject(project.id, {
+        name: settingsForm.name,
+        description: settingsForm.description,
+        status: settingsForm.status,
+        repositoryUrl: settingsForm.repositoryUrl || undefined,
+        repositoryPath: settingsForm.repositoryPath || undefined,
+        baseBranch: settingsForm.baseBranch || 'main',
+      })
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch (error) {
+      console.error('Failed to save project:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const progress = project.stats?.progress || 0
   const completedTasks = project.stats?.completedTasks || 0
@@ -335,7 +371,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                 </label>
                 <input
                   type="text"
-                  defaultValue={project.name}
+                  value={settingsForm.name}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -344,7 +381,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                   Description
                 </label>
                 <textarea
-                  defaultValue={project.description}
+                  value={settingsForm.description}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, description: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
@@ -354,7 +392,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                   Status
                 </label>
                 <select
-                  defaultValue={project.status}
+                  value={settingsForm.status}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, status: e.target.value as Project['status'] })}
                   className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="active">Active</option>
@@ -363,10 +402,67 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                   <option value="cancelled">Cancelled</option>
                 </select>
               </div>
+
+              {/* Repository Settings */}
               <div className="pt-4 border-t border-surface-200 dark:border-surface-700">
-                <button className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
-                  Save Changes
+                <h3 className="text-sm font-semibold text-surface-500 uppercase tracking-wide mb-4">
+                  Repository
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                      GitHub URL
+                    </label>
+                    <input
+                      type="url"
+                      value={settingsForm.repositoryUrl}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, repositoryUrl: e.target.value })}
+                      placeholder="https://github.com/username/repo"
+                      className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                      Local Directory Path
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.repositoryPath}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, repositoryPath: e.target.value })}
+                      placeholder="C:\dev\myproject or /home/user/myproject"
+                      className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                      Base Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.baseBranch}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, baseBranch: e.target.value })}
+                      placeholder="main"
+                      className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-surface-200 dark:border-surface-700 flex items-center gap-3">
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                >
+                  {isSaving && <Loader2 size={14} className="animate-spin" />}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
+                {saveSuccess && (
+                  <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <CheckCircle2 size={14} />
+                    Saved!
+                  </span>
+                )}
               </div>
             </div>
           </div>

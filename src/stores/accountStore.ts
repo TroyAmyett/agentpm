@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AccountWithConfig, AccountType, AccountConfig } from '@/types/agentpm'
-import { supabase } from '@/services/supabase/client'
+import { supabase, isAuthError, handleAuthError } from '@/services/supabase/client'
 import {
   fetchUserAccounts,
   updateAccount as updateAccountService,
@@ -103,6 +103,13 @@ export const useAccountStore = create<AccountState>()(
             })
           }
         } catch (error) {
+          // Check if this is an auth error (expired JWT, etc.)
+          if (isAuthError(error)) {
+            console.warn('[AccountStore] Auth error detected, signing out...')
+            await handleAuthError()
+            return
+          }
+
           // Fallback to default account on error
           console.error('[AccountStore] Failed to fetch account:', error)
           set({
@@ -129,6 +136,13 @@ export const useAccountStore = create<AccountState>()(
             isLoading: false,
           })
         } catch (error) {
+          // Check if this is an auth error (expired JWT, etc.)
+          if (isAuthError(error)) {
+            console.warn('[AccountStore] Auth error during initialization, signing out...')
+            await handleAuthError()
+            return
+          }
+
           console.error('[AccountStore] Failed to initialize account:', error)
           set({
             isLoading: false,

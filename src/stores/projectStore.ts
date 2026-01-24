@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { Project, UpdateEntity } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
+import { isAuthError, handleAuthError } from '@/services/supabase/client'
 
 interface ProjectState {
   // State
@@ -45,6 +46,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.log(`[ProjectStore] Fetched ${projects.length} projects from database`)
       set({ projects, isLoading: false })
     } catch (err) {
+      // Check if this is an auth error (expired JWT, etc.)
+      if (isAuthError(err)) {
+        console.warn('[ProjectStore] Auth error detected, signing out...')
+        await handleAuthError()
+        return
+      }
+
       console.error('[ProjectStore] Failed to fetch projects:', err)
       set({
         projects: [],

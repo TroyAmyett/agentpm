@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { Skill, SkillBuilderMessage } from '@/types/agentpm'
 import * as skillsService from '@/services/skills'
+import { isAuthError, handleAuthError } from '@/services/supabase/client'
 
 interface SkillState {
   // State
@@ -74,6 +75,13 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       console.log(`[SkillStore] Fetched ${skills.length} skills from database`)
       set({ skills, isLoading: false })
     } catch (err) {
+      // Check if this is an auth error (expired JWT, etc.)
+      if (isAuthError(err)) {
+        console.warn('[SkillStore] Auth error detected, signing out...')
+        await handleAuthError()
+        return
+      }
+
       console.error('[SkillStore] Failed to fetch skills:', err)
       set({
         skills: [],

@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import type { AgentPersona, UpdateEntity } from '@/types/agentpm'
 import { DEFAULT_AGENT_PERSONAS, DEMO_ORCHESTRATOR_ID } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
+import { isAuthError, handleAuthError } from '@/services/supabase/client'
 
 // Fixed UUIDs for demo agents (deterministic so they persist across reloads)
 // Index 0 = orchestrator (Atlas), must match DEMO_ORCHESTRATOR_ID
@@ -108,6 +109,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         set({ agents, isLoading: false })
       }
     } catch (err) {
+      // Check if this is an auth error (expired JWT, etc.)
+      if (isAuthError(err)) {
+        console.warn('[AgentStore] Auth error detected, signing out...')
+        await handleAuthError()
+        return
+      }
+
       // On error (e.g. Supabase not configured), use demo agents
       console.warn('[AgentStore] Could not fetch agents, using demo data:', err)
       set({ agents: createDemoAgents(accountId), isLoading: false, error: null })

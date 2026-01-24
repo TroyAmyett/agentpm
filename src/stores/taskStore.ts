@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { Task, TaskStatus, TaskPriority, UpdateEntity, TaskDependency } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
+import { isAuthError, handleAuthError } from '@/services/supabase/client'
 
 interface TaskFilters {
   status: TaskStatus | null
@@ -87,6 +88,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const blockedTasks = await db.fetchBlockedTasks(accountId, tasks)
       set({ tasks, blockedTasks, isLoading: false })
     } catch (err) {
+      // Check if this is an auth error (expired JWT, etc.)
+      if (isAuthError(err)) {
+        console.warn('[TaskStore] Auth error detected, signing out...')
+        await handleAuthError()
+        return
+      }
+
       console.error('[TaskStore] Failed to fetch tasks:', err)
       set({
         tasks: [],
