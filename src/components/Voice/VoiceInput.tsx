@@ -232,7 +232,7 @@ export function VoiceInput({
 
   if (!isSupported) {
     return (
-      <div className={`flex items-center gap-2 text-gray-400 ${className}`}>
+      <div className={`flex items-center gap-2 ${className}`} style={{ color: 'var(--fl-color-text-muted)' }}>
         <MicOff className="w-5 h-5" />
         <span className="text-sm">Voice input not supported</span>
       </div>
@@ -245,16 +245,22 @@ export function VoiceInput({
   return (
     <div className={`relative ${className}`}>
       {/* Main input area */}
-      <div className="flex items-center gap-2 bg-gray-800 rounded-lg border border-gray-700 p-2">
+      <div
+        className="flex items-center gap-2 rounded-lg p-2"
+        style={{
+          background: 'var(--fl-color-bg-surface)',
+          border: '1px solid var(--fl-color-border)',
+        }}
+      >
         {/* Microphone button */}
         <button
           onClick={toggleListening}
           disabled={isProcessing}
-          className={`p-3 rounded-full transition-all ${
-            isListening
-              ? 'bg-red-500 text-white animate-pulse'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`p-3 rounded-full transition-all ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+          style={{
+            background: isListening ? '#ef4444' : 'var(--fl-color-bg-elevated)',
+            color: isListening ? 'white' : 'var(--fl-color-text-secondary)',
+          }}
           title={isListening ? 'Stop recording' : 'Start recording'}
         >
           {isProcessing ? (
@@ -278,14 +284,15 @@ export function VoiceInput({
               {[...Array(5)].map((_, i) => (
                 <motion.div
                   key={i}
-                  className="w-1 bg-cyan-500 rounded-full"
+                  className="w-1 rounded-full"
+                  style={{ background: 'var(--fl-color-primary)' }}
                   animate={{
                     height: `${Math.max(4, volume * 32 * (1 + Math.sin(Date.now() / 100 + i) * 0.5))}px`,
                   }}
                   transition={{ duration: 0.1 }}
                 />
               ))}
-              <Volume2 className="w-4 h-4 text-cyan-500 ml-1" />
+              <Volume2 className="w-4 h-4 ml-1" style={{ color: 'var(--fl-color-primary)' }} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -293,12 +300,12 @@ export function VoiceInput({
         {/* Transcript display / placeholder */}
         <div className="flex-1 min-w-0">
           {hasText ? (
-            <p className="text-sm text-white truncate">
+            <p className="text-sm truncate" style={{ color: 'var(--fl-color-text-primary)' }}>
               {transcript}
-              <span className="text-gray-400">{interimTranscript}</span>
+              <span style={{ color: 'var(--fl-color-text-muted)' }}>{interimTranscript}</span>
             </p>
           ) : (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>
               {isListening ? 'Listening...' : placeholder}
             </p>
           )}
@@ -310,7 +317,8 @@ export function VoiceInput({
             <>
               <button
                 onClick={handleClear}
-                className="p-2 text-gray-400 hover:text-white rounded transition-colors"
+                className="p-2 rounded transition-colors"
+                style={{ color: 'var(--fl-color-text-muted)' }}
                 title="Clear"
               >
                 <X className="w-4 h-4" />
@@ -318,7 +326,11 @@ export function VoiceInput({
               <button
                 onClick={handleSubmit}
                 disabled={isProcessing}
-                className="p-2 bg-cyan-600 text-white rounded hover:bg-cyan-500 transition-colors disabled:opacity-50"
+                className="p-2 rounded transition-colors disabled:opacity-50"
+                style={{
+                  background: 'var(--fl-color-primary)',
+                  color: 'white',
+                }}
                 title="Submit"
               >
                 <Send className="w-4 h-4" />
@@ -335,11 +347,15 @@ export function VoiceInput({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute left-0 right-0 top-full mt-2 bg-gray-800 border border-gray-700 rounded-lg p-3 z-10 max-h-32 overflow-y-auto"
+            className="absolute left-0 right-0 top-full mt-2 rounded-lg p-3 z-10 max-h-32 overflow-y-auto"
+            style={{
+              background: 'var(--fl-color-bg-surface)',
+              border: '1px solid var(--fl-color-border)',
+            }}
           >
-            <p className="text-sm text-white">
+            <p className="text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>
               {transcript}
-              <span className="text-gray-400">{interimTranscript}</span>
+              <span style={{ color: 'var(--fl-color-text-muted)' }}>{interimTranscript}</span>
             </p>
           </motion.div>
         )}

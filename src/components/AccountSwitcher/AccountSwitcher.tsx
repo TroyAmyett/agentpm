@@ -86,31 +86,36 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 transition-colors ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
           compact ? 'min-w-0' : 'min-w-[200px]'
         }`}
+        style={{
+          border: '1px solid var(--fl-color-border)',
+          background: 'var(--fl-color-bg-surface)',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-elevated)'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-surface)'}
       >
         {isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--fl-color-text-muted)' }} />
         ) : current ? (
           <>
-            <span className="text-gray-400 text-sm">Account:</span>
-            <span className="text-cyan-400">
+            <span className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>Account:</span>
+            <span style={{ color: 'var(--fl-color-primary)' }}>
               {accountTypeIcons[current.type || 'internal']}
             </span>
             {!compact && (
-              <span className="flex-1 text-left text-sm font-medium text-white truncate">
+              <span className="flex-1 text-left text-sm font-medium truncate" style={{ color: 'var(--fl-color-text-primary)' }}>
                 {current.name}
               </span>
             )}
           </>
         ) : (
-          <span className="text-gray-400 text-sm">Select account</span>
+          <span className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>Select account</span>
         )}
         <ChevronDown
-          className={`w-4 h-4 text-gray-400 transition-transform ${
-            isOpen ? 'rotate-180' : ''
-          }`}
+          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--fl-color-text-muted)' }}
         />
       </button>
 
@@ -122,8 +127,12 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden"
-            style={{ zIndex: 400 }}
+            className="absolute top-full left-0 mt-2 w-64 rounded-lg shadow-xl overflow-hidden"
+            style={{
+              zIndex: 9999,
+              background: 'var(--fl-color-bg-surface)',
+              border: '1px solid var(--fl-color-border)',
+            }}
           >
             {/* Account groups */}
             <div className="py-2 max-h-80 overflow-y-auto">
@@ -134,7 +143,10 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
                 return (
                   <div key={type}>
                     {/* Group header */}
-                    <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div
+                      className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--fl-color-text-muted)' }}
+                    >
                       {accountTypeLabels[type]}
                     </div>
 
@@ -143,20 +155,21 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
                       <button
                         key={account.id}
                         onClick={() => handleSelectAccount(account.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-700 transition-colors ${
-                          account.id === currentAccountId
-                            ? 'bg-gray-700/50'
-                            : ''
-                        }`}
+                        className="w-full flex items-center gap-3 px-3 py-2 transition-colors"
+                        style={{
+                          background: account.id === currentAccountId ? 'var(--fl-color-bg-elevated)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-elevated)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = account.id === currentAccountId ? 'var(--fl-color-bg-elevated)' : 'transparent'}
                       >
-                        <span className="text-cyan-400">
+                        <span style={{ color: 'var(--fl-color-primary)' }}>
                           {accountTypeIcons[account.type || 'internal']}
                         </span>
-                        <span className="flex-1 text-left text-sm text-white">
+                        <span className="flex-1 text-left text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>
                           {account.name}
                         </span>
                         {account.id === currentAccountId && (
-                          <Check className="w-4 h-4 text-cyan-400" />
+                          <Check className="w-4 h-4" style={{ color: 'var(--fl-color-primary)' }} />
                         )}
                       </button>
                     ))}
@@ -166,7 +179,7 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
             </div>
 
             {/* Divider */}
-            <div className="border-t border-gray-700" />
+            <div style={{ borderTop: '1px solid var(--fl-color-border)' }} />
 
             {/* Actions */}
             <div className="py-2">
@@ -175,7 +188,10 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
                   setIsOpen(false)
                   setShowAddModal(true)
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-700 transition-colors text-gray-300"
+                className="w-full flex items-center gap-3 px-3 py-2 transition-colors"
+                style={{ color: 'var(--fl-color-text-secondary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-elevated)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <Plus className="w-4 h-4" />
                 <span className="text-sm">Add Account</span>
@@ -187,7 +203,10 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
                     setIsOpen(false)
                     // TODO: Open account settings
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-700 transition-colors text-gray-300"
+                  className="w-full flex items-center gap-3 px-3 py-2 transition-colors"
+                  style={{ color: 'var(--fl-color-text-secondary)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--fl-color-bg-elevated)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <Settings className="w-4 h-4" />
                   <span className="text-sm">Account Settings</span>
@@ -253,7 +272,7 @@ function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 10000 }}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60"
@@ -265,15 +284,19 @@ function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-md mx-4 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl"
+        className="relative w-full max-w-md mx-4 rounded-xl shadow-2xl"
+        style={{
+          background: 'var(--fl-color-bg-surface)',
+          border: '1px solid var(--fl-color-border)',
+        }}
       >
         <div className="p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Add Account</h2>
+          <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--fl-color-text-primary)' }}>Add Account</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name input */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--fl-color-text-secondary)' }}>
                 Account Name
               </label>
               <input
@@ -281,13 +304,18 @@ function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Acme Corp"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2"
+                style={{
+                  background: 'var(--fl-color-bg-elevated)',
+                  border: '1px solid var(--fl-color-border)',
+                  color: 'var(--fl-color-text-primary)',
+                }}
               />
             </div>
 
             {/* Type selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--fl-color-text-secondary)' }}>
                 Account Type
               </label>
               <div className="grid grid-cols-3 gap-2">
@@ -296,11 +324,12 @@ function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
                     key={t}
                     type="button"
                     onClick={() => setType(t)}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${
-                      type === t
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
-                        : 'border-gray-600 hover:border-gray-500 text-gray-300'
-                    }`}
+                    className="flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors"
+                    style={{
+                      borderColor: type === t ? 'var(--fl-color-primary)' : 'var(--fl-color-border)',
+                      background: type === t ? 'rgba(14, 165, 233, 0.1)' : 'transparent',
+                      color: type === t ? 'var(--fl-color-primary)' : 'var(--fl-color-text-secondary)',
+                    }}
                   >
                     {accountTypeIcons[t]}
                     <span className="text-xs">{accountTypeLabels[t]}</span>
@@ -319,14 +348,22 @@ function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg transition-colors"
+                style={{
+                  border: '1px solid var(--fl-color-border)',
+                  color: 'var(--fl-color-text-secondary)',
+                }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{
+                  background: 'var(--fl-color-primary)',
+                  color: 'white',
+                }}
               >
                 {isSubmitting ? (
                   <>

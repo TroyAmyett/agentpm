@@ -191,10 +191,12 @@ function ProfileSettings() {
   }
 
   const selectStyle = {
-    background: 'rgba(255, 255, 255, 0.05)',
+    background: '#1e293b',
     border: '1px solid var(--fl-color-border)',
     color: 'var(--fl-color-text-primary)',
   }
+
+  const optionStyle = { background: '#1e293b', color: '#e2e8f0' }
 
   return (
     <div className="space-y-6">
@@ -287,7 +289,7 @@ function ProfileSettings() {
               style={selectStyle}
             >
               {LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
+                <option key={lang.code} value={lang.code} style={optionStyle}>
                   {lang.name}
                 </option>
               ))}
@@ -311,7 +313,7 @@ function ProfileSettings() {
               style={selectStyle}
             >
               {CURRENCIES.map((curr) => (
-                <option key={curr.code} value={curr.code}>
+                <option key={curr.code} value={curr.code} style={optionStyle}>
                   {curr.symbol} - {curr.name} ({curr.code})
                 </option>
               ))}
@@ -335,7 +337,7 @@ function ProfileSettings() {
               style={selectStyle}
             >
               {TIMEZONES.map((tz) => (
-                <option key={tz.value} value={tz.value}>
+                <option key={tz.value} value={tz.value} style={optionStyle}>
                   {tz.label}
                 </option>
               ))}

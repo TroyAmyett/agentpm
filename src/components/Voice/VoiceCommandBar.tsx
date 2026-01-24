@@ -277,7 +277,7 @@ export function VoiceCommandBar({
 
       {/* Processing indicator */}
       {isProcessing && (
-        <div className="flex items-center gap-2 text-cyan-400 text-sm">
+        <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--fl-color-primary)' }}>
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Processing command...</span>
         </div>
@@ -286,18 +286,18 @@ export function VoiceCommandBar({
       {/* Last command result */}
       {lastCommand && !isProcessing && (
         <div className="flex items-center gap-2 text-sm">
-          <Sparkles className="w-4 h-4 text-cyan-400" />
-          <span className="text-gray-400">Detected:</span>
-          <span className="text-white font-medium">
+          <Sparkles className="w-4 h-4" style={{ color: 'var(--fl-color-primary)' }} />
+          <span style={{ color: 'var(--fl-color-text-muted)' }}>Detected:</span>
+          <span className="font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
             {getIntentLabel(lastCommand.intent)}
           </span>
           {lastCommand.project && (
-            <span className="text-gray-500">
+            <span style={{ color: 'var(--fl-color-text-muted)' }}>
               in {lastCommand.project}
             </span>
           )}
           {lastCommand.agent && (
-            <span className="text-gray-500">
+            <span style={{ color: 'var(--fl-color-text-muted)' }}>
               ({lastCommand.agent})
             </span>
           )}

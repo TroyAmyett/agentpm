@@ -72,15 +72,15 @@ export function AccountSettings() {
         <select
           value={selectedAccountId || ''}
           onChange={(e) => setSelectedAccountId(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg text-sm"
+          className="w-full px-3 py-2 rounded-lg text-sm dark-select"
           style={{
-            background: 'rgba(255, 255, 255, 0.05)',
+            background: '#1e293b',
             border: '1px solid var(--fl-color-border)',
             color: 'var(--fl-color-text-primary)',
           }}
         >
           {accounts.map((acc) => (
-            <option key={acc.id} value={acc.id}>
+            <option key={acc.id} value={acc.id} style={{ background: '#1e293b', color: '#e2e8f0' }}>
               {acc.name} ({acc.type})
             </option>
           ))}
@@ -415,14 +415,14 @@ function MembersSection({ accountId }: { accountId: string }) {
                     onChange={(e) => handleUpdateRole(member.userId, e.target.value as MemberRole)}
                     className="text-xs px-2 py-1 rounded"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      background: '#1e293b',
                       border: '1px solid var(--fl-color-border)',
                       color: 'var(--fl-color-text-secondary)',
                     }}
                   >
-                    <option value="admin">Admin</option>
-                    <option value="member">Member</option>
-                    <option value="viewer">Viewer</option>
+                    <option value="admin" style={{ background: '#1e293b', color: '#e2e8f0' }}>Admin</option>
+                    <option value="member" style={{ background: '#1e293b', color: '#e2e8f0' }}>Member</option>
+                    <option value="viewer" style={{ background: '#1e293b', color: '#e2e8f0' }}>Viewer</option>
                   </select>
                   <button
                     onClick={() => handleRemoveMember(member.userId)}
@@ -562,14 +562,14 @@ function InviteMemberForm({
             onChange={(e) => setRole(e.target.value as MemberRole)}
             className="px-3 py-2 rounded-lg text-sm"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: '#1e293b',
               border: '1px solid var(--fl-color-border)',
               color: 'var(--fl-color-text-primary)',
             }}
           >
-            <option value="admin">Admin</option>
-            <option value="member">Member</option>
-            <option value="viewer">Viewer</option>
+            <option value="admin" style={{ background: '#1e293b', color: '#e2e8f0' }}>Admin</option>
+            <option value="member" style={{ background: '#1e293b', color: '#e2e8f0' }}>Member</option>
+            <option value="viewer" style={{ background: '#1e293b', color: '#e2e8f0' }}>Viewer</option>
           </select>
         </div>
         <button
