@@ -319,8 +319,11 @@ export async function setPrimaryAccount(accountId: string): Promise<void> {
 // =============================================================================
 
 /**
- * Ensure user has at least one account (create default if needed)
+ * Ensure user has exactly ONE account (create default if needed)
  * Called after signup/login
+ *
+ * IMPORTANT: Each user can only belong to ONE account.
+ * If you want a separate account, use a different email address.
  */
 export async function ensureUserHasAccount(): Promise<AccountWithConfig> {
   if (!supabase) throw new Error('Supabase not configured')
@@ -328,32 +331,39 @@ export async function ensureUserHasAccount(): Promise<AccountWithConfig> {
   const { data: userData } = await supabase.auth.getUser()
   if (!userData.user) throw new Error('Not authenticated')
 
-  // Check if user has any accounts
-  const { data: existingAccounts, error: fetchError } = await supabase
+  // Check if user already has an account (they can only have ONE)
+  const { data: existingAccount, error: fetchError } = await supabase
     .from('user_accounts')
     .select('account_id')
     .eq('user_id', userData.user.id)
-    .limit(1)
+    .single()
 
-  if (fetchError) throw fetchError
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    // PGRST116 = no rows found, which is fine for new users
+    throw fetchError
+  }
 
-  if (existingAccounts && existingAccounts.length > 0) {
-    // User has accounts, return the first one
-    const account = await fetchAccount(existingAccounts[0].account_id)
+  if (existingAccount) {
+    // User already has an account - return it
+    const account = await fetchAccount(existingAccount.account_id)
     if (account) return account
   }
 
-  // Create a default personal account
+  // New user - create their account
+  // Use email prefix as default account name
+  const emailPrefix = userData.user.email?.split('@')[0] || 'My Account'
+  const accountName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)
+
   const account = await createAccount({
-    name: 'Personal',
-    slug: `personal-${userData.user.id.slice(0, 8)}`,
+    name: accountName,
+    slug: `${emailPrefix.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${userData.user.id.slice(0, 8)}`,
     type: 'personal',
     config: {
       defaultTone: 'casual',
     },
   })
 
-  // Set it as primary
+  // Set it as primary (it's their only account)
   await setPrimaryAccount(account.id)
 
   return account

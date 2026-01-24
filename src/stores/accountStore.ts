@@ -4,37 +4,23 @@ import type { AccountWithConfig, AccountType, AccountConfig } from '@/types/agen
 import { supabase } from '@/services/supabase/client'
 import {
   fetchUserAccounts,
-  createAccount as createAccountService,
   updateAccount as updateAccountService,
   deleteAccount as deleteAccountService,
   ensureUserHasAccount,
 } from '@/services/identity/accounts'
 
-// Default accounts as per PRD
-const DEFAULT_ACCOUNTS: Partial<AccountWithConfig>[] = [
-  {
-    id: 'default-funnelists',
-    name: 'Funnelists',
-    slug: 'funnelists',
-    status: 'active',
-    type: 'internal',
-    config: {
-      website: 'https://funnelists.com',
-      defaultTone: 'conversational',
-      specialInstructions: 'Focus on Salesforce ecosystem and Agentforce',
-    },
+// Default account shown before user logs in
+// Each user has exactly ONE account - use different email for different accounts
+const DEFAULT_ACCOUNT: Partial<AccountWithConfig> = {
+  id: 'default-demo',
+  name: 'Demo Account',
+  slug: 'demo',
+  status: 'active',
+  type: 'personal',
+  config: {
+    defaultTone: 'casual',
   },
-  {
-    id: 'default-personal',
-    name: 'Personal',
-    slug: 'personal',
-    status: 'active',
-    type: 'personal',
-    config: {
-      defaultTone: 'casual',
-    },
-  },
-]
+}
 
 interface AccountWithRole extends AccountWithConfig {
   role?: string
@@ -69,8 +55,8 @@ interface AccountState {
 export const useAccountStore = create<AccountState>()(
   persist(
     (set, get) => ({
-      accounts: DEFAULT_ACCOUNTS as AccountWithRole[],
-      currentAccountId: 'default-funnelists',
+      accounts: [DEFAULT_ACCOUNT as AccountWithRole],
+      currentAccountId: 'default-demo',
       isLoading: false,
       error: null,
 
@@ -90,39 +76,39 @@ export const useAccountStore = create<AccountState>()(
 
       fetchAccounts: async () => {
         if (!supabase) {
-          // Use default accounts if Supabase not configured
+          // Use default account if Supabase not configured
           return
         }
 
         set({ isLoading: true, error: null })
 
         try {
-          // Use the new identity service to fetch user's accounts
+          // Fetch user's account (they only have ONE)
           const userAccounts = await fetchUserAccounts()
 
-          // If no accounts fetched, keep defaults
-          const accounts = userAccounts.length > 0
-            ? userAccounts as AccountWithRole[]
-            : DEFAULT_ACCOUNTS as AccountWithRole[]
-
-          // Find primary account or first account
-          const primaryAccount = userAccounts.find((a) => (a as AccountWithRole).isPrimary) || userAccounts[0]
-          const currentId = get().currentAccountId
-
-          set({
-            accounts,
-            isLoading: false,
-            // Select primary account if current one doesn't exist
-            currentAccountId: currentId && accounts.some((a) => a.id === currentId)
-              ? currentId
-              : primaryAccount?.id || accounts[0]?.id || null,
-          })
+          if (userAccounts.length > 0) {
+            // User has an account - use it
+            const account = userAccounts[0] as AccountWithRole
+            set({
+              accounts: [account],
+              currentAccountId: account.id,
+              isLoading: false,
+            })
+          } else {
+            // No account yet - keep showing demo
+            set({
+              accounts: [DEFAULT_ACCOUNT as AccountWithRole],
+              currentAccountId: 'default-demo',
+              isLoading: false,
+            })
+          }
         } catch (error) {
-          // Fallback to default accounts on error
+          // Fallback to default account on error
+          console.error('[AccountStore] Failed to fetch account:', error)
           set({
-            accounts: DEFAULT_ACCOUNTS as AccountWithRole[],
+            accounts: [DEFAULT_ACCOUNT as AccountWithRole],
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to fetch accounts',
+            error: error instanceof Error ? error.message : 'Failed to fetch account',
           })
         }
       },
@@ -133,25 +119,20 @@ export const useAccountStore = create<AccountState>()(
         set({ isLoading: true, error: null })
 
         try {
-          // Ensure user has at least one account
-          await ensureUserHasAccount()
+          // Ensure user has their account (creates one if new user)
+          const account = await ensureUserHasAccount()
 
-          // Refresh the accounts list - this preserves currentAccountId if valid
-          await get().fetchAccounts()
-
-          // Only set account if none selected (fetchAccounts already handles this)
-          const { currentAccountId, accounts } = get()
-          if (!currentAccountId || !accounts.some((a) => a.id === currentAccountId)) {
-            // Fallback to first account if persisted one is invalid
-            const firstAccount = accounts[0]
-            if (firstAccount) {
-              set({ currentAccountId: firstAccount.id })
-            }
-          }
+          // Set the user's account as current
+          set({
+            accounts: [{ ...account, role: 'owner' } as AccountWithRole],
+            currentAccountId: account.id,
+            isLoading: false,
+          })
         } catch (error) {
+          console.error('[AccountStore] Failed to initialize account:', error)
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to initialize accounts',
+            error: error instanceof Error ? error.message : 'Failed to initialize account',
           })
         }
       },
@@ -163,55 +144,20 @@ export const useAccountStore = create<AccountState>()(
         }
       },
 
-      createAccount: async (accountData) => {
-        if (!supabase) {
-          // Create locally if Supabase not configured
-          const newAccount: AccountWithRole = {
-            ...accountData,
-            id: `local-${Date.now()}`,
-            accountId: `local-${Date.now()}`,
-            createdAt: new Date().toISOString(),
-            createdBy: 'local-user',
-            createdByType: 'user',
-            updatedAt: new Date().toISOString(),
-            updatedBy: 'local-user',
-            updatedByType: 'user',
-            role: 'owner',
-          }
-          set((state) => ({
-            accounts: [...state.accounts, newAccount],
-          }))
-          return newAccount
-        }
+      createAccount: async (_accountData) => {
+        // Users can only have ONE account
+        // If you want a different account, use a different email address
+        const { accounts } = get()
+        const hasRealAccount = accounts.some(a => !a.id?.startsWith('default-'))
 
-        set({ isLoading: true, error: null })
-
-        try {
-          const newAccount = await createAccountService({
-            name: accountData.name,
-            slug: accountData.slug,
-            type: accountData.type,
-            config: accountData.config,
-          })
-
-          const accountWithRole: AccountWithRole = {
-            ...newAccount,
-            role: 'owner',
-          }
-
-          set((state) => ({
-            accounts: [...state.accounts, accountWithRole],
-            isLoading: false,
-          }))
-
-          return newAccount
-        } catch (error) {
-          set({
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to create account',
-          })
+        if (hasRealAccount) {
+          const error = new Error('You already have an account. Each email can only have one account. Use a different email for a separate account.')
+          set({ error: error.message })
           throw error
         }
+
+        // This should only be called during initial setup via ensureUserHasAccount
+        throw new Error('Account creation is handled automatically. Sign in with a new email for a new account.')
       },
 
       updateAccount: async (accountId, updates) => {
