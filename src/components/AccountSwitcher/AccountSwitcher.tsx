@@ -121,7 +121,8 @@ export function AccountSwitcher({ className = '', compact = false }: AccountSwit
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+            className="absolute top-full left-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden"
+            style={{ zIndex: 400 }}
           >
             {/* Account groups */}
             <div className="py-2 max-h-80 overflow-y-auto">
