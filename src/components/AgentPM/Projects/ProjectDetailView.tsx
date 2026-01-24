@@ -15,6 +15,7 @@ import {
   Plus,
 } from 'lucide-react'
 import type { Project } from '@/types/agentpm'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 type TabId = 'overview' | 'tasks' | 'milestones' | 'knowledge' | 'settings'
 
@@ -25,6 +26,7 @@ interface ProjectDetailViewProps {
 
 export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const { formatDate } = useTimezoneFunctions()
 
   const progress = project.stats?.progress || 0
   const completedTasks = project.stats?.completedTasks || 0
@@ -152,7 +154,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                       <div className="text-xs text-surface-500">Start Date</div>
                       <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                         {project.startDate
-                          ? new Date(project.startDate).toLocaleDateString()
+                          ? formatDate(project.startDate, 'medium')
                           : 'Not set'}
                       </div>
                     </div>
@@ -163,7 +165,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                       <div className="text-xs text-surface-500">Target Date</div>
                       <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                         {project.targetDate
-                          ? new Date(project.targetDate).toLocaleDateString()
+                          ? formatDate(project.targetDate, 'medium')
                           : 'Not set'}
                       </div>
                     </div>
@@ -174,7 +176,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                       <div>
                         <div className="text-xs text-surface-500">Completed</div>
                         <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
-                          {new Date(project.completedDate).toLocaleDateString()}
+                          {formatDate(project.completedDate, 'medium')}
                         </div>
                       </div>
                     </div>

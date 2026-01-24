@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Link2 } from 'lucide-react'
 import type { Task, TaskStatus } from '@/types/agentpm'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 // Status to column mapping
 const STATUS_TO_COLUMN: Record<TaskStatus, string> = {
@@ -68,6 +69,7 @@ export function KanbanView({
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
   const [isDragging, setIsDragging] = useState(false) // Track if actual drag occurred
   const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null)
+  const { formatDate: formatDateTz } = useTimezoneFunctions()
 
   // Group tasks by column
   const tasksByColumn = useMemo(() => {
@@ -334,8 +336,7 @@ export function KanbanView({
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return formatDateTz(dateStr, 'short')
   }
 
   return (

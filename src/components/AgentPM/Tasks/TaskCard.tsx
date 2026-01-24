@@ -5,6 +5,7 @@ import { Calendar, User, Bot, Clock, ChevronRight, AlertTriangle } from 'lucide-
 import type { Task } from '@/types/agentpm'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface TaskCardProps {
   task: Task
@@ -16,25 +17,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, agentName, selected, onClick, isBlocked, blockedByCount }: TaskCardProps) {
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return null
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-
-  const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    return `${diffDays}d ago`
-  }
+  const { formatDate, formatRelativeTime } = useTimezoneFunctions()
 
   const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'completed'
 
@@ -98,14 +81,14 @@ export function TaskCard({ task, agentName, selected, onClick, isBlocked, blocke
         {task.dueAt && (
           <div className={`flex items-center gap-1 ${isOverdue ? 'text-red-500' : ''}`}>
             <Calendar size={14} />
-            <span>{formatDate(task.dueAt)}</span>
+            <span>{formatDate(task.dueAt, 'short')}</span>
           </div>
         )}
 
         {/* Updated */}
         <div className="flex items-center gap-1 ml-auto">
           <Clock size={14} />
-          <span>{formatTimeAgo(task.updatedAt)}</span>
+          <span>{formatRelativeTime(task.updatedAt)}</span>
         </div>
       </div>
     </motion.div>

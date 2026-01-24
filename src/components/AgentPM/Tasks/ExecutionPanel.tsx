@@ -31,6 +31,7 @@ import {
   formatFileSize,
   type Attachment,
 } from '@/services/attachments/attachmentService'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface ExecutionPanelProps {
   task: Task
@@ -62,6 +63,7 @@ export function ExecutionPanel({
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
   const [showOutputModal, setShowOutputModal] = useState(false)
+  const { formatDateTime } = useTimezoneFunctions()
 
   // Fetch execution history for this task
   useEffect(() => {
@@ -134,15 +136,6 @@ export function ExecutionPanel({
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
     return `${(ms / 1000).toFixed(1)}s`
-  }
-
-  const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
   }
 
   // Get file icon based on type

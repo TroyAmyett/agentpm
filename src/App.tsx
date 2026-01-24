@@ -22,17 +22,16 @@ import { AccountSwitcher } from '@/components/AccountSwitcher/AccountSwitcher'
 import { Loader2 } from 'lucide-react'
 import {
   PanelLeftOpen,
-  Moon,
-  Sun,
   MessageSquare,
   StickyNote,
   Bot,
   ChevronDown,
   Palette,
   Users,
-  Settings,
   Layout,
   Radio,
+  ExternalLink,
+  Wrench,
 } from 'lucide-react'
 
 // Helper to get app URLs based on environment
@@ -62,10 +61,11 @@ function getAppUrl(app: string): string {
   return `https://${prodDomains[app] || 'funnelists.com'}`
 }
 
-type AppView = 'notes' | 'agentpm' | 'settings'
+type AppView = 'radar' | 'notes' | 'agentpm' | 'settings'
 
 // URL hash to view mapping
 const HASH_TO_VIEW: Record<string, AppView> = {
+  '#radar': 'radar',
   '#notes': 'notes',
   '#notetaker': 'notes',
   '#agentpm': 'agentpm',
@@ -74,6 +74,7 @@ const HASH_TO_VIEW: Record<string, AppView> = {
 }
 
 const VIEW_TO_HASH: Record<AppView, string> = {
+  radar: '#radar',
   notes: '#notetaker',
   agentpm: '#agentpm',
   settings: '#settings',
@@ -85,104 +86,139 @@ function getViewFromHash(): AppView {
   return HASH_TO_VIEW[hash] || 'agentpm'
 }
 
-interface Tool {
+interface NavItemConfig {
   id: string
   name: string
   icon: React.ReactNode
-  description?: string
   href?: string
   comingSoon?: boolean
 }
 
-const tools: Tool[] = [
-  { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} />, description: 'AI project management' },
-  { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} />, description: 'Brainstorming & ideation' },
-  { id: 'radar', name: 'Radar', icon: <Radio size={18} />, description: 'Content monitoring & insights', href: getAppUrl('radar') },
-  { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, description: 'AI design & visuals', href: getAppUrl('canvas'), comingSoon: true },
-  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, description: 'Lead generation & enrichment', href: getAppUrl('leadgen'), comingSoon: true },
+// Main nav items (shown as horizontal tabs)
+const mainNavItems: NavItemConfig[] = [
+  { id: 'radar', name: 'Radar', icon: <Radio size={18} /> },
+  { id: 'notetaker', name: 'NoteTaker', icon: <StickyNote size={18} /> },
+  { id: 'agentpm', name: 'AgentPM', icon: <Bot size={18} /> },
 ]
 
-// Inline ToolSwitcher component
-function ToolSwitcher({ tools, activeTool, onToolChange }: { tools: Tool[]; activeTool: string; onToolChange: (id: string) => void }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const active = tools.find(t => t.id === activeTool) || tools[0]
+// Tools dropdown items (coming soon add-ons)
+const toolsDropdownItems: NavItemConfig[] = [
+  { id: 'canvas', name: 'Canvas', icon: <Palette size={18} />, href: getAppUrl('canvas'), comingSoon: true },
+  { id: 'leadgen', name: 'LeadGen', icon: <Users size={18} />, href: getAppUrl('leadgen'), comingSoon: true },
+]
+
+// Horizontal Nav Component
+function HorizontalNav({
+  items,
+  activeId,
+  onItemClick
+}: {
+  items: NavItemConfig[]
+  activeId: string
+  onItemClick: (id: string) => void
+}) {
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-        style={{ color: 'var(--fl-color-text-primary)' }}
-      >
-        {active.icon}
-        <span className="font-medium">{active.name}</span>
-        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && (
-        <>
-          <div className="fixed inset-0" style={{ zIndex: 350 }} onClick={() => setIsOpen(false)} />
-          <div
-            className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[220px]"
-            style={{ zIndex: 400, background: 'var(--fl-color-bg-surface)', border: '1px solid var(--fl-color-border)' }}
-          >
-            {tools.map(tool => (
-              <button
-                key={tool.id}
-                onClick={() => {
-                  if (tool.comingSoon) return
-                  if (tool.href) {
-                    window.location.href = tool.href
-                  } else {
-                    onToolChange(tool.id)
-                  }
-                  setIsOpen(false)
-                }}
-                disabled={tool.comingSoon}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                  tool.comingSoon
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-[var(--fl-color-bg-elevated)]'
-                } ${tool.id === activeTool ? 'bg-[var(--fl-color-bg-elevated)]' : ''}`}
-                style={{ color: 'var(--fl-color-text-primary)' }}
-              >
-                {tool.icon}
-                <div className="flex-1">
-                  <div className="font-medium flex items-center gap-2">
-                    {tool.name}
-                    {tool.comingSoon && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ background: 'rgba(14, 165, 233, 0.2)', color: '#0ea5e9' }}
-                      >
-                        Soon
-                      </span>
-                    )}
-                  </div>
-                  {tool.description && (
-                    <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
-                      {tool.description}
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
-            {/* Settings Divider */}
-            <div className="border-t my-1" style={{ borderColor: 'var(--fl-color-border)' }} />
-            <button
-              onClick={() => { onToolChange('settings'); setIsOpen(false) }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-              style={{ color: 'var(--fl-color-text-primary)' }}
+    <nav className="flex items-center gap-1">
+      {items.map(item => {
+        const isActive = item.id === activeId
+        const isExternal = !!item.href
+
+        if (isExternal) {
+          return (
+            <a
+              key={item.id}
+              href={item.href}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-white/10`}
+              style={{
+                color: 'var(--fl-color-text-secondary)',
+              }}
             >
-              <Settings size={18} />
-              <div>
-                <div className="font-medium">Settings</div>
-                <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>API keys & preferences</div>
-              </div>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+              {item.icon}
+              <span>{item.name}</span>
+              <ExternalLink size={12} className="opacity-50" />
+            </a>
+          )
+        }
+
+        return (
+          <button
+            key={item.id}
+            onClick={() => onItemClick(item.id)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-[rgba(14,165,233,0.2)] text-[#0ea5e9]'
+                : 'hover:bg-white/10 text-[var(--fl-color-text-secondary)]'
+            }`}
+          >
+            {item.icon}
+            <span>{item.name}</span>
+          </button>
+        )
+      })}
+
+      {/* Tools Dropdown */}
+      <div className="relative">
+        <button
+          onClick={() => setToolsOpen(!toolsOpen)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-white/10"
+          style={{ color: 'var(--fl-color-text-secondary)' }}
+        >
+          <Wrench size={16} />
+          <span>Tools</span>
+          <ChevronDown size={14} className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {toolsOpen && (
+          <>
+            <div
+              className="fixed inset-0"
+              style={{ zIndex: 350 }}
+              onClick={() => setToolsOpen(false)}
+            />
+            <div
+              className="absolute left-0 top-full mt-1 rounded-lg shadow-lg min-w-[200px] py-1"
+              style={{
+                zIndex: 400,
+                background: 'var(--fl-color-bg-surface)',
+                border: '1px solid var(--fl-color-border)'
+              }}
+            >
+              {toolsDropdownItems.map(tool => (
+                <button
+                  key={tool.id}
+                  onClick={() => {
+                    if (!tool.comingSoon && tool.href) {
+                      window.location.href = tool.href
+                    }
+                    setToolsOpen(false)
+                  }}
+                  disabled={tool.comingSoon}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                    tool.comingSoon
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:bg-[var(--fl-color-bg-elevated)]'
+                  }`}
+                  style={{ color: 'var(--fl-color-text-primary)' }}
+                >
+                  {tool.icon}
+                  <span className="flex-1 font-medium">{tool.name}</span>
+                  {tool.comingSoon && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded"
+                      style={{ background: 'rgba(14, 165, 233, 0.2)', color: '#0ea5e9' }}
+                    >
+                      Soon
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </nav>
   )
 }
 
@@ -196,8 +232,6 @@ function App() {
   const {
     sidebarOpen,
     toggleSidebar,
-    darkMode,
-    toggleDarkMode,
     toggleChatPanel,
     chatPanelOpen,
     sidebarWidth,
@@ -211,16 +245,11 @@ function App() {
     setSidebarWidth(sidebarWidth + delta)
   }, [sidebarWidth, setSidebarWidth])
 
-  // Apply theme class to html
+  // Always use dark mode for Funnelists
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark')
-      document.documentElement.classList.remove('light')
-    } else {
-      document.documentElement.classList.remove('dark')
-      document.documentElement.classList.add('light')
-    }
-  }, [darkMode])
+    document.documentElement.classList.add('dark')
+    document.documentElement.classList.remove('light')
+  }, [])
 
   // Sync URL hash with current view
   useEffect(() => {
@@ -356,13 +385,22 @@ function App() {
     return <AuthPage />
   }
 
-  const handleToolChange = (toolId: string) => {
+  const handleNavItemClick = (id: string) => {
     const viewMap: Record<string, AppView> = {
+      'radar': 'radar',
       'notetaker': 'notes',
       'agentpm': 'agentpm',
       'settings': 'settings',
     }
-    setCurrentView(viewMap[toolId] || 'notes')
+    setCurrentView(viewMap[id] || 'agentpm')
+  }
+
+  // Get active nav item id from current view
+  const getActiveNavId = () => {
+    if (currentView === 'radar') return 'radar'
+    if (currentView === 'notes') return 'notetaker'
+    if (currentView === 'agentpm') return 'agentpm'
+    return 'agentpm'
   }
 
   // Handler for saving current note as a template
@@ -389,7 +427,7 @@ function App() {
     <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)' }}>
       {/* Header */}
       <header
-        className="flex items-center justify-between px-4 h-14 flex-shrink-0"
+        className="grid grid-cols-[1fr_auto_1fr] items-center px-4 h-14 flex-shrink-0"
         style={{
           background: 'rgba(255, 255, 255, 0.05)',
           backdropFilter: 'blur(12px)',
@@ -397,7 +435,7 @@ function App() {
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
         }}
       >
-        {/* Left: Logo, Account Switcher, and Tool Switcher */}
+        {/* Left: Logo and Account Switcher */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
@@ -405,16 +443,18 @@ function App() {
             </div>
             <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>AgentPM</span>
           </div>
-          <AccountSwitcher compact />
-          <ToolSwitcher
-            tools={tools}
-            activeTool={currentView === 'notes' ? 'notetaker' : currentView === 'settings' ? 'agentpm' : currentView}
-            onToolChange={handleToolChange}
-          />
+          <AccountSwitcher />
         </div>
 
+        {/* Center: Horizontal Navigation (truly centered) */}
+        <HorizontalNav
+          items={mainNavItems}
+          activeId={getActiveNavId()}
+          onItemClick={handleNavItemClick}
+        />
+
         {/* Right: Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 justify-end">
           {currentView === 'notes' && (
             <>
               {/* Only show open sidebar button when sidebar is closed */}
@@ -451,14 +491,6 @@ function App() {
             </>
           )}
           <SyncStatusIndicator />
-          <button
-            onClick={toggleDarkMode}
-            title={darkMode ? 'Light mode' : 'Dark mode'}
-            className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-            style={{ color: 'var(--fl-color-text-secondary)' }}
-          >
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
           <UserMenu />
         </div>
       </header>
@@ -484,6 +516,14 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {currentView === 'radar' && (
+            <iframe
+              src={getAppUrl('radar')}
+              className="w-full h-full border-0"
+              title="Radar"
+              allow="clipboard-read; clipboard-write"
+            />
+          )}
           {currentView === 'notes' && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <BlockEditor />

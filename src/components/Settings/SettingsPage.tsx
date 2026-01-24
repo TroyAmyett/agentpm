@@ -1,13 +1,14 @@
 // Settings Page
 // Central settings for API keys, preferences, and account management
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench } from 'lucide-react'
+import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench, Globe, DollarSign, Clock, Check } from 'lucide-react'
 import { ApiKeysManager } from './ApiKeysManager'
 import { AccountSettings } from './AccountSettings'
 import { ToolsManager } from '@/components/Admin/ToolsManager'
 import { useAuthStore } from '@/stores/authStore'
+import { useProfileStore } from '@/stores/profileStore'
 
 type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'notifications' | 'security' | 'admin-tools'
 
@@ -122,25 +123,108 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   )
 }
 
-// Placeholder components for other settings
+// Language options
+const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'pt', name: 'Português' },
+  { code: 'ja', name: '日本語' },
+  { code: 'ko', name: '한국어' },
+  { code: 'zh', name: '中文' },
+]
+
+// Currency options
+const CURRENCIES = [
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
+  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
+]
+
+// Common timezones
+const TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (US & Canada)' },
+  { value: 'America/Chicago', label: 'Central Time (US & Canada)' },
+  { value: 'America/Denver', label: 'Mountain Time (US & Canada)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (US & Canada)' },
+  { value: 'America/Anchorage', label: 'Alaska' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii' },
+  { value: 'Europe/London', label: 'London' },
+  { value: 'Europe/Paris', label: 'Paris' },
+  { value: 'Europe/Berlin', label: 'Berlin' },
+  { value: 'Europe/Moscow', label: 'Moscow' },
+  { value: 'Asia/Dubai', label: 'Dubai' },
+  { value: 'Asia/Kolkata', label: 'Mumbai' },
+  { value: 'Asia/Singapore', label: 'Singapore' },
+  { value: 'Asia/Tokyo', label: 'Tokyo' },
+  { value: 'Asia/Shanghai', label: 'Beijing' },
+  { value: 'Australia/Sydney', label: 'Sydney' },
+  { value: 'Pacific/Auckland', label: 'Auckland' },
+  { value: 'UTC', label: 'UTC' },
+]
+
 function ProfileSettings() {
   const { user } = useAuthStore()
+  const { profile, isLoading, fetchProfile, updateProfile } = useProfileStore()
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchProfile(user.id)
+    }
+  }, [user?.id, fetchProfile])
+
+  const handleChange = async (field: string, value: string) => {
+    setSaveStatus('saving')
+    await updateProfile({ [field]: value })
+    setSaveStatus('saved')
+    setTimeout(() => setSaveStatus('idle'), 2000)
+  }
+
+  const selectStyle = {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid var(--fl-color-border)',
+    color: 'var(--fl-color-text-primary)',
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2
-          className="text-lg font-medium flex items-center gap-2"
-          style={{ color: 'var(--fl-color-text-primary)' }}
-        >
-          <User size={20} />
-          Profile
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
-          Manage your profile information
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2
+            className="text-lg font-medium flex items-center gap-2"
+            style={{ color: 'var(--fl-color-text-primary)' }}
+          >
+            <User size={20} />
+            Profile
+          </h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Manage your profile and locale preferences
+          </p>
+        </div>
+        {saveStatus === 'saving' && (
+          <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Saving...
+          </span>
+        )}
+        {saveStatus === 'saved' && (
+          <span className="text-xs px-2 py-1 rounded flex items-center gap-1" style={{ color: '#22c55e' }}>
+            <Check size={14} />
+            Saved
+          </span>
+        )}
       </div>
 
+      {/* Account Info */}
       <div
         className="p-4 rounded-xl"
         style={{
@@ -148,6 +232,9 @@ function ProfileSettings() {
           border: '1px solid var(--fl-color-border)',
         }}
       >
+        <h3 className="text-sm font-medium mb-4" style={{ color: 'var(--fl-color-text-primary)' }}>
+          Account
+        </h3>
         <div className="space-y-4">
           <div>
             <label
@@ -160,7 +247,7 @@ function ProfileSettings() {
               type="email"
               value={user?.email || ''}
               disabled
-              className="w-full px-3 py-2 rounded-lg text-sm"
+              className="w-full px-3 py-2 rounded-lg text-sm opacity-60"
               style={{
                 background: 'rgba(255, 255, 255, 0.03)',
                 border: '1px solid var(--fl-color-border)',
@@ -168,9 +255,95 @@ function ProfileSettings() {
               }}
             />
           </div>
-          <p className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
-            More profile options coming soon.
-          </p>
+        </div>
+      </div>
+
+      {/* Locale Settings */}
+      <div
+        className="p-4 rounded-xl"
+        style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid var(--fl-color-border)',
+        }}
+      >
+        <h3 className="text-sm font-medium mb-4" style={{ color: 'var(--fl-color-text-primary)' }}>
+          Locale Preferences
+        </h3>
+        <div className="space-y-4">
+          {/* Language */}
+          <div>
+            <label
+              className="flex items-center gap-2 text-xs mb-1"
+              style={{ color: 'var(--fl-color-text-muted)' }}
+            >
+              <Globe size={14} />
+              Language
+            </label>
+            <select
+              value={profile?.language || 'en'}
+              onChange={(e) => handleChange('language', e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={selectStyle}
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Currency */}
+          <div>
+            <label
+              className="flex items-center gap-2 text-xs mb-1"
+              style={{ color: 'var(--fl-color-text-muted)' }}
+            >
+              <DollarSign size={14} />
+              Currency
+            </label>
+            <select
+              value={profile?.currency || 'USD'}
+              onChange={(e) => handleChange('currency', e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={selectStyle}
+            >
+              {CURRENCIES.map((curr) => (
+                <option key={curr.code} value={curr.code}>
+                  {curr.symbol} - {curr.name} ({curr.code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Timezone */}
+          <div>
+            <label
+              className="flex items-center gap-2 text-xs mb-1"
+              style={{ color: 'var(--fl-color-text-muted)' }}
+            >
+              <Clock size={14} />
+              Timezone
+            </label>
+            <select
+              value={profile?.timezone || 'UTC'}
+              onChange={(e) => handleChange('timezone', e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={selectStyle}
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+              Used for scheduling and displaying dates/times
+            </p>
+          </div>
         </div>
       </div>
     </div>

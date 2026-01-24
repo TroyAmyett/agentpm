@@ -2,6 +2,7 @@
 
 import { FolderKanban, GitBranch, Calendar, CheckCircle2 } from 'lucide-react'
 import type { Project } from '@/types/agentpm'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface ProjectCardProps {
   project: Project
@@ -10,6 +11,7 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onClick, isSelected }: ProjectCardProps) {
+  const { formatDate } = useTimezoneFunctions()
   const progress = project.stats?.progress || 0
   const completedTasks = project.stats?.completedTasks || 0
   const totalTasks = project.stats?.totalTasks || 0
@@ -80,7 +82,7 @@ export function ProjectCard({ project, onClick, isSelected }: ProjectCardProps) 
         {project.targetDate && (
           <div className="flex items-center gap-1">
             <Calendar size={14} />
-            <span>{new Date(project.targetDate).toLocaleDateString()}</span>
+            <span>{formatDate(project.targetDate, 'short')}</span>
           </div>
         )}
       </div>

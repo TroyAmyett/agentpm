@@ -28,6 +28,7 @@ import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
 import { TaskDependencies } from './TaskDependencies'
 import { ExecutionPanel } from './ExecutionPanel'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface TaskDetailProps {
   task: Task
@@ -71,25 +72,11 @@ export function TaskDetail({
     setActiveTab(newDefault)
   }, [task.id, task.status, task.output])
 
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  }
+  const { formatDateTime, formatDate } = useTimezoneFunctions()
 
-  const formatDate = (dateStr?: string) => {
+  const formatDateDisplay = (dateStr?: string) => {
     if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    return formatDate(dateStr, 'medium')
   }
 
   const getNextActions = (): { status: TaskStatus; label: string; icon: React.ReactNode; color: string }[] => {
@@ -598,7 +585,7 @@ export function TaskDetail({
                 </h4>
                 <div className="flex items-center gap-2 text-surface-900 dark:text-surface-100">
                   <Calendar size={16} className="text-surface-400" />
-                  {formatDate(task.dueAt)}
+                  {formatDateDisplay(task.dueAt)}
                 </div>
               </div>
               <div>
@@ -607,7 +594,7 @@ export function TaskDetail({
                 </h4>
                 <div className="flex items-center gap-2 text-surface-900 dark:text-surface-100">
                   <Clock size={16} className="text-surface-400" />
-                  {formatDate(task.createdAt)}
+                  {formatDateDisplay(task.createdAt)}
                 </div>
               </div>
             </div>

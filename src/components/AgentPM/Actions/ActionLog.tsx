@@ -15,6 +15,7 @@ import {
   MessageSquare,
 } from 'lucide-react'
 import type { AgentAction, ActionAlternative } from '@/types/agentpm'
+import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface ActionLogProps {
   actions: AgentAction[]
@@ -111,16 +112,7 @@ interface ActionItemProps {
 
 function ActionItem({ action }: ActionItemProps) {
   const [expanded, setExpanded] = useState(false)
-
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  }
+  const { formatDateTime } = useTimezoneFunctions()
 
   const formatDuration = (ms?: number) => {
     if (!ms) return '-'
