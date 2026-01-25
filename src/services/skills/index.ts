@@ -170,6 +170,9 @@ export function parseFrontmatter(content: string): { metadata: SkillMetadata; bo
       case 'author':
         metadata.author = value
         break
+      case 'category':
+        metadata.category = value as SkillCategory
+        break
     }
   }
 
@@ -289,6 +292,7 @@ export interface CreateSkillInput {
   version?: string
   author?: string
   tags?: string[]
+  category?: SkillCategory
   content: string
   sourceType: SkillSourceType
   sourceUrl?: string
@@ -317,6 +321,7 @@ export async function createSkill(input: CreateSkillInput): Promise<Skill> {
         version: input.version || '1.0.0',
         author: input.author || null,
         tags: input.tags || [],
+        category: input.category || null,
         content: input.content,
         sourceType: input.sourceType,
         sourceUrl: input.sourceUrl || null,
@@ -405,6 +410,7 @@ export async function importFromGitHub(
     version: metadata.version || '1.0.0',
     author: metadata.author,
     tags: metadata.tags || [],
+    category: metadata.category,
     content: body,
     sourceType: 'github',
     sourceUrl: url,
@@ -436,6 +442,7 @@ export async function importFromRaw(
     version: metadata.version || '1.0.0',
     author: metadata.author,
     tags: metadata.tags || [],
+    category: metadata.category,
     content: body,
     sourceType: 'local',
     isEnabled: true,
@@ -490,6 +497,7 @@ export async function syncSkill(skill: Skill): Promise<Skill> {
     version: metadata.version || skill.version,
     author: metadata.author || skill.author,
     tags: metadata.tags || skill.tags,
+    category: metadata.category || skill.category,
     sourceSha: sha || skill.sourceSha,
     lastSyncedAt: new Date().toISOString(),
   })
@@ -553,6 +561,7 @@ export async function createBuilderSkill(input: CreateBuilderSkillInput): Promis
         version: metadata.version || '1.0.0',
         author: metadata.author || null,
         tags: metadata.tags || [],
+        category: metadata.category || null,
         content: input.content,
         sourceType: 'local' as SkillSourceType,
         forkedFrom: input.forkedFrom || null,
@@ -595,6 +604,7 @@ export async function updateBuilderSkill(
         version: metadata.version,
         author: metadata.author,
         tags: metadata.tags,
+        category: metadata.category,
         content: input.content,
         builderConversation: input.builderConversation,
         updatedAt: new Date().toISOString(),
@@ -791,6 +801,7 @@ export async function importFromIndex(
     version: metadata.version || indexEntry.version,
     author: metadata.author || indexEntry.authorName,
     tags: metadata.tags || indexEntry.tags,
+    category: metadata.category || indexEntry.category,
     content: body,
     sourceType: indexEntry.githubUrl ? 'github' : 'marketplace',
     sourceUrl: indexEntry.githubUrl || indexEntry.rawContentUrl,

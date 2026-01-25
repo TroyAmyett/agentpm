@@ -898,6 +898,7 @@ export interface SkillMetadata {
   version?: string
   author?: string
   tags?: string[]
+  category?: SkillCategory
 }
 
 // =============================================================================
