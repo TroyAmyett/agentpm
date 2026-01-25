@@ -24,7 +24,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { AgentDashboard } from './Dashboard'
-import { TaskList, TaskDetail, DependencyGraph, GanttView, CalendarView } from './Tasks'
+import { TaskList, TaskDetail, DependencyGraph, GanttView, CalendarView, TableListView } from './Tasks'
 import { AgentQueueView } from './Queue'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
@@ -686,9 +686,30 @@ export function AgentPMPage() {
                 />
               )}
 
-              {(taskViewMode === 'list' || taskViewMode === 'agent-tasks') && (
+              {taskViewMode === 'list' && (
+                <div className="h-full p-4">
+                  <TableListView
+                    tasks={tasks}
+                    agents={agents}
+                    blockedTasks={blockedTasks}
+                    executingTaskIds={executingTaskIds}
+                    onTaskClick={setSelectedTaskId}
+                    onRunTask={(taskId) => {
+                      const task = getTask(taskId)
+                      if (!task?.assignedTo) return
+                      const agent = agents.find(a => a.id === task.assignedTo)
+                      if (!agent) return
+                      const skill = task.skillId ? skills.find(s => s.id === task.skillId) : undefined
+                      updateTaskStatus(taskId, 'in_progress', userId, 'Started from list view')
+                        .then(() => runTask(task, agent, skill, accountId, userId))
+                    }}
+                  />
+                </div>
+              )}
+
+              {taskViewMode === 'agent-tasks' && (
                 <div className="flex h-full">
-                  {/* Task List */}
+                  {/* Task List (Card View) */}
                   <div className="w-96 flex-shrink-0 bg-white dark:bg-surface-800 border-r border-surface-200 dark:border-surface-700">
                     <TaskList
                       tasks={tasks}
@@ -784,6 +805,25 @@ export function AgentPMPage() {
                 />
               )}
             </div>
+
+            {/* Task Detail Sidebar for List/Table View */}
+            {taskViewMode === 'list' && selectedTask && (
+              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+                <TaskDetail
+                  task={selectedTask}
+                  agent={selectedTaskAgent}
+                  skill={selectedTaskSkill}
+                  allTasks={tasks}
+                  accountId={accountId}
+                  userId={userId}
+                  onClose={() => setSelectedTaskId(null)}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDelete={() => handleDeleteTask(selectedTask.id)}
+                  onEdit={() => setEditingTask(selectedTask)}
+                  onDependencyChange={() => fetchTasks(accountId)}
+                />
+              </div>
+            )}
 
             {/* Task Detail Sidebar for Kanban View */}
             {taskViewMode === 'kanban' && selectedTask && (
