@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, List, Bot, ChevronDown, Check, GitBranch, GanttChart, Calendar } from 'lucide-react'
+import { LayoutGrid, List, Bot, ChevronDown, Check, GitBranch, GanttChart, Calendar, Zap } from 'lucide-react'
 import type { TaskViewMode } from '@/stores/uiStore'
 
 interface ViewOption {
@@ -48,6 +48,12 @@ const VIEW_OPTIONS: ViewOption[] = [
     label: 'Calendar',
     icon: <Calendar size={16} />,
     description: 'Tasks by due date',
+  },
+  {
+    id: 'queue',
+    label: 'Agent Queue',
+    icon: <Zap size={16} />,
+    description: 'Ready tasks for agent execution',
   },
 ]
 

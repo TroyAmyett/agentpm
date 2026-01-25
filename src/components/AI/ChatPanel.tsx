@@ -8,7 +8,6 @@ import type { JSONContent } from '@tiptap/react'
 import {
   X,
   Send,
-  Sparkles,
   Loader2,
   User,
   Bot,

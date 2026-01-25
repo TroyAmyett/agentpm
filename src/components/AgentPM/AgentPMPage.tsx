@@ -25,6 +25,7 @@ import { useSkillStore } from '@/stores/skillStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail, DependencyGraph, GanttView, CalendarView } from './Tasks'
+import { AgentQueueView } from './Queue'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
 import { KanbanView } from './Kanban'
@@ -77,7 +78,7 @@ export function AgentPMPage() {
   const { projects, fetchProjects } = useProjectStore()
   const { taskViewMode, setTaskViewMode } = useUIStore()
   const { skills, fetchSkills } = useSkillStore()
-  const { runTask, isTaskExecuting, getActiveCount } = useExecutionStore()
+  const { runTask, isTaskExecuting, getActiveCount, activeExecutions } = useExecutionStore()
   const {
     tasks,
     blockedTasks,
@@ -560,6 +561,9 @@ export function AgentPMPage() {
 
   const pendingReviews = getPendingReviewTasks()
 
+  // Create a Set of executing task IDs for AgentQueueView
+  const executingTaskIds = new Set(activeExecutions.keys())
+
   // Handle voice commands
   const handleVoiceCommand = useCallback(
     (command: ParsedVoiceCommand) => {
@@ -747,6 +751,36 @@ export function AgentPMPage() {
                 <CalendarView
                   tasks={tasks}
                   onTaskClick={setSelectedTaskId}
+                />
+              )}
+
+              {taskViewMode === 'queue' && (
+                <AgentQueueView
+                  tasks={tasks}
+                  agents={agents}
+                  blockedTasks={blockedTasks}
+                  executingTaskIds={executingTaskIds}
+                  onTaskClick={setSelectedTaskId}
+                  onRunTask={(taskId) => {
+                    const task = getTask(taskId)
+                    if (!task?.assignedTo) return
+                    const agent = agents.find(a => a.id === task.assignedTo)
+                    if (!agent) return
+                    const skill = task.skillId ? skills.find(s => s.id === task.skillId) : undefined
+                    updateTaskStatus(taskId, 'in_progress', userId, 'Started from queue')
+                      .then(() => runTask(task, agent, skill, accountId, userId))
+                  }}
+                  onBulkRun={(taskIds) => {
+                    taskIds.forEach(taskId => {
+                      const task = getTask(taskId)
+                      if (!task?.assignedTo) return
+                      const agent = agents.find(a => a.id === task.assignedTo)
+                      if (!agent) return
+                      const skill = task.skillId ? skills.find(s => s.id === task.skillId) : undefined
+                      updateTaskStatus(taskId, 'in_progress', userId, 'Started from queue (bulk)')
+                        .then(() => runTask(task, agent, skill, accountId, userId))
+                    })
+                  }}
                 />
               )}
             </div>
