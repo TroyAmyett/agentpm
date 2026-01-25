@@ -926,6 +926,8 @@ export type SkillCategory =
   | 'security'        // Security audits, vulnerability analysis
   | 'data'            // Data processing, ETL
   | 'communication'   // Email, presentations
+  | 'integration'     // API integrations, platform connectors (Salesforce, etc.)
+  | 'testing'         // QA, performance testing, test automation
   | 'other'
 
 // Approval status
@@ -1053,6 +1055,8 @@ export const SKILL_CATEGORY_INFO: Record<SkillCategory, { label: string; icon?: 
   security: { label: 'Security' },
   data: { label: 'Data' },
   communication: { label: 'Communication' },
+  integration: { label: 'Integration' },
+  testing: { label: 'Testing & QA' },
   other: { label: 'Other' },
 }
 
