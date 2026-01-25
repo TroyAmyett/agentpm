@@ -232,87 +232,64 @@ export function ChatPanel() {
           style={{ background: 'var(--fl-color-bg-elevated)', width: chatPanelWidth }}
         >
           <ResizeHandle side="left" onResize={handleResize} />
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-primary-100 dark:bg-primary-900/40">
-                <Sparkles size={18} className="text-primary-600 dark:text-primary-400" />
+          {/* Header - Sticky */}
+          <div className="flex-shrink-0 sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                <Bot size={18} className="text-white" />
               </div>
-              <div>
-                <h2 className="font-semibold text-surface-900 dark:text-surface-100">
+              <div className="min-w-0">
+                <h2 className="font-semibold text-surface-900 dark:text-surface-100 text-sm">
                   {activeNoteTitle ? 'Note Assistant' : 'AI Chat'}
                 </h2>
                 {activeNoteTitle ? (
                   <div className="flex items-center gap-1 text-xs text-surface-500">
-                    <FileText size={12} />
-                    <span className="truncate max-w-[150px]">{activeNoteTitle}</span>
+                    <FileText size={10} className="flex-shrink-0" />
+                    <span className="truncate">{activeNoteTitle}</span>
                   </div>
                 ) : (
                   <p className="text-xs text-surface-500">
-                    General assistant with web search
+                    Web search enabled
                   </p>
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setChatPanelOpen(false)}
-              className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-1">
+              {activeNoteTitle && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary-100 dark:bg-primary-900/40 text-xs text-primary-600 dark:text-primary-400">
+                  <PenLine size={10} />
+                  <span>Can edit</span>
+                </div>
+              )}
+              <button
+                onClick={() => setChatPanelOpen(false)}
+                className="p-2 rounded-lg hover:bg-surface-200/50 dark:hover:bg-surface-700/50 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
             {messages.length === 0 && (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-100 to-purple-100 dark:from-primary-900/30 dark:to-purple-900/30 flex items-center justify-center">
-                  <Bot size={32} className="text-primary-500" />
+              <div className="text-center py-6">
+                <p className="text-sm text-surface-500 max-w-[220px] mx-auto">
+                  {activeNoteTitle
+                    ? `Ask me to brainstorm ideas, suggest features, search the web, or update "${activeNoteTitle}" directly.`
+                    : 'Ask me anything! I can search the web and create new notes for you.'
+                  }
+                </p>
+                <div className="flex items-center justify-center gap-3 mt-3 text-xs">
+                  <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                    <Globe size={12} />
+                    <span>Web search</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                    <FileText size={12} />
+                    <span>{activeNoteTitle ? 'Edit note' : 'Create notes'}</span>
+                  </span>
                 </div>
-                {activeNoteTitle ? (
-                  <>
-                    <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
-                      Let's work on "{activeNoteTitle}"
-                    </h3>
-                    <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      I can brainstorm ideas, suggest features, search the web, and update your note directly. Just ask!
-                    </p>
-                    <div className="flex items-center justify-center gap-2 mt-3 text-xs">
-                      <span className="flex items-center gap-1 text-primary-600 dark:text-primary-400">
-                        <PenLine size={12} />
-                        <span>Can edit</span>
-                      </span>
-                      <span className="text-surface-400">•</span>
-                      <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                        <Globe size={12} />
-                        <span>Web search</span>
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="font-medium text-surface-900 dark:text-surface-100 mb-2">
-                      General Assistant
-                    </h3>
-                    <p className="text-sm text-surface-500 max-w-[250px] mx-auto">
-                      Ask me anything! I can search the web and create new notes for you.
-                    </p>
-                    <div className="flex items-center justify-center gap-2 mt-3 text-xs">
-                      <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                        <Globe size={12} />
-                        <span>Web search</span>
-                      </span>
-                      <span className="text-surface-400">•</span>
-                      <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                        <FileText size={12} />
-                        <span>Create notes</span>
-                      </span>
-                    </div>
-                    <p className="text-xs text-surface-400 mt-2">
-                      Open a note to get note-specific help
-                    </p>
-                  </>
-                )}
               </div>
             )}
 
