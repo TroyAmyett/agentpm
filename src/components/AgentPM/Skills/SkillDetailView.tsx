@@ -26,6 +26,14 @@ import {
 } from 'lucide-react'
 import type { Skill } from '@/types/agentpm'
 
+// Convert slug format (lowercase-with-dashes) to Title Case With Spaces
+function formatSkillName(name: string): string {
+  return name
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
 interface SkillDetailViewProps {
   skill: Skill
   onBack: () => void
@@ -148,7 +156,7 @@ export function SkillDetailView({
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-surface-900 dark:text-surface-100">
-            {skill.name}
+            {formatSkillName(skill.name)}
           </h1>
           {skill.description && (
             <p className="text-sm text-surface-600 dark:text-surface-400">

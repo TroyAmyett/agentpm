@@ -3,6 +3,14 @@
 import { FileText, Github, FileCode, ToggleLeft, ToggleRight, Building2, GitFork, Sparkles } from 'lucide-react'
 import type { Skill } from '@/types/agentpm'
 
+// Convert slug format (lowercase-with-dashes) to Title Case With Spaces
+function formatSkillName(name: string): string {
+  return name
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
 interface SkillCardProps {
   skill: Skill
   onClick: () => void
@@ -47,7 +55,7 @@ export function SkillCard({ skill, onClick, onToggleEnabled, onCustomize, onEdit
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-surface-900 dark:text-surface-100 truncate">
-            {skill.name}
+            {formatSkillName(skill.name)}
           </h3>
           {skill.version && (
             <span className="text-xs text-surface-500">v{skill.version}</span>

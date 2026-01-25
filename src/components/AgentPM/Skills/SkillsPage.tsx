@@ -11,9 +11,11 @@ import { SkillDetailView } from './SkillDetailView'
 import { ImportSkillModal } from './ImportSkillModal'
 import { SkillsBuilderModal } from './SkillsBuilderModal'
 import { BrowseSkillsModal } from './BrowseSkillsModal'
-import type { Skill, SkillSourceType, SkillBuilderMessage } from '@/types/agentpm'
+import type { Skill, SkillSourceType, SkillBuilderMessage, SkillCategory } from '@/types/agentpm'
+import { SKILL_CATEGORY_INFO } from '@/types/agentpm'
 
 type FilterSource = 'all' | SkillSourceType
+type FilterCategory = 'all' | SkillCategory
 
 export function SkillsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false)
@@ -24,6 +26,7 @@ export function SkillsPage() {
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterSource, setFilterSource] = useState<FilterSource>('all')
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>('all')
   const [showAllOfficialSkills, setShowAllOfficialSkills] = useState(false)
 
   const { user } = useAuthStore()
@@ -76,8 +79,16 @@ export function SkillsPage() {
       return false
     }
 
+    // Category filter
+    if (filterCategory !== 'all' && skill.category !== filterCategory) {
+      return false
+    }
+
     return true
   })
+
+  // Get categories that have skills (for showing only relevant tabs)
+  const categoriesWithSkills = [...new Set(skills.map(s => s.category).filter(Boolean))] as SkillCategory[]
 
   // Handlers
   const handleImportGitHub = useCallback(
@@ -262,6 +273,37 @@ export function SkillsPage() {
             </select>
           </div>
         </div>
+
+        {/* Category Filter Tabs */}
+        {(categoriesWithSkills.length > 0 || skills.length > 0) && (
+          <div className="flex items-center gap-2 pt-4 overflow-x-auto">
+            <button
+              onClick={() => setFilterCategory('all')}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                filterCategory === 'all'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                  : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
+              }`}
+            >
+              All Categories
+            </button>
+            {(Object.keys(SKILL_CATEGORY_INFO) as SkillCategory[])
+              .filter(cat => cat !== 'other' || categoriesWithSkills.includes('other'))
+              .map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setFilterCategory(category)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                    filterCategory === category
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                      : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
+                  }`}
+                >
+                  {SKILL_CATEGORY_INFO[category].label}
+                </button>
+              ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
