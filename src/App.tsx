@@ -279,21 +279,21 @@ function App() {
   useEffect(() => {
     if (initialized && !isAuthenticated && notes.length === 0) {
       addNote({
-        title: 'Welcome to AI Notetaker',
+        title: 'Welcome to AgentPM',
         content: {
           type: 'doc',
           content: [
             {
               type: 'heading',
               attrs: { level: 1 },
-              content: [{ type: 'text', text: 'Welcome to AI Notetaker' }],
+              content: [{ type: 'text', text: 'Welcome to AgentPM' }],
             },
             {
               type: 'paragraph',
               content: [
                 {
                   type: 'text',
-                  text: "Your intelligent note-taking companion. Here's what you can do:",
+                  text: "Your AI-powered project management companion. Here's what you can do:",
                 },
               ],
             },
@@ -308,7 +308,7 @@ function App() {
                       content: [
                         {
                           type: 'text',
-                          text: "Type '/' to open the command menu and add different block types",
+                          text: 'Create projects and break them down into tasks for AI agents to execute',
                         },
                       ],
                     },
@@ -322,7 +322,7 @@ function App() {
                       content: [
                         {
                           type: 'text',
-                          text: 'Select text to see AI-powered options like rewrite, expand, or summarize',
+                          text: 'Use the Plans tab to draft and organize your ideas with AI assistance',
                         },
                       ],
                     },
@@ -336,7 +336,7 @@ function App() {
                       content: [
                         {
                           type: 'text',
-                          text: 'Click the chat icon to ask questions about your notes',
+                          text: 'Monitor agent progress and review execution logs in the Agents view',
                         },
                       ],
                     },
@@ -349,7 +349,7 @@ function App() {
               content: [
                 {
                   type: 'text',
-                  text: 'Start writing and let AI help you along the way!',
+                  text: 'Get started by creating your first project!',
                 },
               ],
             },

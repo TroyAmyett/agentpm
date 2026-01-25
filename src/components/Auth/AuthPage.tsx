@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
-import { Mail, Lock, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react'
+import { Mail, Lock, AlertCircle, CheckCircle, ArrowLeft, Bot } from 'lucide-react'
 
 type AuthMode = 'signin' | 'signup' | 'reset'
 
@@ -136,19 +136,19 @@ export function AuthPage() {
               className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center"
               style={{ background: 'linear-gradient(135deg, #0ea5e9, #14b8a6)', marginBottom: '16px' }}
             >
-              <span className="text-2xl text-white font-bold">F</span>
+              <Bot size={32} className="text-white" />
             </div>
             <h1
               className="text-2xl font-bold"
               style={{ color: 'var(--fl-color-text-primary)' }}
             >
-              {mode === 'signin' && 'Welcome Back'}
+              {mode === 'signin' && 'Welcome to AgentPM'}
               {mode === 'signup' && 'Create Account'}
               {mode === 'reset' && 'Reset Password'}
             </h1>
             <p style={{ color: 'var(--fl-color-text-secondary)', marginTop: '8px' }}>
-              {mode === 'signin' && (returnUrl ? 'Sign in to continue to your app' : 'Sign in to access Funnelists')}
-              {mode === 'signup' && 'Create your Funnelists account'}
+              {mode === 'signin' && (returnUrl ? 'Sign in to continue' : 'Sign in to manage your AI agents')}
+              {mode === 'signup' && 'Create your AgentPM account'}
               {mode === 'reset' && "We'll send you a reset link"}
             </p>
           </div>
@@ -278,7 +278,7 @@ export function AuthPage() {
           className="text-center text-sm"
           style={{ color: 'var(--fl-color-text-muted)', marginTop: '24px' }}
         >
-          Funnelists - AI-powered business tools
+          AgentPM - AI-powered project management
         </p>
       </motion.div>
     </div>
