@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, User, Calendar, AlertTriangle, Sparkles } from 'lucide-react'
-import type { TaskPriority, TaskStatus, AgentPersona, Skill } from '@/types/agentpm'
+import { X, Bot, User, Calendar, AlertTriangle, Sparkles, Target } from 'lucide-react'
+import type { TaskPriority, TaskStatus, AgentPersona, Skill, Milestone } from '@/types/agentpm'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -17,10 +17,12 @@ interface CreateTaskModalProps {
     assignedToType?: 'user' | 'agent'
     projectId?: string
     skillId?: string
+    milestoneId?: string
     status?: TaskStatus
   }) => Promise<void>
   agents: AgentPersona[]
   skills?: Skill[]
+  milestones?: Milestone[]
   projectId?: string
   defaultAgentId?: string
   defaultTitle?: string
@@ -38,6 +40,7 @@ export function CreateTaskModal({
   onSubmit,
   agents,
   skills = [],
+  milestones = [],
   projectId,
   defaultAgentId,
   defaultTitle = '',
@@ -53,6 +56,7 @@ export function CreateTaskModal({
   const [assignedTo, setAssignedTo] = useState('')
   const [assignedToType, setAssignedToType] = useState<'user' | 'agent'>('agent')
   const [skillId, setSkillId] = useState('')
+  const [milestoneId, setMilestoneId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -89,6 +93,7 @@ export function CreateTaskModal({
         assignedToType: assignedTo ? assignedToType : undefined,
         projectId,
         skillId: skillId || undefined,
+        milestoneId: milestoneId || undefined,
         status: initialStatus,
       })
       handleClose()
@@ -108,6 +113,7 @@ export function CreateTaskModal({
     setDueAt('')
     setAssignedTo('')
     setSkillId('')
+    setMilestoneId('')
     setError(null)
     onClose()
   }
@@ -323,6 +329,31 @@ export function CreateTaskModal({
                       {enabledSkills.find((s) => s.id === skillId)?.description}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Task List */}
+              {milestones.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <Target size={14} className="text-amber-500" />
+                      Task List (optional)
+                    </span>
+                  </label>
+                  <select
+                    value={milestoneId}
+                    onChange={(e) => setMilestoneId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No task list</option>
+                    {milestones.map((milestone) => (
+                      <option key={milestone.id} value={milestone.id}>
+                        {milestone.name}
+                        {milestone.status !== 'not_started' && ` (${milestone.status.replace('_', ' ')})`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
