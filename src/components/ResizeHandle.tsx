@@ -42,22 +42,23 @@ export function ResizeHandle({ side, onResize }: ResizeHandleProps) {
     <div
       onMouseDown={handleMouseDown}
       className={`
-        absolute top-0 bottom-0 w-1 cursor-col-resize z-10
-        hover:bg-primary-400 active:bg-primary-500
+        absolute top-0 bottom-0 w-2 cursor-col-resize z-50
+        hover:bg-primary-400/50 active:bg-primary-500/50
         transition-colors duration-150
-        ${side === 'left' ? 'right-0' : 'left-0'}
-        ${isDragging ? 'bg-primary-500' : 'bg-transparent'}
+        ${side === 'left' ? 'left-0 -ml-1' : 'right-0 -mr-1'}
+        ${isDragging ? 'bg-primary-500/50' : 'bg-transparent'}
       `}
       style={{
         touchAction: 'none',
       }}
     >
+      {/* Visual indicator that appears on hover */}
       <div
         className={`
-          absolute top-1/2 -translate-y-1/2 w-1 h-8 rounded-full
-          bg-surface-300 dark:bg-surface-600
-          opacity-0 hover:opacity-100 transition-opacity
-          ${side === 'left' ? 'right-0' : 'left-0'}
+          absolute top-1/2 -translate-y-1/2 w-1 h-12 rounded-full
+          bg-surface-400 dark:bg-surface-500
+          opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity
+          ${side === 'left' ? 'left-0.5' : 'right-0.5'}
         `}
       />
     </div>

@@ -24,7 +24,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { AgentDashboard } from './Dashboard'
-import { TaskList, TaskDetail, DependencyGraph } from './Tasks'
+import { TaskList, TaskDetail, DependencyGraph, GanttView, CalendarView } from './Tasks'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
 import { KanbanView } from './Kanban'
@@ -731,6 +731,20 @@ export function AgentPMPage() {
 
               {taskViewMode === 'graph' && (
                 <DependencyGraph
+                  tasks={tasks}
+                  onTaskClick={setSelectedTaskId}
+                />
+              )}
+
+              {taskViewMode === 'gantt' && (
+                <GanttView
+                  tasks={tasks}
+                  onTaskClick={setSelectedTaskId}
+                />
+              )}
+
+              {taskViewMode === 'calendar' && (
+                <CalendarView
                   tasks={tasks}
                   onTaskClick={setSelectedTaskId}
                 />

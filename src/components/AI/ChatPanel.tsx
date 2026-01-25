@@ -25,6 +25,9 @@ interface Message {
   timestamp: Date
 }
 
+// Store chat history per note (in-memory, persists while app is open)
+const chatHistoryByNote = new Map<string | null, Message[]>()
+
 export function ChatPanel() {
   const { chatPanelOpen, setChatPanelOpen, chatPanelWidth, setChatPanelWidth } = useUIStore()
   const { updateNote, addNote, currentNoteId, notes } = useNotesStore()
@@ -37,16 +40,26 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Update active note title and clear chat when note changes
+  // Track previous note ID for history management
   const prevNoteIdRef = useRef<string | null>(null)
+
+  // Save messages to history when they change
+  useEffect(() => {
+    if (currentNoteId !== undefined) {
+      chatHistoryByNote.set(currentNoteId, messages)
+    }
+  }, [messages, currentNoteId])
+
+  // Load/restore chat history when note changes
   useEffect(() => {
     if (chatPanelOpen) {
       const { currentNote } = getCurrentNoteContext()
       setActiveNoteTitle(currentNote?.title || null)
 
-      // Clear chat history when switching to a different note
-      if (prevNoteIdRef.current !== null && prevNoteIdRef.current !== currentNoteId) {
-        setMessages([])
+      // When switching notes, restore that note's chat history
+      if (prevNoteIdRef.current !== currentNoteId) {
+        const savedHistory = chatHistoryByNote.get(currentNoteId) || []
+        setMessages(savedHistory)
         setError(null)
       }
       prevNoteIdRef.current = currentNoteId
@@ -116,7 +129,8 @@ export function ChatPanel() {
   }, [currentNoteId, notes, updateNote, addNote])
 
   const handleResize = useCallback((delta: number) => {
-    setChatPanelWidth(chatPanelWidth + delta)
+    // For a panel on the right side, dragging left (negative delta) should increase width
+    setChatPanelWidth(chatPanelWidth - delta)
   }, [chatPanelWidth, setChatPanelWidth])
 
   const scrollToBottom = () => {
@@ -377,12 +391,17 @@ export function ChatPanel() {
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value)
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto'
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                  }}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask about your notes..."
-                  rows={1}
+                  rows={2}
                   className="flex-1 px-4 py-2.5 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  style={{ maxHeight: '120px' }}
+                  style={{ minHeight: '60px', maxHeight: '200px' }}
                 />
                 <button
                   onClick={handleSend}

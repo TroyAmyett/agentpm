@@ -1,25 +1,123 @@
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useNotesStore } from '@/stores/notesStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useTemplatesStore } from '@/stores/templatesStore'
 import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
+import { SaveAsTemplateModal } from './SaveAsTemplateModal'
+import { BookTemplate } from 'lucide-react'
+
+// Debounce helper with flush capability for note updates
+interface DebouncedNoteUpdate {
+  (noteId: string, content: JSONContent): void
+  cancel: () => void
+  flush: () => void
+}
+
+function createDebouncedNoteUpdate(
+  fn: (noteId: string, content: JSONContent) => void,
+  delay: number
+): DebouncedNoteUpdate {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let pendingNoteId: string | null = null
+  let pendingContent: JSONContent | null = null
+
+  const debounced = (noteId: string, content: JSONContent) => {
+    pendingNoteId = noteId
+    pendingContent = content
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => {
+      fn(noteId, content)
+      pendingNoteId = null
+      pendingContent = null
+      timeoutId = null
+    }, delay)
+  }
+
+  debounced.cancel = () => {
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = null
+    pendingNoteId = null
+    pendingContent = null
+  }
+
+  // Flush immediately executes any pending call
+  debounced.flush = () => {
+    if (timeoutId && pendingNoteId && pendingContent) {
+      clearTimeout(timeoutId)
+      fn(pendingNoteId, pendingContent)
+      timeoutId = null
+      pendingNoteId = null
+      pendingContent = null
+    }
+  }
+
+  return debounced
+}
 
 export function BlockEditor() {
-  const { currentNoteId, notes, updateNote } = useNotesStore()
+  const { currentNoteId, notes, updateNote, isAuthenticated } = useNotesStore()
   const { showAIToolbar, hideAIToolbar } = useUIStore()
+  const { createTemplate } = useTemplatesStore()
 
   const currentNote = notes.find((n) => n.id === currentNoteId)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
 
   // Track right-click to prevent AI toolbar during context menu
   const isRightClickRef = useRef(false)
   // Timer for delayed AI toolbar show
   const aiToolbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track if we're setting content programmatically (to avoid save loop)
+  const isSettingContentRef = useRef(false)
+
+  // Debounced update function - saves after 500ms of inactivity
+  const debouncedUpdate = useMemo(
+    () =>
+      createDebouncedNoteUpdate((noteId: string, content: JSONContent) => {
+        updateNote(noteId, { content })
+      }, 500),
+    [updateNote]
+  )
+
+  // Flush pending saves when note changes or component unmounts
+  // This ensures content is saved before switching away
+  useEffect(() => {
+    return () => {
+      // Flush any pending update to ensure content is saved
+      debouncedUpdate.flush()
+    }
+  }, [debouncedUpdate, currentNoteId])
+
+  const handleSaveAsTemplate = useCallback(() => {
+    if (currentNote && currentNote.content && isAuthenticated) {
+      setShowTemplateModal(true)
+    }
+  }, [currentNote, isAuthenticated])
+
+  const handleSaveTemplate = useCallback(async (data: {
+    name: string
+    description: string
+    icon: string
+    category: string
+  }) => {
+    if (!currentNote?.content) {
+      throw new Error('Note has no content')
+    }
+
+    await createTemplate({
+      name: data.name,
+      description: data.description || undefined,
+      icon: data.icon,
+      category: data.category || undefined,
+      content: currentNote.content,
+    })
+  }, [currentNote, createTemplate])
 
   // Handle right-click (context menu)
   const handleContextMenu = useCallback(() => {
@@ -92,9 +190,11 @@ export function BlockEditor() {
       },
     },
     onUpdate: ({ editor }) => {
+      // Don't save if we're programmatically setting content
+      if (isSettingContentRef.current) return
       if (currentNoteId) {
         const content = editor.getJSON()
-        updateNote(currentNoteId, { content })
+        debouncedUpdate(currentNoteId, content)
       }
     },
     onSelectionUpdate: ({ editor }) => {
@@ -139,10 +239,20 @@ export function BlockEditor() {
     if (editor && currentNote) {
       const currentContent = editor.getJSON()
       if (JSON.stringify(currentContent) !== JSON.stringify(currentNote.content)) {
+        // Mark that we're setting content programmatically to avoid save loop
+        isSettingContentRef.current = true
         editor.commands.setContent(currentNote.content || '')
+        // Reset flag after a tick to allow future user edits to save
+        setTimeout(() => {
+          isSettingContentRef.current = false
+        }, 0)
       }
     } else if (editor && !currentNote) {
+      isSettingContentRef.current = true
       editor.commands.setContent('')
+      setTimeout(() => {
+        isSettingContentRef.current = false
+      }, 0)
     }
   }, [editor, currentNote, currentNoteId])
 
@@ -158,26 +268,47 @@ export function BlockEditor() {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-12 py-12">
-        {/* Title Input */}
-        <input
-          type="text"
-          value={currentNote.title}
-          onChange={(e) => updateNote(currentNote.id, { title: e.target.value })}
-          placeholder="Untitled"
-          className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 text-surface-900 dark:text-surface-100 placeholder:text-surface-300"
-        />
+    <>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-12 py-12">
+          {/* Title Input with Save as Template */}
+          <div className="flex items-start gap-2 mb-8">
+            <input
+              type="text"
+              value={currentNote.title}
+              onChange={(e) => updateNote(currentNote.id, { title: e.target.value })}
+              placeholder="Untitled"
+              className="flex-1 text-4xl font-bold bg-transparent border-none outline-none text-surface-900 dark:text-surface-100 placeholder:text-surface-300"
+            />
+            {isAuthenticated && currentNote.content && (
+              <button
+                onClick={handleSaveAsTemplate}
+                title="Save as Template"
+                className="p-2 mt-1 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors"
+              >
+                <BookTemplate size={20} />
+              </button>
+            )}
+          </div>
 
-        {/* Formatting Toolbar */}
-        {editor && <FormattingToolbar editor={editor} />}
+          {/* Formatting Toolbar */}
+          {editor && <FormattingToolbar editor={editor} />}
 
-        {/* Editor */}
-        <EditorContent
-          editor={editor}
-          className="min-h-[calc(100vh-300px)]"
-        />
+          {/* Editor */}
+          <EditorContent
+            editor={editor}
+            className="min-h-[calc(100vh-300px)]"
+          />
+        </div>
       </div>
-    </div>
+
+      {/* Save as Template Modal */}
+      <SaveAsTemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSave={handleSaveTemplate}
+        defaultName={currentNote.title !== 'Untitled' ? `${currentNote.title} Template` : ''}
+      />
+    </>
   )
 }

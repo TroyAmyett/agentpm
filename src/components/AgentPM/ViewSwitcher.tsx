@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, List, Bot, ChevronDown, Check, GitBranch } from 'lucide-react'
+import { LayoutGrid, List, Bot, ChevronDown, Check, GitBranch, GanttChart, Calendar } from 'lucide-react'
 import type { TaskViewMode } from '@/stores/uiStore'
 
 interface ViewOption {
@@ -36,6 +36,18 @@ const VIEW_OPTIONS: ViewOption[] = [
     label: 'Dependencies',
     icon: <GitBranch size={16} />,
     description: 'Network graph of task dependencies',
+  },
+  {
+    id: 'gantt',
+    label: 'Gantt',
+    icon: <GanttChart size={16} />,
+    description: 'Timeline view with dependencies',
+  },
+  {
+    id: 'calendar',
+    label: 'Calendar',
+    icon: <Calendar size={16} />,
+    description: 'Tasks by due date',
   },
 ]
 
