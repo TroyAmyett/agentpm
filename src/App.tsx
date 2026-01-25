@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useUIStore } from '@/stores/uiStore'
 import { useNotesStore } from '@/stores/notesStore'
 import { useAuth } from '@/hooks/useAuth'
+import { useAuthStore } from '@/stores/authStore'
 import { useSyncQueue } from '@/hooks/useSyncQueue'
 import { NotesList } from '@/components/Sidebar/NotesList'
 import { BlockEditor } from '@/components/Editor/BlockEditor'
@@ -224,6 +225,7 @@ function HorizontalNav({
 
 function App() {
   const { initialized, isAuthenticated } = useAuth()
+  const { session } = useAuthStore()
   useSyncQueue()
 
   const [currentView, setCurrentView] = useState<AppView>(getViewFromHash)
@@ -237,6 +239,22 @@ function App() {
     sidebarWidth,
     setSidebarWidth,
   } = useUIStore()
+
+  // Generate Radar URL with session token for SSO
+  // Pass tokens via URL hash (fragment) to avoid server logging
+  const radarUrl = useMemo(() => {
+    const baseUrl = getAppUrl('radar')
+    if (session?.access_token && session?.refresh_token) {
+      // Encode tokens and pass via hash for cross-subdomain SSO
+      const params = new URLSearchParams({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: String(session.expires_at || ''),
+      })
+      return `${baseUrl}#sso=${btoa(params.toString())}`
+    }
+    return baseUrl
+  }, [session])
   const { notes, addNote, currentNoteId } = useNotesStore()
   const { createTemplate } = useTemplatesStore()
   const currentNote = notes.find(n => n.id === currentNoteId)
@@ -518,7 +536,7 @@ function App() {
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {currentView === 'radar' && (
             <iframe
-              src={getAppUrl('radar')}
+              src={radarUrl}
               className="w-full h-full border-0"
               title="Radar"
               allow="clipboard-read; clipboard-write"
