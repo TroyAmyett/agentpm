@@ -6,6 +6,7 @@ import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { executeTask, type ExecutionResult, type ExecutionStatusCallback } from '@/services/agents/executor'
 import { parseAgentOutput } from '@/services/agents/outputParser'
 import { uploadAgentOutputFiles, type Attachment } from '@/services/attachments/attachmentService'
+import { useTaskStore } from './taskStore'
 
 export type ExecutionStatus =
   | 'pending'
@@ -261,13 +262,16 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       console.log(`[Execution] Started task "${task.title}" (${get().activeExecutions.size} active)`)
 
       // Status callback
-      const onStatusChange: ExecutionStatusCallback = (status) => {
-        set({ executionStatus: status })
+      const onStatusChange: ExecutionStatusCallback = (status, detail) => {
+        set({ executionStatus: status === 'using_tools' ? 'calling_api' : status })
+        if (detail) {
+          console.log(`[Execution] Status: ${status} - ${detail}`)
+        }
       }
 
-      // Execute the task
+      // Execute the task with tools enabled
       const result: ExecutionResult = await executeTask(
-        { task, agent, skill },
+        { task, agent, skill, accountId, enableTools: true },
         onStatusChange
       )
 
@@ -294,28 +298,30 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       // Update task status based on execution result
       console.log(`[Execution] Task "${task.title}" completed. Success: ${result.success}`)
+      const newStatus = result.success ? 'review' : 'queued'
+
       if (result.success) {
-        // Move to review when execution completes successfully
         console.log(`[Execution] Moving task ${task.id} to review...`)
-        const { error: taskUpdateError } = await supabase
-          .from('tasks')
-          .update({ status: 'review' })
-          .eq('id', task.id)
-        if (taskUpdateError) {
-          console.error('[Execution] Failed to update task to review:', taskUpdateError)
-        } else {
-          console.log(`[Execution] Task "${task.title}" moved to review`)
-        }
       } else {
-        // Move back to queued on failure so it can be retried
         console.log(`[Execution] Task failed, moving back to queued. Error: ${result.error}`)
-        const { error: taskUpdateError } = await supabase
-          .from('tasks')
-          .update({ status: 'queued' })
-          .eq('id', task.id)
-        if (taskUpdateError) {
-          console.error('[Execution] Failed to update task to queued:', taskUpdateError)
-        }
+      }
+
+      const { error: taskUpdateError } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', task.id)
+
+      if (taskUpdateError) {
+        console.error(`[Execution] Failed to update task to ${newStatus}:`, taskUpdateError)
+      } else {
+        console.log(`[Execution] Task "${task.title}" moved to ${newStatus}`)
+        // Update the local taskStore so UI reflects the change immediately
+        const taskStore = useTaskStore.getState()
+        taskStore.handleRemoteTaskChange({
+          ...task,
+          status: newStatus as Task['status'],
+          updatedAt: new Date().toISOString(),
+        })
       }
 
       // Parse agent output for files and upload to storage

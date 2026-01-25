@@ -11,6 +11,9 @@ import {
   Bot,
   Hammer,
   FolderKanban,
+  Cpu,
+  Settings,
+  ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -32,9 +35,10 @@ import { ProjectsPage } from './Projects'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
 import { routeTask, analyzeTaskForDecomposition } from '@/services/agents/dispatcher'
+import { BUILT_IN_TOOLS } from '@/services/tools'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge'
+type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge' | 'tools'
 
 interface Tab {
   id: TabId
@@ -50,6 +54,7 @@ const tabs: Tab[] = [
   { id: 'agents', label: 'Agents', icon: <Bot size={18} /> },
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
   { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
+  { id: 'tools', label: 'Tools', icon: <Cpu size={18} /> },
 ]
 
 export function AgentPMPage() {
@@ -924,6 +929,122 @@ export function AgentPMPage() {
         )}
 
         {activeTab === 'skills' && <SkillsPage />}
+
+        {activeTab === 'tools' && (
+          <div className="h-full overflow-auto p-6">
+            <div className="max-w-3xl mx-auto">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                    <Cpu className="text-cyan-500" size={24} />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">
+                      Agent Tools
+                    </h1>
+                    <p className="text-surface-500">
+                      Real-time capabilities for task execution
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    // Navigate to settings - this would need to be connected to your routing
+                    window.dispatchEvent(new CustomEvent('navigate-to-settings', { detail: { tab: 'agent-tools' } }))
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300 transition-colors"
+                >
+                  <Settings size={16} />
+                  Manage in Settings
+                  <ExternalLink size={14} />
+                </a>
+              </div>
+
+              {/* Info Banner */}
+              <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-xl mb-6">
+                <p className="text-sm text-cyan-700 dark:text-cyan-300">
+                  Tools give agents real-time capabilities during task execution. When an agent needs current data or verification, it automatically uses the appropriate tool.
+                </p>
+              </div>
+
+              {/* Tools Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {BUILT_IN_TOOLS.map((tool) => (
+                  <div
+                    key={tool.id}
+                    className="p-4 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center flex-shrink-0">
+                        {tool.name.includes('domain') ? (
+                          <span className="text-lg">🌐</span>
+                        ) : tool.name.includes('search') ? (
+                          <span className="text-lg">🔍</span>
+                        ) : tool.name.includes('dns') ? (
+                          <span className="text-lg">📡</span>
+                        ) : (
+                          <span className="text-lg">🔗</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-surface-900 dark:text-surface-100">
+                            {tool.displayName}
+                          </h3>
+                          <span
+                            className={`px-1.5 py-0.5 text-xs rounded ${
+                              tool.isEnabled
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+                            }`}
+                          >
+                            {tool.isEnabled ? 'Active' : 'Disabled'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-surface-500 mt-1">
+                          {tool.description}
+                        </p>
+                        {tool.requiresApiKey && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                            ⚠️ Requires API key configuration
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Usage Info */}
+              <div className="mt-8 p-6 bg-surface-100 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+                <h3 className="font-semibold text-surface-900 dark:text-surface-100 mb-3">
+                  How Tools Work
+                </h3>
+                <ol className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <span>When a task runs, agents are told which tools are available</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <span>If the agent needs real data (like checking domain availability), it requests to use a tool</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <span>The tool executes and returns live results to the agent</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                    <span>The agent incorporates the real data into its response</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
