@@ -144,19 +144,28 @@ jobs:
           }
 
           console.log(`Inserting ${entries.length} changelog entries`);
+          console.log('Entries:', JSON.stringify(entries, null, 2));
 
-          // Insert entries (upsert by commit_hash to avoid duplicates)
-          const { error: insertError } = await supabase
-            .from('changelog_entries')
-            .upsert(entries, {
-              onConflict: 'commit_hash',
-              ignoreDuplicates: true,
-            });
+          // Insert entries one by one to handle duplicates gracefully
+          let inserted = 0;
+          for (const entry of entries) {
+            const { error: insertError } = await supabase
+              .from('changelog_entries')
+              .insert(entry);
 
-          if (insertError) {
-            console.error('Failed to insert entries:', insertError);
-            process.exit(1);
+            if (insertError) {
+              // Skip duplicates (unique constraint violation)
+              if (insertError.code === '23505') {
+                console.log(`Skipping duplicate: ${entry.title}`);
+                continue;
+              }
+              console.error('Failed to insert entry:', entry.title, insertError);
+              process.exit(1);
+            }
+            inserted++;
           }
+
+          console.log(`Inserted ${inserted} new entries (${entries.length - inserted} duplicates skipped)`);
 
           // Update sync state
           const { error: syncError } = await supabase
