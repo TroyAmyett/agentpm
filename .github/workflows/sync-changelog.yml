@@ -62,7 +62,11 @@ jobs:
             ? `${lastHash}..HEAD`
             : '--since="30 days ago"';
 
-          const format = '%H|%s|%b|%ad';
+          // Use %x00 (null byte) as delimiter to handle multi-line bodies
+          const DELIM = '\x00';
+          const COMMIT_SEP = '\x01';
+          const format = `%H${DELIM}%s${DELIM}%b${DELIM}%ad${COMMIT_SEP}`;
+
           const gitLog = execSync(
             `git log ${range} --pretty=format:"${format}" --date=short`,
             { encoding: 'utf-8' }
@@ -73,7 +77,8 @@ jobs:
             process.exit(0);
           }
 
-          const commits = gitLog.split('\n').filter(Boolean);
+          // Split by commit separator, filter empty
+          const commits = gitLog.split(COMMIT_SEP).filter(c => c.trim());
           console.log(`Found ${commits.length} commits to process`);
 
           // Parse conventional commit format: type(scope): title
@@ -83,14 +88,25 @@ jobs:
           let latestHash = null;
 
           for (const commit of commits) {
-            const [hash, subject, body, date] = commit.split('|');
+            const parts = commit.split(DELIM);
+            if (parts.length < 4) {
+              console.log('Skipping malformed commit entry');
+              continue;
+            }
 
-            if (!latestHash) latestHash = hash;
+            const [hash, subject, body, date] = parts;
 
-            const match = subject.match(conventionalRegex);
+            if (!hash || !subject) {
+              console.log('Skipping commit with missing hash or subject');
+              continue;
+            }
+
+            if (!latestHash) latestHash = hash.trim();
+
+            const match = subject.trim().match(conventionalRegex);
             if (!match) {
-              // Non-conventional commit, skip or use as 'chore'
-              console.log(`Skipping non-conventional commit: ${subject}`);
+              // Non-conventional commit, skip
+              console.log(`Skipping non-conventional commit: ${subject.trim().slice(0, 60)}`);
               continue;
             }
 
@@ -114,10 +130,10 @@ jobs:
             entries.push({
               product,
               title,
-              description,
+              description: description || null,
               commit_type: type,
-              commit_hash: hash,
-              commit_date: date,
+              commit_hash: hash.trim(),
+              commit_date: date.trim(),
               is_highlight: isHighlight,
             });
           }
