@@ -537,6 +537,7 @@ export interface CreateBuilderSkillInput {
   name: string
   description: string
   content: string
+  category?: SkillCategory
   forkedFrom?: string
   builderConversation: SkillBuilderMessage[]
 }
@@ -561,7 +562,7 @@ export async function createBuilderSkill(input: CreateBuilderSkillInput): Promis
         version: metadata.version || '1.0.0',
         author: metadata.author || null,
         tags: metadata.tags || [],
-        category: metadata.category || null,
+        category: metadata.category || input.category || null,
         content: input.content,
         sourceType: 'local' as SkillSourceType,
         forkedFrom: input.forkedFrom || null,
@@ -587,6 +588,7 @@ export async function updateBuilderSkill(
     name: string
     description: string
     content: string
+    category?: SkillCategory
     builderConversation: SkillBuilderMessage[]
   }
 ): Promise<Skill> {
@@ -604,7 +606,7 @@ export async function updateBuilderSkill(
         version: metadata.version,
         author: metadata.author,
         tags: metadata.tags,
-        category: metadata.category,
+        category: metadata.category || input.category,
         content: input.content,
         builderConversation: input.builderConversation,
         updatedAt: new Date().toISOString(),

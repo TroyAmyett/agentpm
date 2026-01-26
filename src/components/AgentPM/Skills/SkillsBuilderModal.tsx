@@ -19,12 +19,13 @@ import {
 } from 'lucide-react'
 import { callClaude, isAnthropicConfigured } from '@/services/ai/anthropic'
 import { searchGitHubSkills, type GitHubSkillResult } from '@/services/skills/githubSkillSearch'
-import type { Skill, SkillBuilderMessage } from '@/types/agentpm'
+import type { Skill, SkillBuilderMessage, SkillCategory } from '@/types/agentpm'
+import { SKILL_CATEGORY_INFO } from '@/types/agentpm'
 
 interface SkillsBuilderModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (skill: { name: string; description: string; content: string; forkedFrom?: string; builderConversation: SkillBuilderMessage[] }) => Promise<void>
+  onSave: (skill: { name: string; description: string; content: string; category?: SkillCategory; forkedFrom?: string; builderConversation: SkillBuilderMessage[] }) => Promise<void>
   officialSkills?: Skill[] // @fun/ skills for discovery
   editingSkill?: Skill | null // Skill being edited (for "Edit" flow)
   baseSkill?: Skill | null // Skill being customized (for "Customize" flow)
@@ -106,6 +107,7 @@ export function SkillsBuilderModal({
     name: string
     description: string
     content: string
+    category?: SkillCategory
   } | null>(null)
 
   // Search state
@@ -133,6 +135,7 @@ export function SkillsBuilderModal({
           name: editingSkill.name,
           description: editingSkill.description || '',
           content: editingSkill.content,
+          category: editingSkill.category as SkillCategory | undefined,
         })
       } else if (baseSkill) {
         // Start with customization prompt
@@ -404,6 +407,7 @@ export function SkillsBuilderModal({
         name: skillPreview.name,
         description: skillPreview.description,
         content: skillPreview.content,
+        category: skillPreview.category,
         forkedFrom: selectedBase?.id,
         builderConversation: messages,
       })
@@ -719,6 +723,28 @@ export function SkillsBuilderModal({
                             }
                             className="w-full px-3 py-2 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-surface-500 uppercase tracking-wider mb-1">
+                            Category
+                          </label>
+                          <select
+                            value={skillPreview.category || ''}
+                            onChange={(e) =>
+                              setSkillPreview({
+                                ...skillPreview,
+                                category: e.target.value as SkillCategory || undefined
+                              })
+                            }
+                            className="w-full px-3 py-2 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="">Select a category...</option>
+                            {(Object.keys(SKILL_CATEGORY_INFO) as SkillCategory[]).map((cat) => (
+                              <option key={cat} value={cat}>
+                                {SKILL_CATEGORY_INFO[cat].label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         {/* Content Preview */}

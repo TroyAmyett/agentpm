@@ -172,6 +172,7 @@ export function SkillsPage() {
       name: string
       description: string
       content: string
+      category?: SkillCategory
       forkedFrom?: string
       builderConversation: SkillBuilderMessage[]
     }) => {
@@ -181,6 +182,7 @@ export function SkillsPage() {
           name: skillData.name,
           description: skillData.description,
           content: skillData.content,
+          category: skillData.category,
           builderConversation: skillData.builderConversation,
         })
       } else {

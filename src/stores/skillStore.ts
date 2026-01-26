@@ -1,7 +1,7 @@
 // Skill Store - Zustand store for AgentPM skills management
 
 import { create } from 'zustand'
-import type { Skill, SkillBuilderMessage } from '@/types/agentpm'
+import type { Skill, SkillBuilderMessage, SkillCategory } from '@/types/agentpm'
 import * as skillsService from '@/services/skills'
 import { isAuthError, handleAuthError } from '@/services/supabase/client'
 
@@ -30,6 +30,7 @@ interface SkillState {
       name: string
       description: string
       content: string
+      category?: SkillCategory
       forkedFrom?: string
       builderConversation: SkillBuilderMessage[]
     }
@@ -40,6 +41,7 @@ interface SkillState {
       name: string
       description: string
       content: string
+      category?: SkillCategory
       builderConversation: SkillBuilderMessage[]
     }
   ) => Promise<Skill>
