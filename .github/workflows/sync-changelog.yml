@@ -153,29 +153,48 @@ jobs:
           }
 
           console.log(`Inserting ${entries.length} changelog entries`);
-          console.log('Entries:', JSON.stringify(entries, null, 2));
+
+          // Test: verify table is accessible
+          const { data: testData, error: testError } = await supabase
+            .from('changelog_entries')
+            .select('id')
+            .limit(1);
+
+          if (testError) {
+            console.error('Cannot access changelog_entries table:', testError);
+            process.exit(1);
+          }
+          console.log('Table access verified, existing entries:', testData?.length || 0);
 
           // Insert entries one by one to handle duplicates gracefully
           let inserted = 0;
           for (const entry of entries) {
-            const { error: insertError } = await supabase
-              .from('changelog_entries')
-              .insert(entry);
+            console.log(`Inserting: ${entry.title}`);
+            try {
+              const { data, error: insertError, status, statusText } = await supabase
+                .from('changelog_entries')
+                .insert(entry)
+                .select();
 
-            if (insertError) {
-              // Skip duplicates (unique constraint violation)
-              if (insertError.code === '23505') {
-                console.log(`Skipping duplicate: ${entry.title}`);
-                continue;
+              console.log(`Response status: ${status} ${statusText}`);
+
+              if (insertError) {
+                // Skip duplicates (unique constraint violation)
+                if (insertError.code === '23505') {
+                  console.log(`Skipping duplicate: ${entry.title}`);
+                  continue;
+                }
+                console.error('Insert failed:', insertError.message || 'No message');
+                console.error('Full error:', JSON.stringify(insertError));
+                process.exit(1);
               }
-              console.error('Failed to insert entry:', entry.title);
-              console.error('Error details:', JSON.stringify(insertError, null, 2));
-              console.error('Error code:', insertError.code);
-              console.error('Error hint:', insertError.hint);
-              console.error('Error details:', insertError.details);
+
+              console.log(`Inserted successfully:`, data?.[0]?.id);
+              inserted++;
+            } catch (e) {
+              console.error('Exception during insert:', e);
               process.exit(1);
             }
-            inserted++;
           }
 
           console.log(`Inserted ${inserted} new entries (${entries.length - inserted} duplicates skipped)`);
