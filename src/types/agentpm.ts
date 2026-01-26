@@ -498,6 +498,17 @@ export interface ProjectContact {
 
 export type MilestoneStatus = 'not_started' | 'in_progress' | 'completed'
 
+export type ScheduleType = 'none' | 'once' | 'daily' | 'weekly' | 'monthly'
+
+export interface MilestoneSchedule {
+  type: ScheduleType
+  hour: number // 0-23, hour of day to run (on the hour only)
+  dayOfWeek?: number // 0-6 (Sunday-Saturday) for weekly
+  dayOfMonth?: number // 1-31 for monthly
+  runDate?: string // ISO date for one-time schedules
+  endDate?: string // Optional end date for recurring schedules
+}
+
 export interface Milestone extends BaseEntity {
   projectId: string
 
@@ -509,6 +520,12 @@ export interface Milestone extends BaseEntity {
 
   dueDate?: string
   completedAt?: string
+
+  // Scheduling
+  schedule?: MilestoneSchedule
+  nextRunAt?: string // Next scheduled execution time
+  lastRunAt?: string // Last time this schedule ran
+  isScheduleActive?: boolean // Whether the schedule is enabled
 }
 
 // =============================================================================

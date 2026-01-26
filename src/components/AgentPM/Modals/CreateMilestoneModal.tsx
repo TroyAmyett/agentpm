@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Target, Calendar } from 'lucide-react'
-import type { MilestoneStatus, Milestone } from '@/types/agentpm'
+import { X, Target, Calendar, Clock, RotateCcw } from 'lucide-react'
+import type { MilestoneStatus, Milestone, ScheduleType, MilestoneSchedule } from '@/types/agentpm'
 
 interface CreateMilestoneModalProps {
   isOpen: boolean
@@ -14,6 +14,8 @@ interface CreateMilestoneModalProps {
     status: MilestoneStatus
     dueDate?: string
     sortOrder: number
+    schedule?: MilestoneSchedule
+    isScheduleActive?: boolean
   }) => Promise<void>
   onUpdate?: (id: string, updates: Partial<Milestone>) => Promise<void>
   existingMilestonesCount: number
@@ -35,6 +37,15 @@ export function CreateMilestoneModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Schedule fields
+  const [scheduleType, setScheduleType] = useState<ScheduleType>('none')
+  const [scheduleHour, setScheduleHour] = useState(22) // Default 10 PM
+  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(0) // Sunday
+  const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1)
+  const [scheduleRunDate, setScheduleRunDate] = useState('')
+  const [scheduleEndDate, setScheduleEndDate] = useState('')
+  const [isScheduleActive, setIsScheduleActive] = useState(false)
+
   const isEditing = !!editingMilestone
 
   // Populate form when editing
@@ -44,12 +55,28 @@ export function CreateMilestoneModal({
       setDescription(editingMilestone.description || '')
       setStatus(editingMilestone.status)
       setDueDate(editingMilestone.dueDate || '')
+      // Schedule fields
+      setScheduleType(editingMilestone.schedule?.type || 'none')
+      setScheduleHour(editingMilestone.schedule?.hour ?? 22)
+      setScheduleDayOfWeek(editingMilestone.schedule?.dayOfWeek ?? 0)
+      setScheduleDayOfMonth(editingMilestone.schedule?.dayOfMonth ?? 1)
+      setScheduleRunDate(editingMilestone.schedule?.runDate || '')
+      setScheduleEndDate(editingMilestone.schedule?.endDate || '')
+      setIsScheduleActive(editingMilestone.isScheduleActive || false)
     } else {
       // Reset to defaults when creating new
       setName('')
       setDescription('')
       setStatus('not_started')
       setDueDate('')
+      // Reset schedule fields
+      setScheduleType('none')
+      setScheduleHour(22)
+      setScheduleDayOfWeek(0)
+      setScheduleDayOfMonth(1)
+      setScheduleRunDate('')
+      setScheduleEndDate('')
+      setIsScheduleActive(false)
     }
   }, [editingMilestone])
 
@@ -64,12 +91,24 @@ export function CreateMilestoneModal({
     setError(null)
 
     try {
+      // Build schedule object if scheduling is enabled
+      const schedule: MilestoneSchedule | undefined = scheduleType !== 'none' ? {
+        type: scheduleType,
+        hour: scheduleHour,
+        ...(scheduleType === 'weekly' && { dayOfWeek: scheduleDayOfWeek }),
+        ...(scheduleType === 'monthly' && { dayOfMonth: scheduleDayOfMonth }),
+        ...(scheduleType === 'once' && scheduleRunDate && { runDate: scheduleRunDate }),
+        ...(scheduleEndDate && { endDate: scheduleEndDate }),
+      } : undefined
+
       if (isEditing && onUpdate) {
         await onUpdate(editingMilestone.id, {
           name: name.trim(),
           description: description.trim() || undefined,
           status,
           dueDate: dueDate || undefined,
+          schedule,
+          isScheduleActive: scheduleType !== 'none' ? isScheduleActive : false,
         })
       } else {
         await onSubmit({
@@ -78,6 +117,8 @@ export function CreateMilestoneModal({
           status,
           dueDate: dueDate || undefined,
           sortOrder: existingMilestonesCount + 1,
+          schedule,
+          isScheduleActive: scheduleType !== 'none' ? isScheduleActive : false,
         })
       }
       handleClose()
@@ -96,6 +137,14 @@ export function CreateMilestoneModal({
     setStatus('not_started')
     setDueDate('')
     setError(null)
+    // Reset schedule fields
+    setScheduleType('none')
+    setScheduleHour(22)
+    setScheduleDayOfWeek(0)
+    setScheduleDayOfMonth(1)
+    setScheduleRunDate('')
+    setScheduleEndDate('')
+    setIsScheduleActive(false)
     onClose()
   }
 
@@ -207,6 +256,156 @@ export function CreateMilestoneModal({
                     className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
+              </div>
+
+              {/* Schedule Section */}
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-4 mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <RotateCcw size={16} className="text-surface-500" />
+                  <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                    Schedule
+                  </span>
+                  <span className="text-xs text-surface-400">(Optional)</span>
+                </div>
+
+                {/* Schedule Type */}
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Schedule Type
+                  </label>
+                  <select
+                    value={scheduleType}
+                    onChange={(e) => setScheduleType(e.target.value as ScheduleType)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="none">No Schedule</option>
+                    <option value="once">One-Time</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+
+                {/* Schedule Details - shown when schedule type is not 'none' */}
+                {scheduleType !== 'none' && (
+                  <div className="space-y-3 p-3 bg-surface-50 dark:bg-surface-900 rounded-lg">
+                    {/* One-time: Run Date */}
+                    {scheduleType === 'once' && (
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                          <Calendar size={14} className="inline mr-1" />
+                          Run Date
+                        </label>
+                        <input
+                          type="date"
+                          value={scheduleRunDate}
+                          onChange={(e) => setScheduleRunDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Hour of day */}
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                        <Clock size={14} className="inline mr-1" />
+                        Time (Hour)
+                      </label>
+                      <select
+                        value={scheduleHour}
+                        onChange={(e) => setScheduleHour(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Weekly: Day of Week */}
+                    {scheduleType === 'weekly' && (
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                          Day of Week
+                        </label>
+                        <select
+                          value={scheduleDayOfWeek}
+                          onChange={(e) => setScheduleDayOfWeek(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value={0}>Sunday</option>
+                          <option value={1}>Monday</option>
+                          <option value={2}>Tuesday</option>
+                          <option value={3}>Wednesday</option>
+                          <option value={4}>Thursday</option>
+                          <option value={5}>Friday</option>
+                          <option value={6}>Saturday</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Monthly: Day of Month */}
+                    {scheduleType === 'monthly' && (
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                          Day of Month
+                        </label>
+                        <select
+                          value={scheduleDayOfMonth}
+                          onChange={(e) => setScheduleDayOfMonth(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          {Array.from({ length: 28 }, (_, i) => (
+                            <option key={i + 1} value={i + 1}>
+                              {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-surface-400 mt-1">
+                          Days 29-31 not available to ensure consistency
+                        </p>
+                      </div>
+                    )}
+
+                    {/* End Date (for recurring) */}
+                    {scheduleType !== 'once' && (
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                          <Calendar size={14} className="inline mr-1" />
+                          End Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={scheduleEndDate}
+                          onChange={(e) => setScheduleEndDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Active Toggle */}
+                    <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">
+                      <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                        Schedule Active
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsScheduleActive(!isScheduleActive)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          isScheduleActive ? 'bg-primary-600' : 'bg-surface-300 dark:bg-surface-600'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isScheduleActive ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}

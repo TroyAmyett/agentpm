@@ -1,9 +1,72 @@
 // Milestone Store - Zustand store for AgentPM milestones
 
 import { create } from 'zustand'
-import type { Milestone, UpdateEntity } from '@/types/agentpm'
+import type { Milestone, MilestoneSchedule, UpdateEntity } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
 import { isAuthError, handleAuthError } from '@/services/supabase/client'
+
+// Calculate the next run time based on schedule configuration
+function calculateNextRun(schedule: MilestoneSchedule | undefined): string | undefined {
+  if (!schedule || schedule.type === 'none') return undefined
+
+  const now = new Date()
+  let next: Date
+
+  switch (schedule.type) {
+    case 'once':
+      // For one-time, use the runDate with the specified hour
+      if (!schedule.runDate) return undefined
+      next = new Date(schedule.runDate)
+      next.setHours(schedule.hour, 0, 0, 0)
+      // If already passed, don't schedule
+      if (next <= now) return undefined
+      break
+
+    case 'daily':
+      next = new Date(now)
+      next.setHours(schedule.hour, 0, 0, 0)
+      if (next <= now) {
+        next.setDate(next.getDate() + 1)
+      }
+      break
+
+    case 'weekly': {
+      next = new Date(now)
+      next.setHours(schedule.hour, 0, 0, 0)
+      const dayOfWeek = schedule.dayOfWeek ?? 0
+      const currentDay = next.getDay()
+      let daysUntil = dayOfWeek - currentDay
+      if (daysUntil < 0 || (daysUntil === 0 && next <= now)) {
+        daysUntil += 7
+      }
+      next.setDate(next.getDate() + daysUntil)
+      break
+    }
+
+    case 'monthly': {
+      const dayOfMonth = schedule.dayOfMonth ?? 1
+      next = new Date(now.getFullYear(), now.getMonth(), dayOfMonth, schedule.hour, 0, 0, 0)
+      if (next <= now) {
+        next.setMonth(next.getMonth() + 1)
+      }
+      break
+    }
+
+    default:
+      return undefined
+  }
+
+  // Check end date
+  if (schedule.endDate) {
+    const endDate = new Date(schedule.endDate)
+    endDate.setHours(23, 59, 59, 999)
+    if (next > endDate) {
+      return undefined
+    }
+  }
+
+  return next.toISOString()
+}
 
 interface MilestoneState {
   // State
@@ -75,7 +138,15 @@ export const useMilestoneStore = create<MilestoneState>((set, get) => ({
   createMilestone: async (milestoneData) => {
     const { milestones } = get()
 
-    const milestone = await db.createMilestone(milestoneData)
+    // Calculate next_run_at if schedule is active
+    const dataWithSchedule = {
+      ...milestoneData,
+      nextRunAt: milestoneData.isScheduleActive
+        ? calculateNextRun(milestoneData.schedule)
+        : undefined,
+    }
+
+    const milestone = await db.createMilestone(dataWithSchedule)
     set({ milestones: [...milestones, milestone] })
     return milestone
   },
@@ -85,15 +156,23 @@ export const useMilestoneStore = create<MilestoneState>((set, get) => ({
     const currentMilestone = milestones.find((m) => m.id === id)
     if (!currentMilestone) return
 
+    // Calculate next_run_at if schedule is being updated
+    const updatesWithSchedule = { ...updates }
+    if ('schedule' in updates || 'isScheduleActive' in updates) {
+      const schedule = updates.schedule ?? currentMilestone.schedule
+      const isActive = updates.isScheduleActive ?? currentMilestone.isScheduleActive
+      updatesWithSchedule.nextRunAt = isActive ? calculateNextRun(schedule) : undefined
+    }
+
     // Optimistic update
     set({
       milestones: milestones.map((m) =>
-        m.id === id ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m
+        m.id === id ? { ...m, ...updatesWithSchedule, updatedAt: new Date().toISOString() } : m
       ),
     })
 
     try {
-      await db.updateMilestone(id, updates)
+      await db.updateMilestone(id, updatesWithSchedule)
     } catch (err) {
       // Revert on error
       set({ milestones })
