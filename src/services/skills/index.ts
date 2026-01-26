@@ -57,13 +57,39 @@ export interface ParsedGitHubUrl {
   branch: string
   path: string
   rawUrl: string
+  isRepoUrl?: false
+}
+
+export interface ParsedGitHubRepoUrl {
+  owner: string
+  repo: string
+  branch?: string
+  isRepoUrl: true
+}
+
+export type ParsedGitHubResult = ParsedGitHubUrl | ParsedGitHubRepoUrl
+
+export interface RepoSkillFile {
+  name: string
+  path: string
+  rawUrl: string
+  type: 'skill' | 'readme' | 'other'
 }
 
 /**
  * Parse a GitHub URL to extract owner, repo, branch, and path
- * Supports both blob URLs and raw URLs
+ * Supports blob URLs, raw URLs, and repo-level URLs
  */
 export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
+  const result = parseGitHubUrlExtended(url)
+  if (!result || result.isRepoUrl) return null
+  return result
+}
+
+/**
+ * Extended parser that also handles repo-level URLs
+ */
+export function parseGitHubUrlExtended(url: string): ParsedGitHubResult | null {
   try {
     const urlObj = new URL(url)
 
@@ -78,6 +104,7 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
           branch,
           path: pathParts.join('/'),
           rawUrl: url,
+          isRepoUrl: false,
         }
       }
     }
@@ -85,6 +112,7 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
     // Handle github.com URLs
     if (urlObj.hostname === 'github.com') {
       const parts = urlObj.pathname.split('/').filter(Boolean)
+
       // Format: /owner/repo/blob/branch/path/to/file.md
       if (parts.length >= 4 && parts[2] === 'blob') {
         const [owner, repo, , branch, ...pathParts] = parts
@@ -95,8 +123,10 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
           branch,
           path,
           rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`,
+          isRepoUrl: false,
         }
       }
+
       // Format: /owner/repo/raw/branch/path/to/file.md
       if (parts.length >= 4 && parts[2] === 'raw') {
         const [owner, repo, , branch, ...pathParts] = parts
@@ -107,6 +137,28 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
           branch,
           path,
           rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`,
+          isRepoUrl: false,
+        }
+      }
+
+      // Format: /owner/repo (repo-level URL)
+      if (parts.length === 2) {
+        const [owner, repo] = parts
+        return {
+          owner,
+          repo,
+          isRepoUrl: true,
+        }
+      }
+
+      // Format: /owner/repo/tree/branch (repo at specific branch)
+      if (parts.length >= 4 && parts[2] === 'tree') {
+        const [owner, repo, , branch] = parts
+        return {
+          owner,
+          repo,
+          branch,
+          isRepoUrl: true,
         }
       }
     }
@@ -117,15 +169,133 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
   }
 }
 
+/**
+ * Check if a URL points to a repo (vs a specific file)
+ */
+export function isRepoUrl(url: string): boolean {
+  const parsed = parseGitHubUrlExtended(url)
+  return parsed?.isRepoUrl === true
+}
+
+/**
+ * Scan a GitHub repo for skill files (SKILL.md, README.md, or .md files in skills/ folder)
+ */
+export async function scanRepoForSkillFiles(
+  owner: string,
+  repo: string,
+  branch: string = 'main'
+): Promise<RepoSkillFile[]> {
+  const skillFiles: RepoSkillFile[] = []
+
+  try {
+    // First, get the repo's default branch if not specified
+    const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`)
+    if (!repoResponse.ok) {
+      throw new Error(`Failed to fetch repo info: ${repoResponse.statusText}`)
+    }
+    const repoData = await repoResponse.json()
+    const defaultBranch = branch || repoData.default_branch || 'main'
+
+    // Get the root tree
+    const treeResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`
+    )
+    if (!treeResponse.ok) {
+      throw new Error(`Failed to fetch repo tree: ${treeResponse.statusText}`)
+    }
+    const treeData = await treeResponse.json()
+
+    // Process all files in the tree
+    for (const item of treeData.tree || []) {
+      if (item.type !== 'blob') continue
+
+      const path = item.path as string
+      const lowerPath = path.toLowerCase()
+
+      // Check for SKILL.md in root
+      if (lowerPath === 'skill.md') {
+        skillFiles.push({
+          name: 'SKILL.md (Root)',
+          path,
+          rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`,
+          type: 'skill',
+        })
+        continue
+      }
+
+      // Check for README.md in root (fallback)
+      if (lowerPath === 'readme.md') {
+        skillFiles.push({
+          name: 'README.md',
+          path,
+          rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`,
+          type: 'readme',
+        })
+        continue
+      }
+
+      // Check for .md files in skills/ folder
+      if (lowerPath.startsWith('skills/') && lowerPath.endsWith('.md')) {
+        const fileName = path.split('/').pop() || path
+        skillFiles.push({
+          name: `skills/${fileName}`,
+          path,
+          rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`,
+          type: 'skill',
+        })
+        continue
+      }
+
+      // Check for .md files in agents/ folder
+      if (lowerPath.startsWith('agents/') && lowerPath.endsWith('.md')) {
+        const fileName = path.split('/').pop() || path
+        skillFiles.push({
+          name: `agents/${fileName}`,
+          path,
+          rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`,
+          type: 'skill',
+        })
+        continue
+      }
+
+      // Check for any SKILL.md in subdirectories
+      if (lowerPath.endsWith('/skill.md') || lowerPath.endsWith('skill.md')) {
+        const dirName = path.split('/').slice(0, -1).join('/') || 'root'
+        skillFiles.push({
+          name: `${dirName}/SKILL.md`,
+          path,
+          rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`,
+          type: 'skill',
+        })
+      }
+    }
+
+    // Sort: SKILL.md first, then skills/, then agents/, then README
+    skillFiles.sort((a, b) => {
+      if (a.type === 'skill' && b.type !== 'skill') return -1
+      if (a.type !== 'skill' && b.type === 'skill') return 1
+      if (a.path.toLowerCase() === 'skill.md') return -1
+      if (b.path.toLowerCase() === 'skill.md') return 1
+      return a.path.localeCompare(b.path)
+    })
+
+    return skillFiles
+  } catch (error) {
+    console.error('Error scanning repo for skill files:', error)
+    return []
+  }
+}
+
 // =============================================================================
 // FRONTMATTER PARSING
 // =============================================================================
 
 /**
  * Parse YAML frontmatter from skill content
+ * Handles single-line values, multiline (| and >), and quoted strings
  */
 export function parseFrontmatter(content: string): { metadata: SkillMetadata; body: string } {
-  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/
+  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/
   const match = content.match(frontmatterRegex)
 
   if (!match) {
@@ -135,48 +305,156 @@ export function parseFrontmatter(content: string): { metadata: SkillMetadata; bo
   const [, frontmatter, body] = match
   const metadata: SkillMetadata = {}
 
-  // Simple YAML parsing for common fields
+  // Parse YAML with support for multiline values
   const lines = frontmatter.split('\n')
-  for (const line of lines) {
-    const colonIndex = line.indexOf(':')
-    if (colonIndex === -1) continue
+  let currentKey: string | null = null
+  let currentValue: string[] = []
+  let isMultiline = false
+  let multilineStyle: '|' | '>' | null = null
 
-    const key = line.slice(0, colonIndex).trim()
-    let value = line.slice(colonIndex + 1).trim()
+  const saveCurrentField = () => {
+    if (currentKey && currentValue.length > 0) {
+      let value = multilineStyle === '>'
+        ? currentValue.join(' ').trim() // Folded style: join with spaces
+        : currentValue.join('\n').trim() // Literal style or single line
 
-    // Handle arrays like [tag1, tag2]
-    if (value.startsWith('[') && value.endsWith(']')) {
-      const arrayContent = value.slice(1, -1)
-      const items = arrayContent.split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
-      if (key === 'tags') {
-        metadata.tags = items
+      // Remove surrounding quotes if present
+      value = value.replace(/^['"]|['"]$/g, '')
+
+      // Case-insensitive key matching
+      const keyLower = currentKey.toLowerCase()
+      switch (keyLower) {
+        case 'name':
+          metadata.name = value
+          break
+        case 'description':
+          metadata.description = value
+          break
+        case 'version':
+          metadata.version = value
+          break
+        case 'author':
+          metadata.author = value
+          break
+        case 'category':
+          // Normalize category to lowercase to match SkillCategory type
+          metadata.category = value.toLowerCase() as SkillCategory
+          break
+        case 'tags':
+          // Handle array syntax [tag1, tag2] or parse from multiline
+          if (value.startsWith('[') && value.endsWith(']')) {
+            const arrayContent = value.slice(1, -1)
+            metadata.tags = arrayContent.split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+          }
+          break
       }
-      continue
     }
+    currentKey = null
+    currentValue = []
+    isMultiline = false
+    multilineStyle = null
+  }
 
-    // Remove quotes
-    value = value.replace(/^['"]|['"]$/g, '')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
 
-    switch (key) {
-      case 'name':
-        metadata.name = value
-        break
-      case 'description':
-        metadata.description = value
-        break
-      case 'version':
-        metadata.version = value
-        break
-      case 'author':
-        metadata.author = value
-        break
-      case 'category':
-        metadata.category = value as SkillCategory
-        break
+    // Check if this is a new key (not indented, has colon)
+    const keyMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/)
+
+    if (keyMatch && !line.startsWith(' ') && !line.startsWith('\t')) {
+      // Save previous field
+      saveCurrentField()
+
+      currentKey = keyMatch[1]
+      const valueAfterColon = keyMatch[2].trim()
+
+      // Check for multiline indicators
+      if (valueAfterColon === '|' || valueAfterColon === '|+' || valueAfterColon === '|-') {
+        isMultiline = true
+        multilineStyle = '|'
+      } else if (valueAfterColon === '>' || valueAfterColon === '>+' || valueAfterColon === '>-') {
+        isMultiline = true
+        multilineStyle = '>'
+      } else if (valueAfterColon) {
+        // Single line value
+        currentValue.push(valueAfterColon)
+      }
+      // If empty after colon but not multiline indicator, check next lines for indented content
+    } else if (currentKey && (line.startsWith('  ') || line.startsWith('\t'))) {
+      // Indented continuation line
+      currentValue.push(line.trim())
     }
   }
 
+  // Save the last field
+  saveCurrentField()
+
   return { metadata, body: body.trim() }
+}
+
+/**
+ * Extract a description from the body content as a fallback
+ * Looks for the first non-heading, non-code paragraph
+ */
+function extractDescriptionFromBody(body: string): string | undefined {
+  const lines = body.split('\n')
+  let paragraph = ''
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    // Skip empty lines, headings, code blocks, horizontal rules
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('```') || trimmed.startsWith('---') || trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      if (paragraph) break // End of paragraph
+      continue
+    }
+    paragraph += (paragraph ? ' ' : '') + trimmed
+    if (paragraph.length > 200) break
+  }
+
+  // Truncate if too long
+  if (paragraph.length > 200) {
+    paragraph = paragraph.slice(0, 197) + '...'
+  }
+
+  return paragraph || undefined
+}
+
+/**
+ * Infer category from tags and/or description
+ * Used as a fallback when no explicit category is provided
+ */
+function inferCategoryFromTags(tags?: string[], description?: string): SkillCategory | undefined {
+  if (!tags?.length && !description) return undefined
+
+  // Combine tags and description words for matching
+  const searchText = [
+    ...(tags || []).map(t => t.toLowerCase()),
+    ...(description || '').toLowerCase().split(/\s+/)
+  ].join(' ')
+
+  // Category inference rules (order matters - more specific first)
+  const categoryPatterns: Array<{ category: SkillCategory; patterns: string[] }> = [
+    { category: 'integration', patterns: ['salesforce', 'hubspot', 'api', 'integration', 'crm', 'connector', 'zapier', 'webhook'] },
+    { category: 'devops', patterns: ['devops', 'ci/cd', 'ci-cd', 'docker', 'kubernetes', 'infrastructure', 'deploy', 'terraform', 'aws', 'azure', 'gcp'] },
+    { category: 'security', patterns: ['security', 'audit', 'vulnerability', 'penetration', 'pentest', 'secure', 'authentication', 'authorization'] },
+    { category: 'data', patterns: ['data', 'etl', 'pipeline', 'database', 'sql', 'analytics', 'warehouse', 'transformation'] },
+    { category: 'development', patterns: ['code', 'coding', 'development', 'programming', 'debugging', 'refactor', 'software', 'engineering', 'typescript', 'javascript', 'python', 'react', 'vue', 'angular'] },
+    { category: 'design', patterns: ['design', 'ui', 'ux', 'figma', 'sketch', 'wireframe', 'prototype', 'visual', 'layout'] },
+    { category: 'analysis', patterns: ['analysis', 'research', 'analyze', 'investigate', 'insight', 'report', 'metrics', 'kpi'] },
+    { category: 'communication', patterns: ['email', 'presentation', 'meeting', 'communication', 'messaging', 'slack', 'teams'] },
+    { category: 'productivity', patterns: ['productivity', 'planning', 'task', 'organize', 'workflow', 'automation', 'efficiency'] },
+    { category: 'writing', patterns: ['writing', 'content', 'documentation', 'copywriting', 'blog', 'article', 'humanize', 'humanizer', 'text', 'prose', 'edit', 'editing', 'rewrite'] },
+  ]
+
+  for (const { category, patterns } of categoryPatterns) {
+    for (const pattern of patterns) {
+      if (searchText.includes(pattern)) {
+        return category
+      }
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -378,48 +656,178 @@ export async function deleteSkill(id: string): Promise<void> {
 // IMPORT FUNCTIONS
 // =============================================================================
 
+export interface ImportFromRepoResult {
+  type: 'single' | 'multiple' | 'none'
+  skill?: Skill
+  skillFiles?: RepoSkillFile[]
+  owner?: string
+  repo?: string
+  branch?: string
+}
+
 /**
- * Import a skill from a GitHub URL
+ * Import a skill from a GitHub URL (file or repo)
+ * If it's a repo URL, returns the list of available skill files for user selection
  */
 export async function importFromGitHub(
   url: string,
   accountId: string,
   userId: string
 ): Promise<Skill> {
-  // 1. Parse the URL
-  const parsed = parseGitHubUrl(url)
+  // 1. Parse the URL (extended to handle repo URLs)
+  const parsed = parseGitHubUrlExtended(url)
   if (!parsed) {
-    throw new Error('Invalid GitHub URL. Please provide a valid GitHub file URL.')
+    throw new Error('Invalid GitHub URL. Please provide a valid GitHub URL.')
   }
 
-  // 2. Fetch the content
-  const content = await fetchGitHubContent(url)
+  // 2. If it's a repo URL, try to find SKILL.md in root first
+  if (parsed.isRepoUrl) {
+    const branch = parsed.branch || 'main'
+    const skillMdUrl = `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${branch}/SKILL.md`
 
-  // 3. Parse frontmatter for metadata
+    try {
+      const response = await fetch(skillMdUrl)
+      if (response.ok) {
+        // Found SKILL.md in root, import it
+        return importFromGitHubFile(
+          skillMdUrl,
+          parsed.owner,
+          parsed.repo,
+          'SKILL.md',
+          branch,
+          accountId,
+          userId
+        )
+      }
+    } catch {
+      // SKILL.md not found, fall through
+    }
+
+    // No SKILL.md found - throw error with repo info for caller to handle
+    const error = new Error('REPO_NEEDS_SELECTION') as Error & {
+      repoInfo: { owner: string; repo: string; branch: string }
+    }
+    error.repoInfo = { owner: parsed.owner, repo: parsed.repo, branch }
+    throw error
+  }
+
+  // 3. It's a file URL, import directly
+  return importFromGitHubFile(
+    parsed.rawUrl,
+    parsed.owner,
+    parsed.repo,
+    parsed.path,
+    parsed.branch,
+    accountId,
+    userId
+  )
+}
+
+/**
+ * Import a skill from a specific GitHub file URL
+ */
+export async function importFromGitHubFile(
+  rawUrl: string,
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string,
+  accountId: string,
+  userId: string
+): Promise<Skill> {
+  // 1. Fetch the content
+  const response = await fetch(rawUrl)
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('File not found on GitHub')
+    }
+    throw new Error(`Failed to fetch from GitHub: ${response.statusText}`)
+  }
+  const content = await response.text()
+
+  // 2. Parse frontmatter for metadata
   const { metadata, body } = parseFrontmatter(content)
 
-  // 4. Get latest commit SHA for version tracking
-  const sha = await getLatestCommitSha(parsed.owner, parsed.repo, parsed.path, parsed.branch)
+  // 3. Get latest commit SHA for version tracking
+  const sha = await getLatestCommitSha(owner, repo, path, branch)
+
+  // 4. Determine description and category (with fallbacks)
+  const description = metadata.description || extractDescriptionFromBody(body)
+  const category = metadata.category || inferCategoryFromTags(metadata.tags, description)
 
   // 5. Create the skill
   return createSkill({
     accountId,
     userId,
-    name: metadata.name || extractNameFromPath(parsed.path),
-    description: metadata.description,
+    name: metadata.name || extractNameFromPath(path),
+    description,
     version: metadata.version || '1.0.0',
     author: metadata.author,
     tags: metadata.tags || [],
-    category: metadata.category,
+    category,
     content: body,
     sourceType: 'github',
-    sourceUrl: url,
-    sourceRepo: `${parsed.owner}/${parsed.repo}`,
-    sourcePath: parsed.path,
-    sourceBranch: parsed.branch,
+    sourceUrl: `https://github.com/${owner}/${repo}/blob/${branch}/${path}`,
+    sourceRepo: `${owner}/${repo}`,
+    sourcePath: path,
+    sourceBranch: branch,
     sourceSha: sha || undefined,
     isEnabled: true,
   })
+}
+
+/**
+ * Try to import from a repo URL, returning skill files if multiple found
+ */
+export async function importFromRepoUrl(
+  url: string,
+  accountId: string,
+  userId: string
+): Promise<ImportFromRepoResult> {
+  const parsed = parseGitHubUrlExtended(url)
+  if (!parsed) {
+    throw new Error('Invalid GitHub URL')
+  }
+
+  if (!parsed.isRepoUrl) {
+    // It's a file URL, import directly
+    const skill = await importFromGitHub(url, accountId, userId)
+    return { type: 'single', skill }
+  }
+
+  // It's a repo URL - scan for skill files
+  const branch = parsed.branch || 'main'
+  const skillFiles = await scanRepoForSkillFiles(parsed.owner, parsed.repo, branch)
+
+  if (skillFiles.length === 0) {
+    return { type: 'none', owner: parsed.owner, repo: parsed.repo, branch }
+  }
+
+  // If there's exactly one SKILL.md in root, import it automatically
+  const rootSkillMd = skillFiles.find(
+    (f) => f.path.toLowerCase() === 'skill.md' && f.type === 'skill'
+  )
+  if (rootSkillMd && skillFiles.filter((f) => f.type === 'skill').length === 1) {
+    const skill = await importFromGitHubFile(
+      rootSkillMd.rawUrl,
+      parsed.owner,
+      parsed.repo,
+      rootSkillMd.path,
+      branch,
+      accountId,
+      userId
+    )
+    return { type: 'single', skill }
+  }
+
+  // Multiple skill files found - return them for user selection
+  return {
+    type: 'multiple',
+    skillFiles,
+    owner: parsed.owner,
+    repo: parsed.repo,
+    branch,
+  }
 }
 
 /**
@@ -434,15 +842,19 @@ export async function importFromRaw(
   // Parse frontmatter for metadata
   const { metadata, body } = parseFrontmatter(content)
 
+  // Determine description and category (with fallbacks)
+  const description = metadata.description || extractDescriptionFromBody(body)
+  const category = metadata.category || inferCategoryFromTags(metadata.tags, description)
+
   return createSkill({
     accountId,
     userId,
     name: metadata.name || name || 'Untitled Skill',
-    description: metadata.description,
+    description,
     version: metadata.version || '1.0.0',
     author: metadata.author,
     tags: metadata.tags || [],
-    category: metadata.category,
+    category,
     content: body,
     sourceType: 'local',
     isEnabled: true,
@@ -920,4 +1332,142 @@ export async function fetchPopularTags(limit: number = 20): Promise<Array<{ tag:
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit)
+}
+
+// =============================================================================
+// SKILL USAGE TRACKING
+// =============================================================================
+
+export interface SkillUsageInput {
+  accountId: string
+  skillId: string
+  taskId?: string
+  agentId?: string
+  userId: string
+  success: boolean
+  errorMessage?: string
+  inputTokens?: number
+  outputTokens?: number
+  durationMs?: number
+  modelUsed?: string
+  toolsUsed?: Array<{ name: string; success: boolean }>
+}
+
+export interface SkillUsageRecord {
+  id: string
+  accountId: string
+  skillId: string
+  taskId?: string
+  agentId?: string
+  userId: string
+  executedAt: string
+  success: boolean
+  errorMessage?: string
+  inputTokens: number
+  outputTokens: number
+  durationMs: number
+  modelUsed?: string
+  toolsUsed: Array<{ name: string; success: boolean }>
+  createdAt: string
+}
+
+export interface SkillUsageStats {
+  skillId: string
+  accountId: string
+  skillName: string
+  totalUses: number
+  successfulUses: number
+  failedUses: number
+  successRate: number
+  totalTokens: number
+  totalDurationMs: number
+  lastUsedAt?: string
+  firstUsedAt?: string
+}
+
+/**
+ * Record a skill usage event
+ */
+export async function recordSkillUsage(input: SkillUsageInput): Promise<SkillUsageRecord> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_usage')
+    .insert(
+      toSnakeCaseKeys({
+        accountId: input.accountId,
+        skillId: input.skillId,
+        taskId: input.taskId || null,
+        agentId: input.agentId || null,
+        userId: input.userId,
+        success: input.success,
+        errorMessage: input.errorMessage || null,
+        inputTokens: input.inputTokens || 0,
+        outputTokens: input.outputTokens || 0,
+        durationMs: input.durationMs || 0,
+        modelUsed: input.modelUsed || null,
+        toolsUsed: input.toolsUsed || [],
+      })
+    )
+    .select()
+    .single()
+
+  if (error) throw error
+  return toCamelCaseKeys<SkillUsageRecord>(data)
+}
+
+/**
+ * Fetch usage stats for all skills in an account
+ */
+export async function fetchSkillUsageStats(accountId: string): Promise<SkillUsageStats[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_usage_stats')
+    .select('*')
+    .eq('account_id', accountId)
+    .order('total_uses', { ascending: false })
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillUsageStats>(row))
+}
+
+/**
+ * Fetch usage stats for a specific skill
+ */
+export async function fetchSkillUsageStatsById(skillId: string): Promise<SkillUsageStats | null> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_usage_stats')
+    .select('*')
+    .eq('skill_id', skillId)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
+
+  return toCamelCaseKeys<SkillUsageStats>(data)
+}
+
+/**
+ * Fetch recent usage history for a skill
+ */
+export async function fetchSkillUsageHistory(
+  skillId: string,
+  limit: number = 50
+): Promise<SkillUsageRecord[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { data, error } = await supabase
+    .from('skill_usage')
+    .select('*')
+    .eq('skill_id', skillId)
+    .order('executed_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data || []).map((row) => toCamelCaseKeys<SkillUsageRecord>(row))
 }

@@ -12,6 +12,7 @@ import {
   type ToolUseRequest,
   type ToolResultMessage,
 } from '@/services/tools'
+import { recordSkillUsage } from '@/services/skills'
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 
@@ -24,6 +25,7 @@ export interface ExecutionInput {
   skill?: Skill
   additionalContext?: string
   accountId?: string // Required for tool execution
+  userId?: string // Required for skill usage tracking
   enableTools?: boolean // Enable tool use (default: true)
 }
 
@@ -275,7 +277,7 @@ export async function executeTask(
       )
       const content = textBlocks.map((block: { text: string }) => block.text).join('\n')
 
-      return {
+      const result: ExecutionResult = {
         success: true,
         content,
         metadata: {
@@ -287,10 +289,33 @@ export async function executeTask(
           toolIterations: iterations > 1 ? iterations : undefined,
         },
       }
+
+      // Track skill usage if a skill was used
+      if (input.skill && accountId && input.userId) {
+        try {
+          await recordSkillUsage({
+            accountId,
+            skillId: input.skill.id,
+            taskId: input.task.id,
+            agentId: input.agent.id,
+            userId: input.userId,
+            success: true,
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            durationMs: Date.now() - startTime,
+            modelUsed: data.model || 'claude-sonnet-4-20250514',
+            toolsUsed: toolsUsed.map(t => ({ name: t.name, success: t.success })),
+          })
+        } catch (trackingError) {
+          console.warn('[Executor] Failed to track skill usage:', trackingError)
+        }
+      }
+
+      return result
     }
 
     // If we exit the loop, we hit max iterations
-    return {
+    const maxIterResult: ExecutionResult = {
       success: false,
       content: '',
       metadata: {
@@ -303,8 +328,32 @@ export async function executeTask(
       },
       error: `Max tool iterations (${MAX_TOOL_ITERATIONS}) exceeded`,
     }
+
+    // Track skill usage for max iterations exceeded
+    if (input.skill && accountId && input.userId) {
+      try {
+        await recordSkillUsage({
+          accountId,
+          skillId: input.skill.id,
+          taskId: input.task.id,
+          agentId: input.agent.id,
+          userId: input.userId,
+          success: false,
+          errorMessage: maxIterResult.error,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          durationMs: Date.now() - startTime,
+          modelUsed: 'claude-sonnet-4-20250514',
+          toolsUsed: toolsUsed.map(t => ({ name: t.name, success: t.success })),
+        })
+      } catch (trackingError) {
+        console.warn('[Executor] Failed to track skill usage:', trackingError)
+      }
+    }
+
+    return maxIterResult
   } catch (error) {
-    return {
+    const errorResult: ExecutionResult = {
       success: false,
       content: '',
       metadata: {
@@ -315,6 +364,30 @@ export async function executeTask(
       },
       error: error instanceof Error ? error.message : 'Unknown error',
     }
+
+    // Track skill usage for errors
+    if (input.skill && accountId && input.userId) {
+      try {
+        await recordSkillUsage({
+          accountId,
+          skillId: input.skill.id,
+          taskId: input.task.id,
+          agentId: input.agent.id,
+          userId: input.userId,
+          success: false,
+          errorMessage: errorResult.error,
+          inputTokens: 0,
+          outputTokens: 0,
+          durationMs: Date.now() - startTime,
+          modelUsed: 'claude-sonnet-4-20250514',
+          toolsUsed: [],
+        })
+      } catch (trackingError) {
+        console.warn('[Executor] Failed to track skill usage:', trackingError)
+      }
+    }
+
+    return errorResult
   }
 }
 

@@ -1050,6 +1050,53 @@ export interface SkillImport {
   lastCheckedAt?: string
 }
 
+// =============================================================================
+// SKILL DISCOVERY (Trending/Hot Skills from GitHub)
+// =============================================================================
+
+export type DiscoverySourceType = 'official' | 'curated' | 'community'
+export type DiscoverySortOption = 'hotness' | 'stars' | 'recent' | 'new'
+
+export interface DiscoveredSkill {
+  id: string
+  githubId: number
+  fullName: string
+  name: string
+  ownerLogin: string
+  ownerAvatarUrl: string | null
+  description: string | null
+  htmlUrl: string
+  stargazersCount: number
+  forksCount: number
+  openIssuesCount: number
+  topics: string[]
+  defaultBranch: string
+  licenseName: string | null
+  sourceType: DiscoverySourceType
+  category: string | null
+  skillMdUrl: string | null
+  skillMdContent: string | null
+  aiSummary: string | null
+  aiSummaryUpdatedAt: string | null
+  githubCreatedAt: string
+  githubUpdatedAt: string
+  githubPushedAt: string
+  createdAt: string
+  updatedAt: string
+  // Computed from view
+  hotnessScore: number
+  isNew: boolean
+  isRecentlyUpdated: boolean
+  isHot: boolean
+}
+
+export interface DiscoveryStats {
+  total: number
+  totalStars: number
+  newThisWeek: number
+  hotCount: number
+}
+
 // Agent display info for UI
 export const SKILL_AGENT_INFO: Record<SkillAgent, { label: string; icon?: string; color: string }> = {
   universal: { label: 'Universal', color: 'gray' },

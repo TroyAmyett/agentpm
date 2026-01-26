@@ -1,7 +1,8 @@
 // Skill Card - Display a skill in the grid
 
-import { FileText, Github, FileCode, ToggleLeft, ToggleRight, Building2, GitFork, Sparkles } from 'lucide-react'
+import { FileText, Github, FileCode, ToggleLeft, ToggleRight, Building2, GitFork, Sparkles, Activity, CheckCircle, AlertCircle } from 'lucide-react'
 import type { Skill } from '@/types/agentpm'
+import type { SkillUsageStats } from '@/services/skills'
 
 // Convert slug format (lowercase-with-dashes) to Title Case With Spaces
 function formatSkillName(name: string): string {
@@ -11,6 +12,23 @@ function formatSkillName(name: string): string {
     .join(' ')
 }
 
+// Format relative time like "2h ago", "3d ago", etc.
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffSecs = Math.floor(diffMs / 1000)
+  const diffMins = Math.floor(diffSecs / 60)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffDays > 30) return date.toLocaleDateString()
+  if (diffDays > 0) return `${diffDays}d ago`
+  if (diffHours > 0) return `${diffHours}h ago`
+  if (diffMins > 0) return `${diffMins}m ago`
+  return 'just now'
+}
+
 interface SkillCardProps {
   skill: Skill
   onClick: () => void
@@ -18,9 +36,10 @@ interface SkillCardProps {
   onCustomize?: (skill: Skill) => void
   onEditWithAI?: (skill: Skill) => void
   isOfficial?: boolean
+  usageStats?: SkillUsageStats
 }
 
-export function SkillCard({ skill, onClick, onToggleEnabled, onCustomize, onEditWithAI, isOfficial }: SkillCardProps) {
+export function SkillCard({ skill, onClick, onToggleEnabled, onCustomize, onEditWithAI, isOfficial, usageStats }: SkillCardProps) {
   const sourceIcon = {
     github: <Github size={14} className="text-surface-400" />,
     local: <FileCode size={14} className="text-surface-400" />,
@@ -83,6 +102,33 @@ export function SkillCard({ skill, onClick, onToggleEnabled, onCustomize, onEdit
             <span className="px-2 py-0.5 text-xs rounded-full bg-surface-100 dark:bg-surface-700 text-surface-500">
               +{skill.tags.length - 3}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Usage Stats */}
+      {usageStats && usageStats.totalUses > 0 && (
+        <div className="flex items-center gap-3 mb-3 text-xs text-surface-500">
+          <div className="flex items-center gap-1" title="Total executions">
+            <Activity size={12} />
+            <span>{usageStats.totalUses} uses</span>
+          </div>
+          {usageStats.successRate !== null && (
+            <div
+              className={`flex items-center gap-1 ${
+                usageStats.successRate >= 90 ? 'text-green-500' :
+                usageStats.successRate >= 70 ? 'text-yellow-500' : 'text-red-500'
+              }`}
+              title="Success rate"
+            >
+              {usageStats.successRate >= 90 ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+              <span>{usageStats.successRate}%</span>
+            </div>
+          )}
+          {usageStats.lastUsedAt && (
+            <div className="ml-auto text-surface-400" title="Last used">
+              {formatRelativeTime(usageStats.lastUsedAt)}
+            </div>
           )}
         </div>
       )}

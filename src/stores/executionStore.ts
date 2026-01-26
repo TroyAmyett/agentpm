@@ -271,7 +271,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       // Execute the task with tools enabled
       const result: ExecutionResult = await executeTask(
-        { task, agent, skill, accountId, enableTools: true },
+        { task, agent, skill, accountId, userId, enableTools: true },
         onStatusChange
       )
 

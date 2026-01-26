@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, FileText, Search, Filter, Sparkles, ChevronRight, Crown } from 'lucide-react'
+import { Plus, FileText, Search, Filter, Sparkles, ChevronRight, Crown, Flame, Activity, TrendingUp, Clock, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useSkillStore } from '@/stores/skillStore'
@@ -11,13 +11,17 @@ import { SkillDetailView } from './SkillDetailView'
 import { ImportSkillModal } from './ImportSkillModal'
 import { SkillsBuilderModal } from './SkillsBuilderModal'
 import { BrowseSkillsModal } from './BrowseSkillsModal'
+import { DiscoverTab } from './DiscoverTab'
+import { fetchSkillUsageStats, type SkillUsageStats } from '@/services/skills'
 import type { Skill, SkillSourceType, SkillBuilderMessage, SkillCategory } from '@/types/agentpm'
 import { SKILL_CATEGORY_INFO } from '@/types/agentpm'
 
 type FilterSource = 'all' | SkillSourceType
 type FilterCategory = 'all' | SkillCategory
+type SkillsTab = 'my-skills' | 'discover'
 
 export function SkillsPage() {
+  const [activeTab, setActiveTab] = useState<SkillsTab>('my-skills')
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBrowseOpen, setIsBrowseOpen] = useState(false)
   const [isBuilderOpen, setIsBuilderOpen] = useState(false)
@@ -28,6 +32,7 @@ export function SkillsPage() {
   const [filterSource, setFilterSource] = useState<FilterSource>('all')
   const [filterCategory, setFilterCategory] = useState<FilterCategory>('all')
   const [showAllOfficialSkills, setShowAllOfficialSkills] = useState(false)
+  const [usageStatsMap, setUsageStatsMap] = useState<Map<string, SkillUsageStats>>(new Map())
 
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
@@ -61,6 +66,21 @@ export function SkillsPage() {
     fetchOfficialSkills()
   }, [accountId, fetchSkills, fetchOfficialSkills])
 
+  // Fetch skill usage stats
+  useEffect(() => {
+    const loadUsageStats = async () => {
+      if (!accountId || accountId.startsWith('default-') || accountId.startsWith('demo-')) return
+      try {
+        const stats = await fetchSkillUsageStats(accountId)
+        const statsMap = new Map(stats.map(s => [s.skillId, s]))
+        setUsageStatsMap(statsMap)
+      } catch (err) {
+        console.warn('Failed to fetch skill usage stats:', err)
+      }
+    }
+    loadUsageStats()
+  }, [accountId, skills]) // Re-fetch when skills change too
+
   // Filter skills
   const filteredSkills = skills.filter((skill) => {
     // Search filter
@@ -90,9 +110,7 @@ export function SkillsPage() {
   // Get categories that have skills (for showing only relevant tabs)
   const categoriesWithSkills = [...new Set(skills.map(s => s.category).filter(Boolean))] as SkillCategory[]
 
-  // Skill counts
-  const enabledCount = skills.filter(s => s.isEnabled).length
-  const disabledCount = skills.filter(s => !s.isEnabled).length
+  // Skill count for tab badge
   const totalCount = skills.length
 
   // Count skills per category
@@ -101,6 +119,38 @@ export function SkillsPage() {
     acc[cat] = (acc[cat] || 0) + 1
     return acc
   }, {} as Record<string, number>)
+
+  // Compute usage analytics from the stats map
+  const usageAnalytics = (() => {
+    const stats = Array.from(usageStatsMap.values())
+    if (stats.length === 0) return null
+
+    const totalExecutions = stats.reduce((sum, s) => sum + s.totalUses, 0)
+    const totalSuccessful = stats.reduce((sum, s) => sum + s.successfulUses, 0)
+    const overallSuccessRate = totalExecutions > 0
+      ? Math.round((totalSuccessful / totalExecutions) * 100)
+      : 0
+
+    // Most used skill
+    const mostUsed = stats.reduce((max, s) =>
+      s.totalUses > (max?.totalUses || 0) ? s : max,
+      null as SkillUsageStats | null
+    )
+
+    // Most recent activity
+    const mostRecent = stats.reduce((latest, s) => {
+      if (!s.lastUsedAt) return latest
+      if (!latest?.lastUsedAt) return s
+      return new Date(s.lastUsedAt) > new Date(latest.lastUsedAt) ? s : latest
+    }, null as SkillUsageStats | null)
+
+    return {
+      totalExecutions,
+      overallSuccessRate,
+      mostUsed,
+      mostRecent,
+    }
+  })()
 
   // Get category color based on skill count (green: good coverage, yellow: few, red: none)
   const getCategoryColor = (category: SkillCategory) => {
@@ -245,85 +295,99 @@ export function SkillsPage() {
       {/* Header */}
       <div className="flex-shrink-0 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="flex items-center gap-6">
             <h1 className="text-2xl font-semibold text-surface-900 dark:text-surface-100">
               Skills
             </h1>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-surface-600 dark:text-surface-400">
-                {searchQuery ? (
-                  <>Showing {filteredSkills.length} of {totalCount}</>
-                ) : (
-                  <>{totalCount} total</>
+            {/* Tab Toggle */}
+            <div className="flex items-center bg-surface-100 dark:bg-surface-700 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('my-skills')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'my-skills'
+                    ? 'bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 shadow-sm'
+                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                }`}
+              >
+                My Skills
+                {totalCount > 0 && (
+                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-surface-200 dark:bg-surface-600">
+                    {totalCount}
+                  </span>
                 )}
-              </span>
-              {totalCount > 0 && (
-                <>
-                  <span className="text-surface-300 dark:text-surface-600">•</span>
-                  <span className="text-green-600 dark:text-green-400">{enabledCount} enabled</span>
-                  {disabledCount > 0 && (
-                    <>
-                      <span className="text-surface-300 dark:text-surface-600">•</span>
-                      <span className="text-surface-500">{disabledCount} disabled</span>
-                    </>
-                  )}
-                </>
-              )}
+              </button>
+              <button
+                onClick={() => setActiveTab('discover')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'discover'
+                    ? 'bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 shadow-sm'
+                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                }`}
+              >
+                <Flame size={16} className="text-orange-500" />
+                Discover
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleOpenBuilder}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-medium rounded-lg transition-all shadow-sm"
-            >
-              <Sparkles size={18} />
-              New Skill
-            </button>
-            <button
-              onClick={() => setIsImportOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 font-medium rounded-lg transition-colors"
-            >
-              <Plus size={18} />
-              Import
-            </button>
-          </div>
+          {activeTab === 'my-skills' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenBuilder}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-medium rounded-lg transition-all shadow-sm"
+              >
+                <Sparkles size={18} />
+                New Skill
+              </button>
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 font-medium rounded-lg transition-colors"
+              >
+                <Plus size={18} />
+                Import
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Search and Filters */}
-        <div className="flex items-center gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400"
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search skills..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
+        {/* Search and Filters - Only show for My Skills tab */}
+        {activeTab === 'my-skills' && (
+          <>
+            <div className="flex items-center gap-4">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400"
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search skills..."
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
 
-          {/* Source Filter */}
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-surface-500" />
-            <select
-              value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value as FilterSource)}
-              className="px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">All Sources</option>
-              <option value="github">GitHub</option>
-              <option value="local">Local</option>
-              <option value="marketplace">Marketplace</option>
-            </select>
-          </div>
-        </div>
+              {/* Source Filter */}
+              <div className="flex items-center gap-2">
+                <Filter size={16} className="text-surface-500" />
+                <select
+                  value={filterSource}
+                  onChange={(e) => setFilterSource(e.target.value as FilterSource)}
+                  className="px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">All Sources</option>
+                  <option value="github">GitHub</option>
+                  <option value="local">Local</option>
+                  <option value="marketplace">Marketplace</option>
+                </select>
+              </div>
+            </div>
+          </>
+        )}
 
-        {/* Category Filter Tabs */}
-        {(categoriesWithSkills.length > 0 || skills.length > 0) && (
+        {/* Category Filter Tabs - Only show for My Skills tab */}
+        {activeTab === 'my-skills' && (categoriesWithSkills.length > 0 || skills.length > 0) && (
           <div className="flex items-center gap-2 pt-4 overflow-x-auto">
             <button
               onClick={() => setFilterCategory('all')}
@@ -376,10 +440,23 @@ export function SkillsPage() {
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {/* Error */}
-        {error && (
+      {/* Content - Discover Tab */}
+      {activeTab === 'discover' && (
+        <DiscoverTab
+          accountId={accountId}
+          userId={userId}
+          onImportSuccess={() => {
+            fetchSkills(accountId)
+            setActiveTab('my-skills') // Switch to My Skills after import
+          }}
+        />
+      )}
+
+      {/* Content - My Skills Tab */}
+      {activeTab === 'my-skills' && (
+        <div className="flex-1 overflow-auto p-6">
+          {/* Error */}
+          {error && (
           <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 flex items-center justify-between">
             <span>{error}</span>
             <button
@@ -388,6 +465,87 @@ export function SkillsPage() {
             >
               Dismiss
             </button>
+          </div>
+        )}
+
+        {/* Usage Analytics */}
+        {usageAnalytics && usageAnalytics.totalExecutions > 0 && (
+          <div className="mb-6 p-4 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+            <div className="flex items-center gap-2 mb-3">
+              <Activity size={18} className="text-primary-500" />
+              <h3 className="font-medium text-surface-900 dark:text-surface-100">Skill Usage Analytics</h3>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Executions */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <TrendingUp size={16} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                    {usageAnalytics.totalExecutions}
+                  </p>
+                  <p className="text-xs text-surface-500">Total Runs</p>
+                </div>
+              </div>
+
+              {/* Success Rate */}
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  usageAnalytics.overallSuccessRate >= 90
+                    ? 'bg-green-100 dark:bg-green-900/30'
+                    : usageAnalytics.overallSuccessRate >= 70
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                    : 'bg-red-100 dark:bg-red-900/30'
+                }`}>
+                  <CheckCircle size={16} className={`${
+                    usageAnalytics.overallSuccessRate >= 90
+                      ? 'text-green-600 dark:text-green-400'
+                      : usageAnalytics.overallSuccessRate >= 70
+                      ? 'text-yellow-600 dark:text-yellow-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                    {usageAnalytics.overallSuccessRate}%
+                  </p>
+                  <p className="text-xs text-surface-500">Success Rate</p>
+                </div>
+              </div>
+
+              {/* Most Used Skill */}
+              {usageAnalytics.mostUsed && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <Crown size={16} className="text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-surface-900 dark:text-surface-100 truncate" title={usageAnalytics.mostUsed.skillName}>
+                      {usageAnalytics.mostUsed.skillName}
+                    </p>
+                    <p className="text-xs text-surface-500">{usageAnalytics.mostUsed.totalUses} uses - Top Skill</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Most Recent Activity */}
+              {usageAnalytics.mostRecent?.lastUsedAt && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <Clock size={16} className="text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-surface-900 dark:text-surface-100 truncate" title={usageAnalytics.mostRecent.skillName}>
+                      {usageAnalytics.mostRecent.skillName}
+                    </p>
+                    <p className="text-xs text-surface-500">
+                      {new Date(usageAnalytics.mostRecent.lastUsedAt).toLocaleDateString()} - Last Used
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -505,6 +663,7 @@ export function SkillsPage() {
                   onCustomize={handleCustomizeSkill}
                   onEditWithAI={handleEditSkillWithBuilder}
                   isOfficial={isOfficialSkill(skill)}
+                  usageStats={usageStatsMap.get(skill.id)}
                 />
               ))}
             </AnimatePresence>
@@ -521,7 +680,8 @@ export function SkillsPage() {
             </button>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       <ImportSkillModal
