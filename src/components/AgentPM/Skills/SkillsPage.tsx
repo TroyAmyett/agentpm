@@ -90,6 +90,34 @@ export function SkillsPage() {
   // Get categories that have skills (for showing only relevant tabs)
   const categoriesWithSkills = [...new Set(skills.map(s => s.category).filter(Boolean))] as SkillCategory[]
 
+  // Skill counts
+  const enabledCount = skills.filter(s => s.isEnabled).length
+  const disabledCount = skills.filter(s => !s.isEnabled).length
+  const totalCount = skills.length
+
+  // Count skills per category
+  const categorySkillCounts = skills.reduce((acc, skill) => {
+    const cat = skill.category || 'other'
+    acc[cat] = (acc[cat] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  // Get category color based on skill count (green: good coverage, yellow: few, red: none)
+  const getCategoryColor = (category: SkillCategory) => {
+    const count = categorySkillCounts[category] || 0
+    if (count >= 5) return 'green' // Good coverage
+    if (count >= 1) return 'yellow' // Has some
+    return 'red' // None
+  }
+
+  // Category recommendations
+  const getCategoryRecommendation = (category: SkillCategory) => {
+    const count = categorySkillCounts[category] || 0
+    if (count >= 5) return `${count} skills - Good coverage`
+    if (count >= 1) return `${count} skill${count > 1 ? 's' : ''} - Consider adding more`
+    return 'No skills yet - Add skills for this category'
+  }
+
   // Handlers
   const handleImportGitHub = useCallback(
     async (url: string) => {
@@ -221,9 +249,27 @@ export function SkillsPage() {
             <h1 className="text-2xl font-semibold text-surface-900 dark:text-surface-100">
               Skills
             </h1>
-            <p className="text-sm text-surface-600 dark:text-surface-400">
-              Import and manage Claude Code skills for your projects
-            </p>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-surface-600 dark:text-surface-400">
+                {searchQuery ? (
+                  <>Showing {filteredSkills.length} of {totalCount}</>
+                ) : (
+                  <>{totalCount} total</>
+                )}
+              </span>
+              {totalCount > 0 && (
+                <>
+                  <span className="text-surface-300 dark:text-surface-600">•</span>
+                  <span className="text-green-600 dark:text-green-400">{enabledCount} enabled</span>
+                  {disabledCount > 0 && (
+                    <>
+                      <span className="text-surface-300 dark:text-surface-600">•</span>
+                      <span className="text-surface-500">{disabledCount} disabled</span>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -291,19 +337,41 @@ export function SkillsPage() {
             </button>
             {(Object.keys(SKILL_CATEGORY_INFO) as SkillCategory[])
               .filter(cat => cat !== 'other' || categoriesWithSkills.includes('other'))
-              .map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setFilterCategory(category)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                    filterCategory === category
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                      : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
-                  }`}
-                >
-                  {SKILL_CATEGORY_INFO[category].label}
-                </button>
-              ))}
+              .map((category) => {
+                const count = categorySkillCounts[category] || 0
+                const color = getCategoryColor(category)
+                const recommendation = getCategoryRecommendation(category)
+
+                return (
+                  <button
+                    key={category}
+                    onClick={() => setFilterCategory(category)}
+                    title={recommendation}
+                    className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                      filterCategory === category
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
+                    }`}
+                  >
+                    {/* Color indicator dot */}
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        color === 'green'
+                          ? 'bg-green-500'
+                          : color === 'yellow'
+                          ? 'bg-yellow-500'
+                          : 'bg-red-400'
+                      }`}
+                    />
+                    {SKILL_CATEGORY_INFO[category].label}
+                    {count > 0 && (
+                      <span className="text-xs text-surface-500 dark:text-surface-400">
+                        ({count})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
           </div>
         )}
       </div>
