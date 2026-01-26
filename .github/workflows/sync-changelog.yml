@@ -62,15 +62,15 @@ jobs:
             ? `${lastHash}..HEAD`
             : '--since="30 days ago"';
 
-          // Use %x00 (null byte) as delimiter to handle multi-line bodies
-          const DELIM = '\x00';
-          const COMMIT_SEP = '\x01';
-          const format = `%H${DELIM}%s${DELIM}%b${DELIM}%ad${COMMIT_SEP}`;
-
+          // Use ASCII separators via git's %x notation (handled by git, not JS)
+          // %x1e = record separator, %x1f = unit separator
           const gitLog = execSync(
-            `git log ${range} --pretty=format:"${format}" --date=short`,
+            `git log ${range} --pretty=format:"%H%x1f%s%x1f%b%x1f%ad%x1e" --date=short`,
             { encoding: 'utf-8' }
           ).trim();
+
+          const DELIM = '\x1f';  // Unit separator
+          const COMMIT_SEP = '\x1e';  // Record separator
 
           if (!gitLog) {
             console.log('No new commits to sync');
