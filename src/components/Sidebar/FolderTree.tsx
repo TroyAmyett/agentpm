@@ -158,8 +158,11 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              addNote({ folder_id: folder.id })
-              if (!isExpanded) toggleFolderExpanded(folder.id)
+              const noteName = prompt('Enter note title:')
+              if (noteName && noteName.trim()) {
+                addNote({ folder_id: folder.id, title: noteName.trim() })
+                if (!isExpanded) toggleFolderExpanded(folder.id)
+              }
             }}
             className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700"
             title="New Note"
@@ -227,8 +230,11 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      addNote({ folder_id: folder.id })
-                      if (!isExpanded) toggleFolderExpanded(folder.id)
+                      const noteName = prompt('Enter note title:')
+                      if (noteName && noteName.trim()) {
+                        addNote({ folder_id: folder.id, title: noteName.trim() })
+                        if (!isExpanded) toggleFolderExpanded(folder.id)
+                      }
                       setMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"

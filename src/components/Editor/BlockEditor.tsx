@@ -11,6 +11,7 @@ import { useTemplatesStore } from '@/stores/templatesStore'
 import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
+import { BookTemplate } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
 interface DebouncedNoteUpdate {
@@ -61,7 +62,7 @@ function createDebouncedNoteUpdate(
 }
 
 export function BlockEditor() {
-  const { currentNoteId, notes, updateNote } = useNotesStore()
+  const { currentNoteId, notes, updateNote, isAuthenticated } = useNotesStore()
   const { showAIToolbar, hideAIToolbar } = useUIStore()
   const { createTemplate } = useTemplatesStore()
 
@@ -266,8 +267,17 @@ export function BlockEditor() {
         {/* Sticky Formatting Toolbar */}
         {editor && (
           <div className="flex-shrink-0 px-12 pt-4 pb-2" style={{ background: 'var(--fl-color-bg-base)' }}>
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto flex items-center gap-2">
               <FormattingToolbar editor={editor} />
+              {isAuthenticated && currentNote?.content && (
+                <button
+                  onClick={() => setShowTemplateModal(true)}
+                  title="Save as Template"
+                  className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors border border-surface-200 dark:border-surface-700"
+                >
+                  <BookTemplate size={18} />
+                </button>
+              )}
             </div>
           </div>
         )}

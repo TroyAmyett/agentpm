@@ -45,7 +45,10 @@ export function NotesList() {
   }
 
   const handleNewNote = () => {
-    addNote({ title: 'Untitled' })
+    const noteName = prompt('Enter note title:')
+    if (noteName && noteName.trim()) {
+      addNote({ title: noteName.trim() })
+    }
   }
 
   const handleNewFolder = () => {

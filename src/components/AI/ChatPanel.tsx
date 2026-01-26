@@ -475,8 +475,8 @@ export function ChatPanel() {
                   onKeyDown={handleKeyDown}
                   placeholder="Ask about your notes..."
                   rows={4}
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  style={{ minHeight: '100px', maxHeight: '200px' }}
+                  className="flex-1 pl-4 pr-4 py-2.5 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                  style={{ minHeight: '100px', maxHeight: '200px', paddingLeft: '16px' }}
                 />
                 <div className="flex flex-col gap-2">
                   {speechSupported && (
