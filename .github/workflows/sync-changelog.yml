@@ -46,7 +46,16 @@ jobs:
             process.exit(1);
           }
 
-          const supabase = createClient(supabaseUrl, supabaseKey);
+          // Use service role with auth disabled to bypass RLS
+          const supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          });
+
+          console.log('Supabase URL:', supabaseUrl);
+          console.log('Service key starts with:', supabaseKey?.slice(0, 20) + '...');
 
           // Get last synced commit
           const { data: syncState } = await supabase
@@ -159,7 +168,11 @@ jobs:
                 console.log(`Skipping duplicate: ${entry.title}`);
                 continue;
               }
-              console.error('Failed to insert entry:', entry.title, insertError);
+              console.error('Failed to insert entry:', entry.title);
+              console.error('Error details:', JSON.stringify(insertError, null, 2));
+              console.error('Error code:', insertError.code);
+              console.error('Error hint:', insertError.hint);
+              console.error('Error details:', insertError.details);
               process.exit(1);
             }
             inserted++;
