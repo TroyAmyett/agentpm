@@ -15,7 +15,53 @@ import {
   FileText,
   PenLine,
   Globe,
+  Mic,
+  MicOff,
 } from 'lucide-react'
+
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList
+  resultIndex: number
+}
+
+interface SpeechRecognitionResultList {
+  length: number
+  item(index: number): SpeechRecognitionResult
+  [index: number]: SpeechRecognitionResult
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean
+  length: number
+  item(index: number): SpeechRecognitionAlternative
+  [index: number]: SpeechRecognitionAlternative
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string
+  confidence: number
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  abort(): void
+  onresult: ((event: SpeechRecognitionEvent) => void) | null
+  onerror: ((event: Event & { error: string }) => void) | null
+  onend: (() => void) | null
+  onstart: (() => void) | null
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition
+    webkitSpeechRecognition: new () => SpeechRecognition
+  }
+}
 
 interface Message {
   id: string
@@ -36,8 +82,11 @@ export function ChatPanel() {
   const [error, setError] = useState<string | null>(null)
   const [activeNoteTitle, setActiveNoteTitle] = useState<string | null>(null)
   const [chatStatus, setChatStatus] = useState<'thinking' | 'searching' | 'updating-note'>('thinking')
+  const [isRecording, setIsRecording] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   // Track previous note ID for history management
   const prevNoteIdRef = useRef<string | null>(null)
@@ -126,6 +175,56 @@ export function ChatPanel() {
       setNoteOperationCallbacks(null)
     }
   }, [currentNoteId, notes, updateNote, addNote])
+
+  // Check for speech recognition support
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
+    setSpeechSupported(!!SpeechRecognitionAPI)
+  }, [])
+
+  const toggleRecording = useCallback(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognitionAPI) return
+
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop()
+      setIsRecording(false)
+      return
+    }
+
+    const recognition = new SpeechRecognitionAPI()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript
+        }
+      }
+
+      if (finalTranscript) {
+        setInput(prev => prev + finalTranscript)
+      }
+    }
+
+    recognition.onerror = (event: Event & { error: string }) => {
+      console.error('Speech recognition error:', event.error)
+      setIsRecording(false)
+    }
+
+    recognition.onend = () => {
+      setIsRecording(false)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsRecording(true)
+  }, [isRecording])
 
   const handleResize = useCallback((delta: number) => {
     // For a panel on the right side, dragging left (negative delta) should increase width
@@ -375,21 +474,37 @@ export function ChatPanel() {
                   }}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask about your notes..."
-                  rows={2}
+                  rows={4}
                   className="flex-1 px-4 py-2.5 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  style={{ minHeight: '60px', maxHeight: '200px' }}
+                  style={{ minHeight: '100px', maxHeight: '200px' }}
                 />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || loading}
-                  className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-300 dark:disabled:bg-surface-600 text-white rounded-xl transition-colors disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Send size={18} />
+                <div className="flex flex-col gap-2">
+                  {speechSupported && (
+                    <button
+                      onClick={toggleRecording}
+                      disabled={loading}
+                      className={`p-2.5 rounded-xl transition-colors ${
+                        isRecording
+                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                          : 'bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-600 dark:text-surface-300'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={isRecording ? 'Stop recording' : 'Voice input'}
+                    >
+                      {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
+                    </button>
                   )}
-                </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim() || loading}
+                    className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-300 dark:disabled:bg-surface-600 text-white rounded-xl transition-colors disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <Send size={18} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -153,6 +153,35 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
           <span className="flex-1 text-sm truncate">{folder.name}</span>
         )}
 
+        {/* Quick action icons */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              addNote({ folder_id: folder.id })
+              if (!isExpanded) toggleFolderExpanded(folder.id)
+            }}
+            className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700"
+            title="New Note"
+          >
+            <Plus size={12} className="text-surface-500" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const folderName = prompt('Enter subfolder name:')
+              if (folderName && folderName.trim()) {
+                addFolder({ parent_id: folder.id, name: folderName.trim() })
+                if (!isExpanded) toggleFolderExpanded(folder.id)
+              }
+            }}
+            className="p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700"
+            title="New Subfolder"
+          >
+            <FolderPlus size={12} className="text-surface-500" />
+          </button>
+        </div>
+
         {/* Menu */}
         <div className="relative">
           <button

@@ -453,7 +453,7 @@ function App() {
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
         }}
       >
-        {/* Left: Logo and Account Switcher */}
+        {/* Left: Logo, Account Switcher, and Note Title (when in notes view) */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
@@ -462,6 +462,22 @@ function App() {
             <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>Agents</span>
           </div>
           <AccountSwitcher />
+          {currentView === 'notes' && currentNote && (
+            <>
+              <div className="w-px h-6 bg-white/10" />
+              <input
+                type="text"
+                value={currentNote.title}
+                onChange={(e) => {
+                  const { updateNote } = useNotesStore.getState()
+                  updateNote(currentNote.id, { title: e.target.value })
+                }}
+                placeholder="Untitled"
+                className="bg-transparent border-none outline-none text-lg font-medium max-w-[300px] truncate"
+                style={{ color: 'var(--fl-color-text-primary)' }}
+              />
+            </>
+          )}
         </div>
 
         {/* Center: Horizontal Navigation (truly centered) */}

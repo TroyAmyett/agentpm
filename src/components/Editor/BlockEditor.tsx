@@ -11,7 +11,6 @@ import { useTemplatesStore } from '@/stores/templatesStore'
 import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
-import { BookTemplate } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
 interface DebouncedNoteUpdate {
@@ -62,7 +61,7 @@ function createDebouncedNoteUpdate(
 }
 
 export function BlockEditor() {
-  const { currentNoteId, notes, updateNote, isAuthenticated } = useNotesStore()
+  const { currentNoteId, notes, updateNote } = useNotesStore()
   const { showAIToolbar, hideAIToolbar } = useUIStore()
   const { createTemplate } = useTemplatesStore()
 
@@ -93,12 +92,6 @@ export function BlockEditor() {
       debouncedUpdate.flush()
     }
   }, [debouncedUpdate, currentNoteId])
-
-  const handleSaveAsTemplate = useCallback(() => {
-    if (currentNote && currentNote.content && isAuthenticated) {
-      setShowTemplateModal(true)
-    }
-  }, [currentNote, isAuthenticated])
 
   const handleSaveTemplate = useCallback(async (data: {
     name: string
@@ -269,36 +262,24 @@ export function BlockEditor() {
 
   return (
     <>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-12 py-12">
-          {/* Title Input with Save as Template */}
-          <div className="flex items-start gap-2 mb-8">
-            <input
-              type="text"
-              value={currentNote.title}
-              onChange={(e) => updateNote(currentNote.id, { title: e.target.value })}
-              placeholder="Untitled"
-              className="flex-1 text-4xl font-bold bg-transparent border-none outline-none text-surface-900 dark:text-surface-100 placeholder:text-surface-300"
-            />
-            {isAuthenticated && currentNote.content && (
-              <button
-                onClick={handleSaveAsTemplate}
-                title="Save as Template"
-                className="p-2 mt-1 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors"
-              >
-                <BookTemplate size={20} />
-              </button>
-            )}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* Sticky Formatting Toolbar */}
+        {editor && (
+          <div className="flex-shrink-0 px-12 pt-4 pb-2" style={{ background: 'var(--fl-color-bg-base)' }}>
+            <div className="max-w-4xl mx-auto">
+              <FormattingToolbar editor={editor} />
+            </div>
           </div>
+        )}
 
-          {/* Formatting Toolbar */}
-          {editor && <FormattingToolbar editor={editor} />}
-
-          {/* Editor */}
-          <EditorContent
-            editor={editor}
-            className="min-h-[calc(100vh-300px)]"
-          />
+        {/* Scrollable Editor Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-12 pb-12">
+            <EditorContent
+              editor={editor}
+              className="min-h-[calc(100vh-300px)]"
+            />
+          </div>
         </div>
       </div>
 
