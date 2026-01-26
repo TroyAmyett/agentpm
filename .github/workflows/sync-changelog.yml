@@ -1,0 +1,165 @@
+# Sync Changelog from Git Commits
+# Parses conventional commits and syncs to Supabase changelog_entries table
+
+name: Sync Changelog
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  # Set per repo - determines which product these commits belong to
+  CHANGELOG_PRODUCT: agentpm
+
+jobs:
+  sync-changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for commit parsing
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Parse and Sync Commits
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cat << 'EOF' > sync-changelog.mjs
+          import { createClient } from '@supabase/supabase-js';
+          import { execSync } from 'child_process';
+
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+          const product = process.env.CHANGELOG_PRODUCT || 'agentpm';
+
+          if (!supabaseUrl || !supabaseKey) {
+            console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
+            process.exit(1);
+          }
+
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          // Get last synced commit
+          const { data: syncState } = await supabase
+            .from('changelog_sync_state')
+            .select('last_commit_hash')
+            .eq('product', product)
+            .single();
+
+          const lastHash = syncState?.last_commit_hash;
+
+          // Get commits since last sync (or last 30 days if no sync state)
+          const range = lastHash
+            ? `${lastHash}..HEAD`
+            : '--since="30 days ago"';
+
+          const format = '%H|%s|%b|%ad';
+          const gitLog = execSync(
+            `git log ${range} --pretty=format:"${format}" --date=short`,
+            { encoding: 'utf-8' }
+          ).trim();
+
+          if (!gitLog) {
+            console.log('No new commits to sync');
+            process.exit(0);
+          }
+
+          const commits = gitLog.split('\n').filter(Boolean);
+          console.log(`Found ${commits.length} commits to process`);
+
+          // Parse conventional commit format: type(scope): title
+          const conventionalRegex = /^(\w+)(?:\(([^)]+)\))?:\s*(.+)$/;
+
+          const entries = [];
+          let latestHash = null;
+
+          for (const commit of commits) {
+            const [hash, subject, body, date] = commit.split('|');
+
+            if (!latestHash) latestHash = hash;
+
+            const match = subject.match(conventionalRegex);
+            if (!match) {
+              // Non-conventional commit, skip or use as 'chore'
+              console.log(`Skipping non-conventional commit: ${subject}`);
+              continue;
+            }
+
+            const [, type, scope, title] = match;
+
+            // Skip certain types
+            if (['ci', 'build', 'test', 'style'].includes(type)) {
+              console.log(`Skipping ${type} commit: ${title}`);
+              continue;
+            }
+
+            // Check for --highlight flag in body
+            const isHighlight = body?.includes('--highlight') || false;
+
+            // Clean up body (remove --highlight flag)
+            const description = body
+              ?.replace('--highlight', '')
+              .trim()
+              .slice(0, 500) || null;
+
+            entries.push({
+              product,
+              title,
+              description,
+              commit_type: type,
+              commit_hash: hash,
+              commit_date: date,
+              is_highlight: isHighlight,
+            });
+          }
+
+          if (entries.length === 0) {
+            console.log('No changelog entries to insert');
+            process.exit(0);
+          }
+
+          console.log(`Inserting ${entries.length} changelog entries`);
+
+          // Insert entries (upsert by commit_hash to avoid duplicates)
+          const { error: insertError } = await supabase
+            .from('changelog_entries')
+            .upsert(entries, {
+              onConflict: 'commit_hash',
+              ignoreDuplicates: true,
+            });
+
+          if (insertError) {
+            console.error('Failed to insert entries:', insertError);
+            process.exit(1);
+          }
+
+          // Update sync state
+          const { error: syncError } = await supabase
+            .from('changelog_sync_state')
+            .upsert({
+              product,
+              last_commit_hash: latestHash,
+              last_sync_at: new Date().toISOString(),
+            }, {
+              onConflict: 'product',
+            });
+
+          if (syncError) {
+            console.error('Failed to update sync state:', syncError);
+            process.exit(1);
+          }
+
+          console.log(`Successfully synced ${entries.length} entries`);
+          EOF
+
+          npm install @supabase/supabase-js
+          node sync-changelog.mjs
