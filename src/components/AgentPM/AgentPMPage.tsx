@@ -58,8 +58,25 @@ const tabs: Tab[] = [
   { id: 'tools', label: 'Tools', icon: <Cpu size={18} /> },
 ]
 
+// Valid tab IDs for URL hash parsing
+const VALID_TABS: TabId[] = ['dashboard', 'projects', 'tasks', 'agents', 'reviews', 'skills', 'forge', 'tools']
+
+// Get initial tab from URL hash (e.g., #agentpm/tasks)
+function getTabFromHash(): TabId {
+  const hash = window.location.hash
+  // Parse hash like #agentpm/tasks or just check if it contains a tab name
+  const match = hash.match(/(?:agentpm\/)?(\w+)$/i)
+  if (match) {
+    const tabId = match[1].toLowerCase() as TabId
+    if (VALID_TABS.includes(tabId)) {
+      return tabId
+    }
+  }
+  return 'dashboard'
+}
+
 export function AgentPMPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard')
+  const [activeTab, setActiveTab] = useState<TabId>(getTabFromHash)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false)
   const [createTaskInitialStatus, setCreateTaskInitialStatus] = useState<Task['status'] | undefined>(undefined)
@@ -70,6 +87,7 @@ export function AgentPMPage() {
   const [voiceTaskTitle, setVoiceTaskTitle] = useState<string>('')
   const [isForgeTaskOpen, setIsForgeTaskOpen] = useState(false)
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all')
+  const [taskProjectFilter, setTaskProjectFilter] = useState<string | 'all'>('all')
   const [_isPending, startTransition] = useTransition()
 
   const { user } = useAuthStore()
@@ -134,6 +152,36 @@ export function AgentPMPage() {
       unsubTasks()
     }
   }, [accountId, subscribeToAgents, subscribeToTasks])
+
+  // Sync URL hash with active tab (preserving the #agentpm prefix if present)
+  useEffect(() => {
+    const currentHash = window.location.hash
+    const expectedHash = currentHash.includes('agentpm')
+      ? `#agentpm/${activeTab}`
+      : `#agentpm/${activeTab}`
+
+    if (!currentHash.endsWith(`/${activeTab}`) && !currentHash.endsWith(activeTab)) {
+      window.history.replaceState(null, '', expectedHash)
+    }
+  }, [activeTab])
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const newTab = getTabFromHash()
+      if (newTab !== activeTab) {
+        setActiveTab(newTab)
+      }
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    window.addEventListener('popstate', handleHashChange)
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+      window.removeEventListener('popstate', handleHashChange)
+    }
+  }, [activeTab])
 
   // Queue watcher - auto-process queued tasks with assigned agents (PARALLEL for sizzle!)
   const MAX_PARALLEL_TASKS = 3 // Process up to 3 tasks simultaneously
@@ -270,20 +318,57 @@ export function AgentPMPage() {
           .catch((err) => console.error('Failed to queue next sub-task:', err))
       }
 
-      // Check if all sub-tasks are complete - mark parent as complete
+      // Check if all sub-tasks are complete - aggregate outputs and mark parent for review
       const allSiblings = tasks.filter((t) => t.parentTaskId === completedTask.parentTaskId)
       const allComplete = allSiblings.every((t) => t.status === 'completed' || t.status === 'review')
 
       if (allComplete && allSiblings.length > 0) {
         const parentTask = tasks.find((t) => t.id === completedTask.parentTaskId)
         if (parentTask && parentTask.status === 'in_progress') {
-          console.log(`All sub-tasks complete for "${parentTask.title}", marking parent as review`)
-          updateTaskStatus(parentTask.id, 'review', userId, 'All sub-tasks completed')
-            .catch((err) => console.error('Failed to complete parent task:', err))
+          console.log(`All sub-tasks complete for "${parentTask.title}", aggregating outputs...`)
+
+          // Aggregate all subtask outputs into parent output
+          const subtaskOutputs = allSiblings
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            .map((subtask) => ({
+              taskId: subtask.id,
+              title: subtask.title,
+              output: subtask.output,
+              completedAt: subtask.completedAt,
+            }))
+
+          // Build aggregated content from subtask outputs
+          const aggregatedContent = subtaskOutputs
+            .map((s) => {
+              const content = s.output && typeof s.output === 'object' && 'content' in s.output
+                ? String(s.output.content)
+                : JSON.stringify(s.output)
+              return `## ${s.title}\n\n${content}`
+            })
+            .join('\n\n---\n\n')
+
+          const aggregatedOutput = {
+            content: aggregatedContent,
+            subtasks: subtaskOutputs,
+            aggregatedAt: new Date().toISOString(),
+            subtaskCount: allSiblings.length,
+          }
+
+          // Update parent with aggregated output, then move to review
+          updateTask(parentTask.id, {
+            output: aggregatedOutput,
+            updatedBy: userId,
+            updatedByType: 'user',
+          })
+            .then(() => {
+              console.log(`Aggregated ${allSiblings.length} subtask outputs into parent "${parentTask.title}"`)
+              return updateTaskStatus(parentTask.id, 'review', userId, 'All sub-tasks completed - outputs aggregated')
+            })
+            .catch((err) => console.error('Failed to aggregate and complete parent task:', err))
         }
       }
     }
-  }, [tasks, updateTaskStatus, userId, isTaskBlocked])
+  }, [tasks, updateTask, updateTaskStatus, userId, isTaskBlocked])
 
   // Handle task creation - new tasks go to Inbox (draft) by default
   const handleCreateTask = useCallback(
@@ -564,6 +649,11 @@ export function AgentPMPage() {
   // Create a Set of executing task IDs for AgentQueueView
   const executingTaskIds = new Set(activeExecutions.keys())
 
+  // Filter tasks by project if a filter is set
+  const filteredTasks = taskProjectFilter === 'all'
+    ? tasks
+    : tasks.filter(t => t.projectId === taskProjectFilter)
+
   // Handle voice commands
   const handleVoiceCommand = useCallback(
     (command: ParsedVoiceCommand) => {
@@ -662,9 +752,25 @@ export function AgentPMPage() {
           <div className="flex flex-col h-full">
             {/* View Switcher Bar */}
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
-              <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
-                {tasks.length} tasks
-              </span>
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
+                  {filteredTasks.length} tasks
+                  {taskProjectFilter !== 'all' && ` in ${projects.find(p => p.id === taskProjectFilter)?.name || 'project'}`}
+                </span>
+                {/* Project Filter */}
+                <select
+                  value={taskProjectFilter}
+                  onChange={(e) => setTaskProjectFilter(e.target.value)}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">All Projects</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <ViewSwitcher
                 currentView={taskViewMode}
                 onViewChange={(view) => setTaskViewMode(view)}
@@ -675,7 +781,7 @@ export function AgentPMPage() {
             <div className="flex-1 overflow-hidden">
               {taskViewMode === 'kanban' && (
                 <KanbanView
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   agents={agentNameMap}
                   onTaskClick={setSelectedTaskId}
                   onAddTask={(columnStatus) => {
@@ -689,7 +795,7 @@ export function AgentPMPage() {
               {taskViewMode === 'list' && (
                 <div className="h-full p-4">
                   <TableListView
-                    tasks={tasks}
+                    tasks={filteredTasks}
                     agents={agents}
                     blockedTasks={blockedTasks}
                     executingTaskIds={executingTaskIds}
@@ -712,7 +818,7 @@ export function AgentPMPage() {
                   {/* Task List (Card View) */}
                   <div className="w-96 flex-shrink-0 bg-white dark:bg-surface-800 border-r border-surface-200 dark:border-surface-700">
                     <TaskList
-                      tasks={tasks}
+                      tasks={filteredTasks}
                       agents={agentNameMap}
                       blockedTasks={blockedTasks}
                       selectedTaskId={selectedTaskId}
@@ -756,28 +862,28 @@ export function AgentPMPage() {
 
               {taskViewMode === 'graph' && (
                 <DependencyGraph
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   onTaskClick={setSelectedTaskId}
                 />
               )}
 
               {taskViewMode === 'gantt' && (
                 <GanttView
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   onTaskClick={setSelectedTaskId}
                 />
               )}
 
               {taskViewMode === 'calendar' && (
                 <CalendarView
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   onTaskClick={setSelectedTaskId}
                 />
               )}
 
               {taskViewMode === 'queue' && (
                 <AgentQueueView
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   agents={agents}
                   blockedTasks={blockedTasks}
                   executingTaskIds={executingTaskIds}
@@ -827,6 +933,25 @@ export function AgentPMPage() {
 
             {/* Task Detail Sidebar for Kanban View */}
             {taskViewMode === 'kanban' && selectedTask && (
+              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+                <TaskDetail
+                  task={selectedTask}
+                  agent={selectedTaskAgent}
+                  skill={selectedTaskSkill}
+                  allTasks={tasks}
+                  accountId={accountId}
+                  userId={userId}
+                  onClose={() => setSelectedTaskId(null)}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDelete={() => handleDeleteTask(selectedTask.id)}
+                  onEdit={() => setEditingTask(selectedTask)}
+                  onDependencyChange={() => fetchTasks(accountId)}
+                />
+              </div>
+            )}
+
+            {/* Task Detail Sidebar for Gantt View */}
+            {taskViewMode === 'gantt' && selectedTask && (
               <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
                 <TaskDetail
                   task={selectedTask}
@@ -1195,6 +1320,7 @@ export function AgentPMPage() {
         onClose={() => setIsForgeTaskOpen(false)}
         onSubmit={handleCreateForgeTask}
         agents={agents}
+        projects={projects}
         projectId={undefined}
       />
 
