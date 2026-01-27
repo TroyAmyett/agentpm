@@ -695,7 +695,6 @@ function ReviewStep({
                 className="max-h-full max-w-full object-contain cursor-crosshair"
                 crossOrigin="anonymous"
                 onClick={handleImageClick}
-                onLoad={() => loadLogoToCanvas(config.logos?.primary || '')}
               />
             </div>
           </div>
