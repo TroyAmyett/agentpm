@@ -597,15 +597,25 @@ async function generatePptxTemplate(brand: BrandConfig): Promise<GeneratedTempla
     align: 'center',
   })
 
-  // Generate the file
-  const blob = (await pptx.write({ outputType: 'blob' })) as Blob
-  const prefix = brand.companyName.toLowerCase().replace(/\s+/g, '-')
+  // Generate the file - use arraybuffer and convert to Blob for better browser compatibility
+  try {
+    const output = await pptx.write({ outputType: 'arraybuffer' })
+    const blob = new Blob([output as ArrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    const prefix = brand.companyName.toLowerCase().replace(/\s+/g, '-')
 
-  return {
-    blob,
-    fileName: `${prefix}-presentation-template.pptx`,
-    mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    templateType: 'presentation',
+    console.log('[TemplateGenerator] Generated presentation template:', blob.size, 'bytes')
+
+    return {
+      blob,
+      fileName: `${prefix}-presentation-template.pptx`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      templateType: 'presentation',
+    }
+  } catch (writeError) {
+    console.error('[TemplateGenerator] pptxgenjs write error:', writeError)
+    throw writeError
   }
 }
 
