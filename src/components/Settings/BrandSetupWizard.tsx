@@ -1,7 +1,7 @@
 // Brand Setup Wizard
 // Multi-step wizard for configuring brand identity and generating templates
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe,
@@ -16,6 +16,7 @@ import {
   Presentation,
   Table,
   Sparkles,
+  Pipette,
 } from 'lucide-react'
 import { useBrandStore } from '@/stores/brandStore'
 import { useAccountStore } from '@/stores/accountStore'
@@ -409,6 +410,63 @@ function ReviewStep({
   onContinue: () => void
   isSaving: boolean
 }) {
+  // Eyedropper state - which color field is actively picking
+  const [eyedropperTarget, setEyedropperTarget] = useState<'primary' | 'secondary' | 'accent' | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Handle clicking on the logo to pick a color
+  const handleLogoClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!eyedropperTarget || !canvasRef.current) return
+
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+
+    // Scale coordinates to canvas size
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const canvasX = Math.floor(x * scaleX)
+    const canvasY = Math.floor(y * scaleY)
+
+    // Get pixel color
+    const pixel = ctx.getImageData(canvasX, canvasY, 1, 1).data
+    const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`
+
+    // Update the target color
+    onUpdateConfig(`colors.${eyedropperTarget}`, hex)
+    setEyedropperTarget(null)
+  }, [eyedropperTarget, onUpdateConfig])
+
+  // Load logo into canvas when available
+  const loadLogoToCanvas = useCallback((logoUrl: string) => {
+    if (!canvasRef.current) return
+
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      canvas.width = img.width
+      canvas.height = img.height
+      ctx.drawImage(img, 0, 0)
+    }
+    img.src = logoUrl
+  }, [])
+
+  // Load logo when primary logo URL changes
+  const logoUrl = config.logos?.primary
+  useEffect(() => {
+    if (logoUrl) {
+      loadLogoToCanvas(logoUrl)
+    }
+  }, [logoUrl, loadLogoToCanvas])
+
   return (
     <div className="space-y-6">
       <div>
@@ -502,24 +560,75 @@ function ReviewStep({
 
       {/* Colors */}
       <div className="space-y-3">
-        <h4 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
-          Brand Colors
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
+            Brand Colors
+          </h4>
+          {config.logos?.primary && (
+            <span className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+              Click <Pipette size={12} className="inline mx-0.5" /> to pick from logo
+            </span>
+          )}
+        </div>
+
+        {/* Hidden canvas for color extraction */}
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+        {/* Eyedropper color picker overlay */}
+        {eyedropperTarget && config.logos?.primary && (
+          <div
+            className="p-3 rounded-lg"
+            style={{ background: 'rgba(14, 165, 233, 0.1)', border: '1px solid #0ea5e9' }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Pipette size={14} style={{ color: '#0ea5e9' }} />
+              <span className="text-xs font-medium" style={{ color: '#0ea5e9' }}>
+                Click on the logo to pick {eyedropperTarget} color
+              </span>
+              <button
+                onClick={() => setEyedropperTarget(null)}
+                className="ml-auto text-xs px-2 py-0.5 rounded hover:bg-white/10"
+                style={{ color: 'var(--fl-color-text-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+            <div
+              className="h-24 rounded-lg flex items-center justify-center cursor-crosshair overflow-hidden"
+              style={{ background: extractionResult?.logoDesignedForDarkBackground ? '#1e293b' : 'white' }}
+              onClick={handleLogoClick}
+            >
+              <img
+                src={config.logos.primary}
+                alt="Pick color from logo"
+                className="max-h-full max-w-full object-contain"
+                onLoad={() => loadLogoToCanvas(config.logos?.primary || '')}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-3">
           <ColorInput
             label="Primary"
             value={config.colors?.primary || '#0ea5e9'}
             onChange={(v) => onUpdateConfig('colors.primary', v)}
+            onEyedropper={config.logos?.primary ? () => setEyedropperTarget('primary') : undefined}
+            isEyedropperActive={eyedropperTarget === 'primary'}
           />
           <ColorInput
             label="Secondary"
             value={config.colors?.secondary || '#64748b'}
             onChange={(v) => onUpdateConfig('colors.secondary', v)}
+            onEyedropper={config.logos?.primary ? () => setEyedropperTarget('secondary') : undefined}
+            isEyedropperActive={eyedropperTarget === 'secondary'}
           />
           <ColorInput
             label="Accent"
             value={config.colors?.accent || '#f59e0b'}
             onChange={(v) => onUpdateConfig('colors.accent', v)}
+            onEyedropper={config.logos?.primary ? () => setEyedropperTarget('accent') : undefined}
+            isEyedropperActive={eyedropperTarget === 'accent'}
           />
         </div>
       </div>
@@ -789,19 +898,23 @@ function ColorInput({
   label,
   value,
   onChange,
+  onEyedropper,
+  isEyedropperActive,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
+  onEyedropper?: () => void
+  isEyedropperActive?: boolean
 }) {
   return (
     <label className="block">
       <span className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
         {label}
       </span>
-      <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-1 mt-1">
         <div
-          className="w-8 h-8 rounded-lg border cursor-pointer"
+          className="w-8 h-8 rounded-lg border cursor-pointer flex-shrink-0"
           style={{ backgroundColor: value, borderColor: 'var(--fl-color-border)' }}
         >
           <input
@@ -816,13 +929,31 @@ function ColorInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="#000000"
-          className="flex-1 px-2 py-1.5 rounded text-xs font-mono"
+          className="flex-1 min-w-0 px-2 py-1.5 rounded text-xs font-mono"
           style={{
             background: 'rgba(255, 255, 255, 0.05)',
             border: '1px solid var(--fl-color-border)',
             color: 'var(--fl-color-text-primary)',
           }}
         />
+        {onEyedropper && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              onEyedropper()
+            }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+            style={{
+              background: isEyedropperActive ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${isEyedropperActive ? '#0ea5e9' : 'var(--fl-color-border)'}`,
+              color: isEyedropperActive ? '#0ea5e9' : 'var(--fl-color-text-muted)',
+            }}
+            title="Pick color from logo"
+          >
+            <Pipette size={14} />
+          </button>
+        )}
       </div>
     </label>
   )
