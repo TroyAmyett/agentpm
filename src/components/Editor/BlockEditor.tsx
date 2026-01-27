@@ -8,9 +8,12 @@ import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useNotesStore } from '@/stores/notesStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useTemplatesStore } from '@/stores/templatesStore'
+import { useAccountStore } from '@/stores/accountStore'
+import { useAuthStore } from '@/stores/authStore'
 import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
+import { AttachmentPanel } from '@/components/Attachments'
 import { BookTemplate } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
@@ -65,6 +68,8 @@ export function BlockEditor() {
   const { currentNoteId, notes, updateNote, isAuthenticated } = useNotesStore()
   const { showAIToolbar, hideAIToolbar } = useUIStore()
   const { createTemplate } = useTemplatesStore()
+  const { currentAccountId } = useAccountStore()
+  const { user } = useAuthStore()
 
   const currentNote = notes.find((n) => n.id === currentNoteId)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -285,10 +290,32 @@ export function BlockEditor() {
         {/* Scrollable Editor Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-12 pb-12">
+            {/* Note Title */}
+            <input
+              type="text"
+              value={currentNote.title}
+              onChange={(e) => updateNote(currentNote.id, { title: e.target.value })}
+              placeholder="Untitled"
+              className="w-full text-3xl font-bold bg-transparent border-none outline-none mb-4 text-surface-900 dark:text-surface-100 placeholder:text-surface-400"
+              style={{ lineHeight: 1.3 }}
+            />
+
             <EditorContent
               editor={editor}
-              className="min-h-[calc(100vh-300px)]"
+              className="min-h-[calc(100vh-400px)]"
             />
+
+            {/* Attachments Panel */}
+            {currentAccountId && user?.id && (
+              <div className="mt-6">
+                <AttachmentPanel
+                  entityType="note"
+                  entityId={currentNote.id}
+                  accountId={currentAccountId}
+                  userId={user.id}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

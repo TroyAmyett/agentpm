@@ -23,6 +23,7 @@ interface NotesState {
   setCurrentNote: (id: string | null) => void
   getCurrentNote: () => Note | null
   moveNoteToFolder: (noteId: string, folderId: string | null) => Promise<void>
+  reorderNote: (noteId: string, newPosition: number) => Promise<void>
 
   // Folder Actions
   addFolder: (folder: Partial<Folder>) => Promise<Folder>
@@ -31,6 +32,7 @@ interface NotesState {
   setCurrentFolder: (id: string | null) => void
   toggleFolderExpanded: (id: string) => void
   moveFolderTo: (folderId: string, newParentId: string | null) => Promise<void>
+  reorderFolder: (folderId: string, newPosition: number) => Promise<void>
 
   // Hierarchy helpers
   getFolderChildren: (parentId: string | null) => Folder[]
@@ -546,19 +548,99 @@ export const useNotesStore = create<NotesState>()(
         await get().updateFolder(folderId, { parent_id: newParentId })
       },
 
+      reorderNote: async (noteId, newPosition) => {
+        const { notes, isAuthenticated } = get()
+        const note = notes.find((n) => n.id === noteId)
+        if (!note) return
+
+        const folderId = note.folder_id
+
+        // Get siblings in same folder, sorted by current sort_order
+        const siblings = notes
+          .filter((n) => n.folder_id === folderId && n.id !== noteId)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+        // Build new order array with note inserted at new position
+        const newOrder = [...siblings]
+        newOrder.splice(newPosition, 0, note)
+
+        // Update sort_order for all affected notes
+        const updates = newOrder.map((n, index) => ({
+          id: n.id,
+          sort_order: index,
+        }))
+
+        // Optimistic update
+        set((state) => ({
+          notes: state.notes.map((n) => {
+            const update = updates.find((u) => u.id === n.id)
+            return update ? { ...n, sort_order: update.sort_order } : n
+          }),
+        }))
+
+        // Sync to server
+        if (isAuthenticated) {
+          try {
+            await db.reorderNote(noteId, newPosition, folderId)
+          } catch (error) {
+            console.error('[NotesStore] Failed to reorder note:', error)
+          }
+        }
+      },
+
+      reorderFolder: async (folderId, newPosition) => {
+        const { folders, isAuthenticated } = get()
+        const folder = folders.find((f) => f.id === folderId)
+        if (!folder) return
+
+        const parentId = folder.parent_id
+
+        // Get siblings in same parent, sorted by current sort_order
+        const siblings = folders
+          .filter((f) => f.parent_id === parentId && f.id !== folderId)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+        // Build new order array
+        const newOrder = [...siblings]
+        newOrder.splice(newPosition, 0, folder)
+
+        // Update sort_order for all affected folders
+        const updates = newOrder.map((f, index) => ({
+          id: f.id,
+          sort_order: index,
+        }))
+
+        // Optimistic update
+        set((state) => ({
+          folders: state.folders.map((f) => {
+            const update = updates.find((u) => u.id === f.id)
+            return update ? { ...f, sort_order: update.sort_order } : f
+          }),
+        }))
+
+        // Sync to server
+        if (isAuthenticated) {
+          try {
+            await db.reorderFolder(folderId, newPosition, parentId)
+          } catch (error) {
+            console.error('[NotesStore] Failed to reorder folder:', error)
+          }
+        }
+      },
+
       // Hierarchy helpers
       getFolderChildren: (parentId) => {
         const { folders } = get()
         return folders
           .filter((f) => f.parent_id === parentId)
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       },
 
       getNotesInFolder: (folderId) => {
         const { notes } = get()
         return notes
           .filter((n) => n.folder_id === folderId)
-          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       },
 
       getFolderPath: (folderId) => {

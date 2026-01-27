@@ -21,6 +21,7 @@ import {
   File,
   Maximize2,
   X,
+  Wrench,
 } from 'lucide-react'
 import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { useExecutionStore } from '@/stores/executionStore'
@@ -276,6 +277,44 @@ export function ExecutionPanel({
                 <span>{formatDateTime(displayExecution.createdAt)}</span>
               </div>
             </div>
+
+            {/* Skill & Tools Used */}
+            {(displayExecution.inputContext?.skillName || displayExecution.outputMetadata?.toolsUsed) && (
+              <div className="px-4 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-900/30">
+                <div className="flex flex-wrap items-center gap-2">
+                  {displayExecution.inputContext?.skillName && (
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium">
+                      <Sparkles size={12} />
+                      {displayExecution.inputContext.skillName}
+                    </span>
+                  )}
+                  {displayExecution.outputMetadata?.toolsUsed && displayExecution.outputMetadata.toolsUsed.length > 0 && (
+                    <>
+                      {displayExecution.inputContext?.skillName && (
+                        <span className="text-surface-400">•</span>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <Wrench size={12} className="text-surface-500" />
+                        <span className="text-xs text-surface-600 dark:text-surface-400">Tools:</span>
+                        {displayExecution.outputMetadata.toolsUsed.map((tool, idx) => (
+                          <span
+                            key={idx}
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              tool.success
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            }`}
+                            title={tool.error || `Input: ${JSON.stringify(tool.input)}`}
+                          >
+                            {tool.name}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Output Content */}
             {displayExecution.outputContent && (

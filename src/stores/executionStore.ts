@@ -36,6 +36,13 @@ export interface TaskExecution {
     inputTokens: number
     outputTokens: number
     durationMs: number
+    toolsUsed?: Array<{
+      name: string
+      input: Record<string, unknown>
+      success: boolean
+      error?: string
+    }>
+    toolIterations?: number
   }
   errorMessage?: string
   errorDetails?: Record<string, unknown>
@@ -269,9 +276,38 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         }
       }
 
-      // Execute the task with tools enabled
+      // Build additional context from completed sibling subtasks (for dependent tasks)
+      let additionalContext: string | undefined
+      if (task.parentTaskId) {
+        // Fetch completed sibling tasks
+        const { data: siblings } = await supabase
+          .from('tasks')
+          .select('id, title, output, status, completed_at')
+          .eq('parent_task_id', task.parentTaskId)
+          .neq('id', task.id)
+          .in('status', ['completed', 'review'])
+          .order('created_at', { ascending: true })
+
+        if (siblings && siblings.length > 0) {
+          const siblingOutputs = siblings
+            .filter((s) => s.output && Object.keys(s.output).length > 0)
+            .map((s) => {
+              const output = s.output as Record<string, unknown>
+              const content = output.content ? String(output.content) : JSON.stringify(output)
+              return `## ${s.title}\n\n${content}`
+            })
+            .join('\n\n---\n\n')
+
+          if (siblingOutputs) {
+            additionalContext = `The following work has been completed by other team members on this project:\n\n${siblingOutputs}\n\nUse this context to inform your work and ensure consistency with what has already been done.`
+            console.log(`[Execution] Providing context from ${siblings.length} completed sibling tasks`)
+          }
+        }
+      }
+
+      // Execute the task with tools enabled and sibling context
       const result: ExecutionResult = await executeTask(
-        { task, agent, skill, accountId, userId, enableTools: true },
+        { task, agent, skill, additionalContext, accountId, userId, enableTools: true },
         onStatusChange
       )
 
@@ -298,17 +334,44 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       // Update task status based on execution result
       console.log(`[Execution] Task "${task.title}" completed. Success: ${result.success}`)
-      const newStatus = result.success ? 'review' : 'queued'
 
+      // Determine appropriate status for successful tasks:
+      // - Subtasks auto-complete UNLESS they are QA/Review tasks
+      // - Parent tasks (no parentTaskId) always go to review
+      // - QA/Review subtasks go to review for human approval
+      let newStatus: string = 'queued'
       if (result.success) {
-        console.log(`[Execution] Moving task ${task.id} to review...`)
+        const isSubtask = !!task.parentTaskId
+        const isQaTask = agent.agentType === 'qa-tester' ||
+          /\b(qa|quality\s*assurance|review|final\s*review)\b/i.test(task.title)
+
+        if (isSubtask && !isQaTask) {
+          // Intermediate subtasks auto-complete
+          newStatus = 'completed'
+          console.log(`[Execution] Subtask "${task.title}" auto-completed (intermediate step)`)
+        } else {
+          // Parent tasks and QA tasks go to review for human approval
+          newStatus = 'review'
+          console.log(`[Execution] Moving task ${task.id} to review (${isQaTask ? 'QA task' : 'parent task'})`)
+        }
       } else {
         console.log(`[Execution] Task failed, moving back to queued. Error: ${result.error}`)
       }
 
+      // Build task output object from execution result
+      const taskOutput = result.success && result.content ? {
+        content: result.content,
+        metadata: result.metadata,
+        executionId,
+        completedAt: new Date().toISOString(),
+      } : task.output
+
       const { error: taskUpdateError } = await supabase
         .from('tasks')
-        .update({ status: newStatus })
+        .update({
+          status: newStatus,
+          output: result.success ? taskOutput : task.output,
+        })
         .eq('id', task.id)
 
       if (taskUpdateError) {
@@ -320,6 +383,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         taskStore.handleRemoteTaskChange({
           ...task,
           status: newStatus as Task['status'],
+          output: result.success ? taskOutput : task.output,
           updatedAt: new Date().toISOString(),
         })
       }

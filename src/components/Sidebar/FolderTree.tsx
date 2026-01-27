@@ -19,10 +19,12 @@ import type { Folder as FolderType, Note } from '@/types'
 interface FolderItemProps {
   folder: FolderType
   depth: number
+  index: number
+  parentId: string | null
   onExportFolder: (folderId: string) => void
 }
 
-function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
+function FolderItem({ folder, depth, index, parentId, onExportFolder }: FolderItemProps) {
   const {
     currentFolderId,
     expandedFolders,
@@ -36,13 +38,16 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
     addNote,
     moveNoteToFolder,
     moveFolderTo,
+    reorderFolder,
   } = useNotesStore()
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(folder.name)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [dropPosition, setDropPosition] = useState<'above' | 'below' | 'inside' | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const itemRef = useRef<HTMLDivElement>(null)
 
   const isExpanded = expandedFolders.has(folder.id)
   const isSelected = currentFolderId === folder.id
@@ -59,36 +64,94 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('folder-id', folder.id)
+    e.dataTransfer.setData('folder-parent-id', parentId || '')
+    e.dataTransfer.setData('folder-index', String(index))
     e.dataTransfer.effectAllowed = 'move'
   }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragOver(true)
+
+    const rect = itemRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    const draggedFolderId = e.dataTransfer.types.includes('folder-id')
+    const draggedNoteId = e.dataTransfer.types.includes('note-id')
+
+    if (draggedNoteId) {
+      // Notes always go inside folders
+      setDropPosition('inside')
+      setIsDragOver(true)
+    } else if (draggedFolderId) {
+      // For folders, calculate top/middle/bottom thirds
+      const third = rect.height / 3
+      const relativeY = e.clientY - rect.top
+
+      if (relativeY < third) {
+        setDropPosition('above')
+        setIsDragOver(false)
+      } else if (relativeY > third * 2) {
+        setDropPosition('below')
+        setIsDragOver(false)
+      } else {
+        // Middle third = drop inside
+        setDropPosition('inside')
+        setIsDragOver(true)
+      }
+    }
   }
 
   const handleDragLeave = () => {
     setIsDragOver(false)
+    setDropPosition(null)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    const currentDropPosition = dropPosition
     setIsDragOver(false)
+    setDropPosition(null)
 
     const noteId = e.dataTransfer.getData('note-id')
-    const folderId = e.dataTransfer.getData('folder-id')
+    const draggedFolderId = e.dataTransfer.getData('folder-id')
+    const draggedParentId = e.dataTransfer.getData('folder-parent-id') || null
+    const draggedIndex = parseInt(e.dataTransfer.getData('folder-index'), 10)
 
     if (noteId) {
+      // Move note into this folder
       moveNoteToFolder(noteId, folder.id)
-    } else if (folderId && folderId !== folder.id) {
-      moveFolderTo(folderId, folder.id)
+    } else if (draggedFolderId && draggedFolderId !== folder.id) {
+      if (currentDropPosition === 'inside') {
+        // Move folder inside this folder
+        moveFolderTo(draggedFolderId, folder.id)
+      } else if (currentDropPosition === 'above' || currentDropPosition === 'below') {
+        // Reorder within same parent
+        const isSameParent = draggedParentId === (parentId || '')
+
+        if (isSameParent) {
+          let newPosition = currentDropPosition === 'above' ? index : index + 1
+          if (draggedIndex < newPosition) {
+            newPosition = newPosition - 1
+          }
+          reorderFolder(draggedFolderId, newPosition)
+        } else {
+          // Move to different parent, then it will be at the end
+          moveFolderTo(draggedFolderId, parentId)
+        }
+      }
     }
   }
 
   return (
-    <div>
+    <div ref={itemRef} className="relative">
+      {/* Drop indicator above */}
+      {dropPosition === 'above' && (
+        <div className="absolute top-0 left-2 right-2 h-0.5 bg-primary-500 rounded-full z-10" />
+      )}
+
       <div
         className={`group flex items-center gap-1 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
           isSelected
@@ -296,22 +359,36 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
             transition={{ duration: 0.15 }}
           >
             {/* Subfolders */}
-            {children.map((child) => (
+            {children.map((child, childIndex) => (
               <FolderItem
                 key={child.id}
                 folder={child}
                 depth={depth + 1}
+                index={childIndex}
+                parentId={folder.id}
                 onExportFolder={onExportFolder}
               />
             ))}
 
             {/* Notes in folder */}
-            {notes.map((note) => (
-              <NoteItem key={note.id} note={note} depth={depth + 1} />
+            {notes.map((note, index) => (
+              <NoteItem
+                key={note.id}
+                note={note}
+                depth={depth + 1}
+                index={index}
+                totalInFolder={notes.length}
+                folderId={folder.id}
+              />
             ))}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Drop indicator below */}
+      {dropPosition === 'below' && (
+        <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary-500 rounded-full z-10" />
+      )}
     </div>
   )
 }
@@ -319,87 +396,162 @@ function FolderItem({ folder, depth, onExportFolder }: FolderItemProps) {
 interface NoteItemProps {
   note: Note
   depth: number
+  index: number
+  totalInFolder: number
+  folderId: string | null
 }
 
-function NoteItem({ note, depth }: NoteItemProps) {
-  const { currentNoteId, setCurrentNote, deleteNote, moveNoteToFolder } = useNotesStore()
+function NoteItem({ note, depth, index, folderId }: NoteItemProps) {
+  const { currentNoteId, setCurrentNote, deleteNote, moveNoteToFolder, reorderNote } = useNotesStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dropPosition, setDropPosition] = useState<'above' | 'below' | null>(null)
+  const itemRef = useRef<HTMLDivElement>(null)
   const isSelected = currentNoteId === note.id
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('note-id', note.id)
+    e.dataTransfer.setData('note-folder-id', folderId || '')
+    e.dataTransfer.setData('note-index', String(index))
     e.dataTransfer.effectAllowed = 'move'
   }
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const draggedNoteId = e.dataTransfer.types.includes('note-id')
+    if (!draggedNoteId) return
+
+    // Calculate if cursor is in top or bottom half
+    const rect = itemRef.current?.getBoundingClientRect()
+    if (rect) {
+      const midY = rect.top + rect.height / 2
+      setDropPosition(e.clientY < midY ? 'above' : 'below')
+    }
+  }
+
+  const handleDragLeave = () => {
+    setDropPosition(null)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDropPosition(null)
+
+    const draggedNoteId = e.dataTransfer.getData('note-id')
+    const draggedFolderId = e.dataTransfer.getData('note-folder-id') || null
+    const draggedIndex = parseInt(e.dataTransfer.getData('note-index'), 10)
+
+    if (!draggedNoteId || draggedNoteId === note.id) return
+
+    // Check if same folder (reorder) or different folder (move)
+    const isSameFolder = draggedFolderId === (folderId || '')
+
+    if (isSameFolder) {
+      // Reorder within same folder
+      const rect = itemRef.current?.getBoundingClientRect()
+      if (rect) {
+        const midY = rect.top + rect.height / 2
+        let newPosition = e.clientY < midY ? index : index + 1
+
+        // Adjust for dragging down (the item being moved will shift positions)
+        if (draggedIndex < newPosition) {
+          newPosition = newPosition - 1
+        }
+
+        reorderNote(draggedNoteId, newPosition)
+      }
+    } else {
+      // Move to different folder - place at position
+      moveNoteToFolder(draggedNoteId, folderId)
+    }
+  }
+
   return (
-    <div
-      className={`group flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
-        isSelected
-          ? 'bg-primary-50 dark:bg-primary-900/30'
-          : 'hover:bg-surface-100 dark:hover:bg-surface-800'
-      }`}
-      style={{ paddingLeft: `${depth * 16 + 24}px` }}
-      draggable
-      onDragStart={handleDragStart}
-      onClick={() => setCurrentNote(note.id)}
-    >
-      <FileText size={14} className="text-surface-400 flex-shrink-0" />
-      <span className="flex-1 text-sm truncate">{note.title || 'Untitled'}</span>
+    <div ref={itemRef} className="relative">
+      {/* Drop indicator above */}
+      {dropPosition === 'above' && (
+        <div className="absolute top-0 left-4 right-2 h-0.5 bg-primary-500 rounded-full z-10" />
+      )}
 
-      {/* Menu */}
-      <div className="relative">
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            setMenuOpen(!menuOpen)
-          }}
-          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-opacity"
-        >
-          <MoreVertical size={14} />
-        </button>
+      <div
+        className={`group flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
+          isSelected
+            ? 'bg-primary-50 dark:bg-primary-900/30'
+            : 'hover:bg-surface-100 dark:hover:bg-surface-800'
+        }`}
+        style={{ paddingLeft: `${depth * 16 + 24}px` }}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => setCurrentNote(note.id)}
+      >
+        <FileText size={14} className="text-surface-400 flex-shrink-0" />
+        <span className="flex-1 text-sm truncate">{note.title || 'Untitled'}</span>
 
-        <AnimatePresence>
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="absolute right-0 top-6 z-50 rounded-lg shadow-lg py-1 min-w-[140px]"
-                style={{
-                  background: 'var(--fl-color-bg-elevated, #1a1a24)',
-                  border: '1px solid var(--fl-color-border, rgba(255,255,255,0.1))',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
-                }}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    moveNoteToFolder(note.id, null)
-                    setMenuOpen(false)
+        {/* Menu */}
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setMenuOpen(!menuOpen)
+            }}
+            className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-opacity"
+          >
+            <MoreVertical size={14} />
+          </button>
+
+          <AnimatePresence>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute right-0 top-6 z-50 rounded-lg shadow-lg py-1 min-w-[140px]"
+                  style={{
+                    background: 'var(--fl-color-bg-elevated, #1a1a24)',
+                    border: '1px solid var(--fl-color-border, rgba(255,255,255,0.1))',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
                 >
-                  <Folder size={14} />
-                  Move to Root
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteNote(note.id)
-                    setMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-900/20"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      moveNoteToFolder(note.id, null)
+                      setMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--fl-color-text-primary)] hover:bg-white/5"
+                  >
+                    <Folder size={14} />
+                    Move to Root
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteNote(note.id)
+                      setMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-900/20"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+
+      {/* Drop indicator below */}
+      {dropPosition === 'below' && (
+        <div className="absolute bottom-0 left-4 right-2 h-0.5 bg-primary-500 rounded-full z-10" />
+      )}
     </div>
   )
 }
@@ -470,18 +622,29 @@ export function FolderTree({ onExportFolder }: FolderTreeProps) {
 
       {/* Folder tree */}
       <div className="px-1">
-        {rootFolders.map((folder) => (
+        {rootFolders.map((folder, index) => (
           <FolderItem
             key={folder.id}
             folder={folder}
             depth={0}
+            index={index}
+            parentId={null}
             onExportFolder={onExportFolder}
           />
         ))}
 
         {/* Root notes (not in any folder) */}
         {currentFolderId === null &&
-          rootNotes.map((note) => <NoteItem key={note.id} note={note} depth={0} />)}
+          rootNotes.map((note, index) => (
+            <NoteItem
+              key={note.id}
+              note={note}
+              depth={0}
+              index={index}
+              totalInFolder={rootNotes.length}
+              folderId={null}
+            />
+          ))}
       </div>
     </div>
   )

@@ -10,7 +10,7 @@ export async function fetchNotes(userId: string): Promise<Note[]> {
     .from('notes')
     .select('*')
     .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
+    .order('sort_order', { ascending: true })
 
   if (error) throw error
   return data || []
@@ -62,7 +62,7 @@ export async function fetchFolders(userId: string): Promise<Folder[]> {
     .from('folders')
     .select('*')
     .eq('user_id', userId)
-    .order('name')
+    .order('sort_order', { ascending: true })
 
   if (error) throw error
   return data || []
@@ -249,4 +249,51 @@ export async function deleteUserTemplate(id: string): Promise<void> {
     .eq('id', id)
 
   if (error) throw error
+}
+
+// Reorder notes within a folder
+export async function reorderNote(
+  noteId: string,
+  newPosition: number,
+  folderId: string | null
+): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase.rpc('reorder_notes_in_folder', {
+    p_note_id: noteId,
+    p_new_position: newPosition,
+    p_folder_id: folderId,
+  })
+
+  if (error) {
+    // Fallback: direct update if RPC not available
+    console.warn('[Database] Reorder RPC not available, using direct update')
+    await supabase
+      .from('notes')
+      .update({ sort_order: newPosition })
+      .eq('id', noteId)
+  }
+}
+
+// Reorder folders within a parent
+export async function reorderFolder(
+  folderId: string,
+  newPosition: number,
+  parentId: string | null
+): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+
+  const { error } = await supabase.rpc('reorder_folders_in_parent', {
+    p_folder_id: folderId,
+    p_new_position: newPosition,
+    p_parent_id: parentId,
+  })
+
+  if (error) {
+    console.warn('[Database] Reorder RPC not available, using direct update')
+    await supabase
+      .from('folders')
+      .update({ sort_order: newPosition })
+      .eq('id', folderId)
+  }
 }
