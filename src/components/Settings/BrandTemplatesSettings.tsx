@@ -17,10 +17,11 @@ import {
 } from 'lucide-react'
 import { useBrandStore } from '@/stores/brandStore'
 import { useAccountStore } from '@/stores/accountStore'
+import { useAuthStore } from '@/stores/authStore'
 import { BrandSetupWizard } from './BrandSetupWizard'
 import type { TemplateType, DocumentTypeCode, AccountTemplate } from '@/types/brand'
 import { TEMPLATE_TYPE_INFO } from '@/types/brand'
-import { getTemplateDownloadUrl } from '@/services/brand/templateGenerator'
+import { getTemplateDownloadUrl, generateAllTemplates, uploadTemplates } from '@/services/brand/templateGenerator'
 
 export function BrandTemplatesSettings() {
   const { currentAccountId } = useAccountStore()
@@ -160,9 +161,40 @@ function EmptyState({ onSetup }: { onSetup: () => void }) {
 // ============================================================================
 
 function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
-  const { brandConfig, templates } = useBrandStore()
+  const { user } = useAuthStore()
+  const { currentAccountId } = useAccountStore()
+  const { brandConfig, templates, fetchTemplates } = useBrandStore()
   const config = brandConfig?.brandConfig
   const [loadingTemplate, setLoadingTemplate] = useState<string | null>(null)
+  const [isRegenerating, setIsRegenerating] = useState(false)
+
+  const handleRegenerateAll = useCallback(async () => {
+    if (!config || !currentAccountId || !user?.id) {
+      console.error('[BrandOverview] Missing config, accountId, or userId')
+      return
+    }
+
+    setIsRegenerating(true)
+    try {
+      console.log('[BrandOverview] Regenerating all templates...')
+
+      // Generate all templates
+      const generatedTemplates = await generateAllTemplates(config)
+      console.log('[BrandOverview] Generated templates:', generatedTemplates.length)
+
+      // Upload to storage
+      await uploadTemplates(generatedTemplates, currentAccountId, user.id)
+      console.log('[BrandOverview] Uploaded templates')
+
+      // Refresh templates list
+      await fetchTemplates(currentAccountId)
+      console.log('[BrandOverview] Refreshed templates list')
+    } catch (error) {
+      console.error('[BrandOverview] Regenerate error:', error)
+    } finally {
+      setIsRegenerating(false)
+    }
+  }, [config, currentAccountId, user?.id, fetchTemplates])
 
   const handlePreview = useCallback(async (template: AccountTemplate) => {
     setLoadingTemplate(`preview-${template.id}`)
@@ -244,15 +276,19 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
                 Primary Logo
               </div>
               {config.logos.primary ? (
-                <img
-                  src={config.logos.primary}
-                  alt="Primary logo"
-                  className="h-12 max-w-[150px] object-contain rounded"
+                <div
+                  className="h-12 w-32 rounded flex items-center justify-center"
                   style={{ background: 'white', padding: '4px' }}
-                />
+                >
+                  <img
+                    src={config.logos.primary}
+                    alt="Primary logo"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
               ) : (
                 <div
-                  className="h-12 w-24 rounded flex items-center justify-center text-xs"
+                  className="h-12 w-32 rounded flex items-center justify-center text-xs"
                   style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--fl-color-text-muted)' }}
                 >
                   No logo
@@ -264,12 +300,16 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
                 <div className="text-xs mb-1" style={{ color: 'var(--fl-color-text-muted)' }}>
                   Secondary Logo
                 </div>
-                <img
-                  src={config.logos.secondary}
-                  alt="Secondary logo"
-                  className="h-12 max-w-[150px] object-contain rounded"
+                <div
+                  className="h-12 w-32 rounded flex items-center justify-center"
                   style={{ background: '#1e293b', padding: '4px' }}
-                />
+                >
+                  <img
+                    src={config.logos.secondary}
+                    alt="Secondary logo"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -347,11 +387,17 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
             Templates
           </h3>
           <button
-            className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
+            onClick={handleRegenerateAll}
+            disabled={isRegenerating}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
             style={{ color: 'var(--fl-color-text-muted)' }}
           >
-            <RefreshCw size={12} />
-            Regenerate All
+            {isRegenerating ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <RefreshCw size={12} />
+            )}
+            {isRegenerating ? 'Regenerating...' : 'Regenerate All'}
           </button>
         </div>
 
