@@ -137,14 +137,14 @@ export function AttachmentDropzone({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={`
-          relative cursor-pointer rounded-lg border-2 border-dashed p-6
-          transition-colors flex flex-col items-center justify-center gap-2
-          ${isDragging
-            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-            : 'border-surface-300 dark:border-surface-600 hover:border-primary-400 hover:bg-surface-50 dark:hover:bg-surface-800/50'
-          }
+          relative cursor-pointer rounded-lg border-2 border-dashed p-4
+          transition-all flex flex-col items-center justify-center gap-2
           ${isUploading ? 'pointer-events-none opacity-60' : ''}
         `}
+        style={{
+          borderColor: isDragging ? '#0ea5e9' : 'rgba(255, 255, 255, 0.1)',
+          background: isDragging ? 'rgba(14, 165, 233, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+        }}
       >
         <input
           ref={fileInputRef}
@@ -156,18 +156,18 @@ export function AttachmentDropzone({
 
         {isUploading ? (
           <>
-            <Loader2 size={24} className="animate-spin text-primary-500" />
-            <span className="text-sm text-surface-600 dark:text-surface-400">
+            <Loader2 size={20} className="animate-spin" style={{ color: '#0ea5e9' }} />
+            <span className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>
               Uploading...
             </span>
           </>
         ) : (
           <>
-            <Upload size={24} className="text-surface-400" />
-            <span className="text-sm text-surface-600 dark:text-surface-400">
-              Drop file here or click to upload
+            <Upload size={20} style={{ color: isDragging ? '#0ea5e9' : 'var(--fl-color-text-muted)' }} />
+            <span className="text-sm" style={{ color: isDragging ? '#0ea5e9' : 'var(--fl-color-text-muted)' }}>
+              Drop files here or click to upload
             </span>
-            <span className="text-xs text-surface-500">
+            <span className="text-xs" style={{ color: 'var(--fl-color-text-muted)', opacity: 0.7 }}>
               Max {maxSizeMB}MB
             </span>
           </>
@@ -175,9 +175,18 @@ export function AttachmentDropzone({
       </div>
 
       {error && (
-        <div className="mt-2 flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+        <div
+          className="mt-2 flex items-center gap-2 p-2 rounded-lg text-sm"
+          style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}
+        >
           <X size={14} />
-          {error}
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="p-0.5 rounded hover:bg-white/10"
+          >
+            <X size={12} />
+          </button>
         </div>
       )}
     </div>
