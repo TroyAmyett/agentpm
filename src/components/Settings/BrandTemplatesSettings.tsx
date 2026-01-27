@@ -13,7 +13,6 @@ import {
   Loader2,
   Edit2,
   Download,
-  ExternalLink,
 } from 'lucide-react'
 import { useBrandStore } from '@/stores/brandStore'
 import { useAccountStore } from '@/stores/accountStore'
@@ -195,24 +194,6 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
       setIsRegenerating(false)
     }
   }, [config, currentAccountId, user?.id, fetchTemplates])
-
-  const handlePreview = useCallback(async (template: AccountTemplate) => {
-    setLoadingTemplate(`preview-${template.id}`)
-    try {
-      const url = await getTemplateDownloadUrl(template.storagePath)
-      if (url) {
-        // Use Microsoft Office Online Viewer for better Office document preview
-        // Google Docs Viewer: https://docs.google.com/viewer?url=ENCODED_URL
-        // Microsoft Office: https://view.officeapps.live.com/op/embed.aspx?src=ENCODED_URL
-        const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
-        window.open(viewerUrl, '_blank')
-      }
-    } catch (error) {
-      console.error('[BrandOverview] Preview error:', error)
-    } finally {
-      setLoadingTemplate(null)
-    }
-  }, [])
 
   const handleDownload = useCallback(async (template: AccountTemplate) => {
     setLoadingTemplate(`download-${template.id}`)
@@ -428,34 +409,19 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
                     <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
                       {template.templateName}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handlePreview(template)}
-                        disabled={loadingTemplate === `preview-${template.id}`}
-                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
-                        style={{ color: '#0ea5e9' }}
-                      >
-                        {loadingTemplate === `preview-${template.id}` ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <ExternalLink size={12} />
-                        )}
-                        Preview
-                      </button>
-                      <button
-                        onClick={() => handleDownload(template)}
-                        disabled={loadingTemplate === `download-${template.id}`}
-                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
-                        style={{ color: 'var(--fl-color-text-muted)' }}
-                      >
-                        {loadingTemplate === `download-${template.id}` ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Download size={12} />
-                        )}
-                        Download
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleDownload(template)}
+                      disabled={loadingTemplate === `download-${template.id}`}
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
+                      style={{ color: '#0ea5e9' }}
+                    >
+                      {loadingTemplate === `download-${template.id}` ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Download size={12} />
+                      )}
+                      Download
+                    </button>
                   </div>
                 ) : (
                   <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
