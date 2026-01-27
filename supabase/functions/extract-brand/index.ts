@@ -38,6 +38,8 @@ interface BrandExtractionResult {
   confidence: number
   sourceUrl: string
   extractedAt: string
+  websiteHasDarkBackground?: boolean
+  logoDesignedForDarkBackground?: boolean
 }
 
 interface ParsedPageData {
@@ -313,23 +315,37 @@ Fonts Found: ${JSON.stringify(pageData.fonts)}
 Extract and return as JSON:
 {
   "companyName": "the company/brand name",
-  "tagline": "tagline or slogan if found (null if not)",
+  "tagline": "short tagline/slogan (5 words MAX, null if not found)",
   "suggestedPrefix": "3-4 letter uppercase prefix for document numbers (e.g., company name abbreviation)",
   "logos": [
     { "url": "full URL to logo", "type": "primary" | "secondary" | "favicon" }
   ],
   "colors": [
-    { "hex": "#XXXXXX", "usage": "primary" | "secondary" | "accent", "source": "css" }
+    { "hex": "#XXXXXX", "usage": "primary" | "secondary" | "accent", "source": "css" | "logo" }
   ],
   "fonts": ["font names found"],
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "websiteHasDarkBackground": true | false,
+  "logoDesignedForDarkBackground": true | false
 }
 
-Rules:
+CRITICAL COLOR RULES:
+- NEVER use pure white (#ffffff, #fff) or pure black (#000000, #000) as primary or secondary brand colors
+- If the CSS colors are mostly black/white/gray, the ACTUAL brand colors are likely IN THE LOGO itself
+- Look at the logo URL/filename for color hints (e.g., "logo-blue.svg")
+- Common brand colors are vibrant: blues, greens, oranges, reds, purples - not black or white
+- If you see a dark website with white text, the brand color is NOT white - look deeper at accent colors, buttons, links
+- Primary color = the main brand identity color (often used in buttons, headers, links)
+- Secondary color = supporting color (often used for hover states, secondary buttons)
+- Accent color = highlight color (often used for alerts, badges, call-to-actions)
+
+Other Rules:
 - companyName: Extract from title, OG data, or domain. Remove suffixes like "Inc", "LLC", "| Home", etc.
+- tagline: MUST be 5 words or fewer. If the original is longer, condense it to capture the essence.
 - suggestedPrefix: Create from company name initials or first 3-4 letters. Uppercase.
 - logos: Pick the best logo URL. Classify as primary (main logo), secondary (alternate), or favicon.
-- colors: Extract 2-3 main brand colors. Primary should be the dominant brand color.
+- websiteHasDarkBackground: true if the main site background is dark/black
+- logoDesignedForDarkBackground: true if the logo appears to be white/light colored (designed to show on dark backgrounds)
 - confidence: Rate how confident you are in the extraction (0.0-1.0).
 
 Return ONLY the JSON object.`
@@ -366,21 +382,49 @@ Return ONLY the JSON object.`
     }
 
     const result = JSON.parse(jsonMatch[0])
+
+    // Validate and clean colors - reject pure black/white
+    const validatedColors = (result.colors || [])
+      .map((c: { hex: string; usage: string; source: string }) => ({
+        hex: c.hex?.toLowerCase(),
+        usage: c.usage as 'primary' | 'secondary' | 'accent',
+        source: (c.source || 'css') as 'css' | 'meta' | 'logo' | 'image',
+      }))
+      .filter((c: { hex: string }) => {
+        // Filter out pure black and white
+        const pureBlackWhite = ['#000000', '#000', '#ffffff', '#fff', '#fefefe', '#010101']
+        return !pureBlackWhite.includes(c.hex)
+      })
+
+    // Ensure we have at least some colors
+    const finalColors = validatedColors.length >= 2 ? validatedColors : [
+      { hex: '#0ea5e9', usage: 'primary' as const, source: 'css' as const },
+      { hex: '#64748b', usage: 'secondary' as const, source: 'css' as const },
+      ...validatedColors.filter((c: { usage: string }) => c.usage === 'accent'),
+    ]
+
+    // Truncate tagline to 5 words if needed
+    let tagline = result.tagline || undefined
+    if (tagline) {
+      const words = tagline.split(/\s+/)
+      if (words.length > 5) {
+        tagline = words.slice(0, 5).join(' ')
+      }
+    }
+
     return {
       companyName: result.companyName || '',
-      tagline: result.tagline || undefined,
+      tagline,
       suggestedPrefix: (result.suggestedPrefix || '').toUpperCase().slice(0, 5),
       logos: (result.logos || []).map((l: { url: string; type: string }) => ({
         url: l.url,
         type: l.type as 'primary' | 'secondary' | 'favicon',
       })),
-      colors: (result.colors || []).map((c: { hex: string; usage: string; source: string }) => ({
-        hex: c.hex,
-        usage: c.usage as 'primary' | 'secondary' | 'accent',
-        source: (c.source || 'css') as 'css' | 'meta' | 'logo' | 'image',
-      })),
+      colors: finalColors,
       fonts: result.fonts || [],
       confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
+      websiteHasDarkBackground: result.websiteHasDarkBackground === true,
+      logoDesignedForDarkBackground: result.logoDesignedForDarkBackground === true,
     }
   } catch (error) {
     console.error('[extract-brand] Claude analysis failed:', error)

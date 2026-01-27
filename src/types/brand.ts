@@ -283,7 +283,7 @@ export interface DetectedColor {
 export interface BrandExtractionResult {
   /** Extracted company name */
   companyName: string
-  /** Extracted tagline/slogan */
+  /** Extracted tagline/slogan (5 words max) */
   tagline?: string
   /** Suggested document number prefix */
   suggestedPrefix: string
@@ -299,6 +299,10 @@ export interface BrandExtractionResult {
   sourceUrl: string
   /** Timestamp */
   extractedAt: string
+  /** Whether the source website has a dark background */
+  websiteHasDarkBackground?: boolean
+  /** Whether the extracted logo is designed for dark backgrounds (white/light logo) */
+  logoDesignedForDarkBackground?: boolean
 }
 
 // ============================================================================

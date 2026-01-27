@@ -524,29 +524,88 @@ function ReviewStep({
         </div>
       </div>
 
-      {/* Logo preview */}
-      {config.logos?.primary && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
-            Extracted Logo
-          </h4>
-          <div className="flex items-center gap-4">
-            <img
-              src={config.logos.primary}
-              alt="Extracted logo"
-              className="h-16 max-w-[200px] object-contain rounded p-2"
-              style={{ background: 'white' }}
-            />
+      {/* Logo section */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
+          Logos
+        </h4>
+
+        {/* Show warning if logo is for dark backgrounds */}
+        {extractionResult?.logoDesignedForDarkBackground && !config.logos?.secondary && (
+          <div
+            className="flex items-start gap-2 p-3 rounded-lg text-sm"
+            style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}
+          >
+            <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <div className="font-medium">Logo designed for dark backgrounds</div>
+              <div className="text-xs mt-1 opacity-80">
+                Consider uploading an alternate logo for light backgrounds (documents, presentations).
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Primary logo - for dark backgrounds */}
+          <div>
+            <div className="text-xs mb-2" style={{ color: 'var(--fl-color-text-muted)' }}>
+              {extractionResult?.logoDesignedForDarkBackground ? 'Logo (for dark backgrounds)' : 'Primary Logo'}
+            </div>
+            <div
+              className="h-20 rounded-lg flex items-center justify-center p-2 relative group"
+              style={{ background: extractionResult?.logoDesignedForDarkBackground ? '#1e293b' : 'white' }}
+            >
+              {config.logos?.primary ? (
+                <img
+                  src={config.logos.primary}
+                  alt="Primary logo"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <span className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>No logo</span>
+              )}
+            </div>
             <button
-              className="text-xs px-2 py-1 rounded hover:bg-white/10"
+              className="text-xs px-2 py-1 mt-1 rounded hover:bg-white/10 w-full text-center"
               style={{ color: 'var(--fl-color-text-muted)' }}
             >
-              <Upload size={14} className="inline mr-1" />
-              Upload different logo
+              <Upload size={12} className="inline mr-1" />
+              Upload
+            </button>
+          </div>
+
+          {/* Secondary logo - for light backgrounds */}
+          <div>
+            <div className="text-xs mb-2" style={{ color: 'var(--fl-color-text-muted)' }}>
+              {extractionResult?.logoDesignedForDarkBackground ? 'Logo (for light backgrounds)' : 'Alternate Logo'}
+            </div>
+            <div
+              className="h-20 rounded-lg flex items-center justify-center p-2 relative group"
+              style={{ background: extractionResult?.logoDesignedForDarkBackground ? 'white' : '#1e293b' }}
+            >
+              {config.logos?.secondary ? (
+                <img
+                  src={config.logos.secondary}
+                  alt="Secondary logo"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <span className="text-xs" style={{ color: extractionResult?.logoDesignedForDarkBackground ? '#94a3b8' : 'var(--fl-color-text-muted)' }}>
+                  {extractionResult?.logoDesignedForDarkBackground ? 'Upload for documents' : 'Optional'}
+                </span>
+              )}
+            </div>
+            <button
+              className="text-xs px-2 py-1 mt-1 rounded hover:bg-white/10 w-full text-center"
+              style={{ color: extractionResult?.logoDesignedForDarkBackground && !config.logos?.secondary ? '#f59e0b' : 'var(--fl-color-text-muted)' }}
+            >
+              <Upload size={12} className="inline mr-1" />
+              Upload
             </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4">
