@@ -8,8 +8,6 @@ import { NotesList } from '@/components/Sidebar/NotesList'
 import { BlockEditor } from '@/components/Editor/BlockEditor'
 import { ExportMenu } from '@/components/Editor/ExportMenu'
 import { TemplateMenu } from '@/components/Editor/TemplateMenu'
-import { SaveAsTemplateModal } from '@/components/Editor/SaveAsTemplateModal'
-import { useTemplatesStore } from '@/stores/templatesStore'
 import { AIToolbar } from '@/components/AI/AIToolbar'
 import { ChatPanel } from '@/components/AI/ChatPanel'
 import { ResizeHandle } from '@/components/ResizeHandle'
@@ -19,6 +17,7 @@ import { SyncStatusIndicator } from '@/components/Sync/SyncStatusIndicator'
 import { AgentPMPage } from '@/components/AgentPM'
 import { SettingsPage } from '@/components/Settings/SettingsPage'
 import { AccountSwitcher } from '@/components/AccountSwitcher/AccountSwitcher'
+import { ChangelogBadge, ChangelogDrawer, WhatsNewModal } from '@/components/Changelog'
 // AcceptInvitation component available at: @/components/Auth/AcceptInvitation
 import { Loader2 } from 'lucide-react'
 import {
@@ -29,11 +28,15 @@ import {
   ChevronDown,
   Palette,
   Users,
-  Layout,
   Radio,
   ExternalLink,
   Wrench,
+  FileOutput,
+  ArrowRightCircle,
 } from 'lucide-react'
+import { GenerateDocumentModal } from '@/components/Documents'
+import { PushToTaskModal } from '@/components/Notes'
+import { fetchAttachments, type Attachment } from '@/services/attachments/attachmentService'
 
 // Helper to get app URLs based on environment
 function getAppUrl(app: string): string {
@@ -229,7 +232,9 @@ function App() {
   useSyncQueue()
 
   const [currentView, setCurrentView] = useState<AppView>(getViewFromHash)
-  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
+  const [showGenerateDocModal, setShowGenerateDocModal] = useState(false)
+  const [showPushToTaskModal, setShowPushToTaskModal] = useState(false)
+  const [noteAttachments, setNoteAttachments] = useState<Attachment[]>([])
 
   const {
     sidebarOpen,
@@ -256,7 +261,6 @@ function App() {
     return baseUrl
   }, [session])
   const { notes, addNote, currentNoteId } = useNotesStore()
-  const { createTemplate } = useTemplatesStore()
   const currentNote = notes.find(n => n.id === currentNoteId)
 
   const handleSidebarResize = useCallback((delta: number) => {
@@ -377,6 +381,40 @@ function App() {
     }
   }, [initialized, isAuthenticated, notes.length, addNote])
 
+  // Fetch attachments when current note changes (for Push to Task)
+  useEffect(() => {
+    if (!currentNoteId) {
+      setNoteAttachments([])
+      return
+    }
+
+    let mounted = true
+
+    async function loadAttachments() {
+      try {
+        const attachments = await fetchAttachments('note', currentNoteId!)
+        if (mounted) {
+          setNoteAttachments(attachments)
+        }
+      } catch (error) {
+        console.error('[App] Failed to load note attachments:', error)
+      }
+    }
+
+    loadAttachments()
+
+    return () => {
+      mounted = false
+    }
+  }, [currentNoteId])
+
+  // Callback to refresh attachments after upload
+  const handleAttachmentChange = useCallback(() => {
+    if (currentNoteId) {
+      fetchAttachments('note', currentNoteId).then(setNoteAttachments).catch(console.error)
+    }
+  }, [currentNoteId])
+
   // Placeholder functions for AI toolbar - will connect to editor
   const handleAIInsert = (text: string) => {
     console.log('Insert:', text)
@@ -419,26 +457,6 @@ function App() {
     if (currentView === 'notes') return 'notetaker'
     if (currentView === 'agentpm') return 'agentpm'
     return 'agentpm'
-  }
-
-  // Handler for saving current note as a template
-  const handleSaveAsTemplate = async (data: {
-    name: string
-    description: string
-    icon: string
-    category: string
-  }) => {
-    if (!currentNote?.content) {
-      throw new Error('Note has no content')
-    }
-
-    await createTemplate({
-      name: data.name,
-      description: data.description || undefined,
-      icon: data.icon,
-      category: data.category || undefined,
-      content: currentNote.content,
-    })
   }
 
   return (
@@ -505,14 +523,24 @@ function App() {
               <TemplateMenu />
               <ExportMenu />
               {currentNote?.content && (
-                <button
-                  onClick={() => setShowSaveTemplateModal(true)}
-                  title="Save as template"
-                  className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
-                  style={{ color: 'var(--fl-color-text-secondary)' }}
-                >
-                  <Layout size={18} />
-                </button>
+                <>
+                  <button
+                    onClick={() => setShowGenerateDocModal(true)}
+                    title="Generate Document"
+                    className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+                    style={{ color: 'var(--fl-color-text-secondary)' }}
+                  >
+                    <FileOutput size={18} />
+                  </button>
+                  <button
+                    onClick={() => setShowPushToTaskModal(true)}
+                    title="Push to Task"
+                    className="p-2 rounded-lg transition-colors hover:bg-[var(--fl-color-bg-elevated)]"
+                    style={{ color: 'var(--fl-color-text-secondary)' }}
+                  >
+                    <ArrowRightCircle size={18} />
+                  </button>
+                </>
               )}
               <button
                 onClick={toggleChatPanel}
@@ -525,6 +553,7 @@ function App() {
             </>
           )}
           <SyncStatusIndicator />
+          <ChangelogBadge />
           <UserMenu />
         </div>
       </header>
@@ -578,13 +607,35 @@ function App() {
         <AIToolbar onInsert={handleAIInsert} onReplace={handleAIReplace} />
       )}
 
-      {/* Save as Template Modal */}
-      <SaveAsTemplateModal
-        isOpen={showSaveTemplateModal}
-        onClose={() => setShowSaveTemplateModal(false)}
-        onSave={handleSaveAsTemplate}
-        defaultName={currentNote?.title !== 'Untitled' ? `${currentNote?.title} Template` : ''}
-      />
+      {/* Generate Document Modal */}
+      {currentNote && (
+        <GenerateDocumentModal
+          isOpen={showGenerateDocModal}
+          onClose={() => setShowGenerateDocModal(false)}
+          noteId={currentNote.id}
+          noteTitle={currentNote.title}
+          noteContent={currentNote.content || { type: 'doc', content: [] }}
+          onGenerated={handleAttachmentChange}
+        />
+      )}
+
+      {/* Push to Task Modal */}
+      {currentNote && (
+        <PushToTaskModal
+          isOpen={showPushToTaskModal}
+          onClose={() => setShowPushToTaskModal(false)}
+          note={currentNote}
+          attachments={noteAttachments}
+          onTaskCreated={() => {
+            setShowPushToTaskModal(false)
+            handleAttachmentChange()
+          }}
+        />
+      )}
+
+      {/* Changelog */}
+      <ChangelogDrawer />
+      <WhatsNewModal />
     </div>
   )
 }
