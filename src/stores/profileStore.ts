@@ -10,6 +10,7 @@ export interface UserProfile {
   fullName?: string
   displayName?: string
   avatarUrl?: string
+  website?: string  // Company website URL for brand extraction
   language: string
   currency: string
   timezone: string
@@ -27,7 +28,7 @@ interface ProfileState {
 
   // Actions
   fetchProfile: (userId: string) => Promise<void>
-  updateProfile: (updates: Partial<Pick<UserProfile, 'fullName' | 'displayName' | 'avatarUrl' | 'language' | 'currency' | 'timezone' | 'dateFormat' | 'timeFormat'>>) => Promise<void>
+  updateProfile: (updates: Partial<Pick<UserProfile, 'fullName' | 'displayName' | 'avatarUrl' | 'website' | 'language' | 'currency' | 'timezone' | 'dateFormat' | 'timeFormat'>>) => Promise<void>
   clearError: () => void
 }
 
@@ -207,6 +208,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName
       if (updates.displayName !== undefined) dbUpdates.display_name = updates.displayName
       if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl
+      if (updates.website !== undefined) dbUpdates.website = updates.website
       if (updates.language !== undefined) dbUpdates.language = updates.language
       if (updates.currency !== undefined) dbUpdates.currency = updates.currency
       if (updates.timezone !== undefined) dbUpdates.timezone = updates.timezone
@@ -245,6 +247,7 @@ function mapDbRowToProfile(row: Record<string, unknown>): UserProfile {
     fullName: row.full_name as string | undefined,
     displayName: row.display_name as string | undefined,
     avatarUrl: row.avatar_url as string | undefined,
+    website: row.website as string | undefined,
     language: (row.language as string) || 'en',
     currency: (row.currency as string) || 'USD',
     timezone: (row.timezone as string) || 'UTC',

@@ -21,6 +21,7 @@ import {
 import { useBrandStore } from '@/stores/brandStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useProfileStore } from '@/stores/profileStore'
 import type { BrandConfig, TemplateType, BrandExtractionResult } from '@/types/brand'
 import { TEMPLATE_TYPE_INFO } from '@/types/brand'
 import { generateAllTemplates, uploadTemplates } from '@/services/brand'
@@ -35,6 +36,7 @@ type WizardStep = 'url-input' | 'review' | 'templates' | 'complete'
 export function BrandSetupWizard({ onComplete, onCancel }: BrandSetupWizardProps) {
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
+  const { profile, updateProfile } = useProfileStore()
   const {
     brandConfig,
     extractionResult,
@@ -50,6 +52,28 @@ export function BrandSetupWizard({ onComplete, onCancel }: BrandSetupWizardProps
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Pre-populate website URL: 1) From profile, 2) From email domain
+  useEffect(() => {
+    if (websiteUrl) return // Don't overwrite if already set
+
+    // First, try to get website from user profile
+    if (profile?.website) {
+      setWebsiteUrl(profile.website)
+      return
+    }
+
+    // Fall back to extracting domain from email
+    const email = user?.email
+    if (email && email.includes('@')) {
+      const domain = email.split('@')[1]
+      // Skip common email providers
+      const commonProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com', 'mail.com']
+      if (domain && !commonProviders.includes(domain.toLowerCase())) {
+        setWebsiteUrl(`https://${domain}`)
+      }
+    }
+  }, [profile?.website, user?.email]) // Check profile first, then email
 
   // Editable brand config (merged from extraction + manual edits)
   const [editableConfig, setEditableConfig] = useState<Partial<BrandConfig>>({
@@ -72,6 +96,13 @@ export function BrandSetupWizard({ onComplete, onCancel }: BrandSetupWizardProps
 
     try {
       const result = await extractBrandFromUrl(websiteUrl, currentAccountId)
+
+      // Save website to user profile for future use
+      if (websiteUrl !== profile?.website) {
+        updateProfile({ website: websiteUrl }).catch(err => {
+          console.warn('Failed to save website to profile:', err)
+        })
+      }
 
       // Populate editable config from extraction result
       setEditableConfig({
@@ -99,7 +130,7 @@ export function BrandSetupWizard({ onComplete, onCancel }: BrandSetupWizardProps
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to extract brand from website')
     }
-  }, [websiteUrl, currentAccountId, extractBrandFromUrl])
+  }, [websiteUrl, currentAccountId, extractBrandFromUrl, profile?.website, updateProfile])
 
   // Handle skip to manual setup
   const handleSkipToManual = useCallback(() => {
@@ -412,33 +443,87 @@ function ReviewStep({
 }) {
   // Eyedropper state - which color field is actively picking
   const [eyedropperTarget, setEyedropperTarget] = useState<'primary' | 'secondary' | 'accent' | null>(null)
+  const [canvasReady, setCanvasReady] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
 
-  // Handle clicking on the logo to pick a color
-  const handleLogoClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!eyedropperTarget || !canvasRef.current) return
+  // Handle clicking on the logo image directly to pick a color
+  const handleImageClick = useCallback((event: React.MouseEvent<HTMLImageElement>) => {
+    if (!eyedropperTarget || !canvasRef.current || !canvasReady) {
+      console.log('[Eyedropper] Not ready:', { eyedropperTarget, canvasReady })
+      return
+    }
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      console.log('[Eyedropper] No canvas context')
+      return
+    }
 
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const img = event.currentTarget
+    const rect = img.getBoundingClientRect()
 
-    // Scale coordinates to canvas size
+    // Get click position relative to the image element
+    const clickX = event.clientX - rect.left
+    const clickY = event.clientY - rect.top
+
+    // Scale to canvas coordinates (canvas has original image dimensions)
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
-    const canvasX = Math.floor(x * scaleX)
-    const canvasY = Math.floor(y * scaleY)
+    const canvasX = Math.floor(clickX * scaleX)
+    const canvasY = Math.floor(clickY * scaleY)
 
-    // Get pixel color
-    const pixel = ctx.getImageData(canvasX, canvasY, 1, 1).data
-    const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`
+    try {
+      // Get pixel color
+      const pixel = ctx.getImageData(canvasX, canvasY, 1, 1).data
+      const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`
 
-    // Update the target color
-    onUpdateConfig(`colors.${eyedropperTarget}`, hex)
-    setEyedropperTarget(null)
+      console.log('[Eyedropper] Picked color:', hex, 'at', canvasX, canvasY)
+
+      // Update the target color
+      onUpdateConfig(`colors.${eyedropperTarget}`, hex)
+      setEyedropperTarget(null)
+    } catch (err) {
+      console.error('[Eyedropper] Failed to get pixel data (CORS?):', err)
+      // Fallback: try to get color from a fresh canvas
+      tryFallbackColorPick(event)
+    }
+  }, [eyedropperTarget, canvasReady, onUpdateConfig])
+
+  // Fallback color picker that creates a fresh canvas
+  const tryFallbackColorPick = useCallback((event: React.MouseEvent<HTMLImageElement>) => {
+    const img = event.currentTarget
+    const rect = img.getBoundingClientRect()
+    const clickX = event.clientX - rect.left
+    const clickY = event.clientY - rect.top
+
+    // Create a temporary canvas
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    if (!tempCtx) return
+
+    tempCanvas.width = img.naturalWidth
+    tempCanvas.height = img.naturalHeight
+    tempCtx.drawImage(img, 0, 0)
+
+    const scaleX = img.naturalWidth / rect.width
+    const scaleY = img.naturalHeight / rect.height
+    const canvasX = Math.floor(clickX * scaleX)
+    const canvasY = Math.floor(clickY * scaleY)
+
+    try {
+      const pixel = tempCtx.getImageData(canvasX, canvasY, 1, 1).data
+      const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`
+
+      console.log('[Eyedropper Fallback] Picked color:', hex)
+      onUpdateConfig(`colors.${eyedropperTarget}`, hex)
+      setEyedropperTarget(null)
+    } catch (err) {
+      console.error('[Eyedropper Fallback] Also failed:', err)
+      alert('Unable to pick color from logo due to security restrictions. Please enter the color manually.')
+      setEyedropperTarget(null)
+    }
   }, [eyedropperTarget, onUpdateConfig])
 
   // Load logo into canvas when available
@@ -449,12 +534,18 @@ function ReviewStep({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    setCanvasReady(false)
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       canvas.width = img.width
       canvas.height = img.height
       ctx.drawImage(img, 0, 0)
+      setCanvasReady(true)
+      console.log('[Eyedropper] Canvas loaded:', img.width, 'x', img.height)
+    }
+    img.onerror = (err) => {
+      console.error('[Eyedropper] Failed to load image:', err)
     }
     img.src = logoUrl
   }, [])
@@ -594,14 +685,16 @@ function ReviewStep({
               </button>
             </div>
             <div
-              className="h-24 rounded-lg flex items-center justify-center cursor-crosshair overflow-hidden"
+              className="h-24 rounded-lg flex items-center justify-center overflow-hidden"
               style={{ background: extractionResult?.logoDesignedForDarkBackground ? '#1e293b' : 'white' }}
-              onClick={handleLogoClick}
             >
               <img
+                ref={imgRef}
                 src={config.logos.primary}
                 alt="Pick color from logo"
-                className="max-h-full max-w-full object-contain"
+                className="max-h-full max-w-full object-contain cursor-crosshair"
+                crossOrigin="anonymous"
+                onClick={handleImageClick}
                 onLoad={() => loadLogoToCanvas(config.logos?.primary || '')}
               />
             </div>
