@@ -1,7 +1,7 @@
 // Brand & Templates Settings
 // Main container for brand configuration and document templates
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Palette,
   Globe,
@@ -12,12 +12,15 @@ import {
   AlertCircle,
   Loader2,
   Edit2,
+  Download,
+  ExternalLink,
 } from 'lucide-react'
 import { useBrandStore } from '@/stores/brandStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { BrandSetupWizard } from './BrandSetupWizard'
-import type { TemplateType, DocumentTypeCode } from '@/types/brand'
+import type { TemplateType, DocumentTypeCode, AccountTemplate } from '@/types/brand'
 import { TEMPLATE_TYPE_INFO } from '@/types/brand'
+import { getTemplateDownloadUrl } from '@/services/brand/templateGenerator'
 
 export function BrandTemplatesSettings() {
   const { currentAccountId } = useAccountStore()
@@ -159,6 +162,41 @@ function EmptyState({ onSetup }: { onSetup: () => void }) {
 function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
   const { brandConfig, templates } = useBrandStore()
   const config = brandConfig?.brandConfig
+  const [loadingTemplate, setLoadingTemplate] = useState<string | null>(null)
+
+  const handlePreview = useCallback(async (template: AccountTemplate) => {
+    setLoadingTemplate(`preview-${template.id}`)
+    try {
+      const url = await getTemplateDownloadUrl(template.storagePath)
+      if (url) {
+        window.open(url, '_blank')
+      }
+    } catch (error) {
+      console.error('[BrandOverview] Preview error:', error)
+    } finally {
+      setLoadingTemplate(null)
+    }
+  }, [])
+
+  const handleDownload = useCallback(async (template: AccountTemplate) => {
+    setLoadingTemplate(`download-${template.id}`)
+    try {
+      const url = await getTemplateDownloadUrl(template.storagePath)
+      if (url) {
+        // Create a temporary link to trigger download
+        const link = document.createElement('a')
+        link.href = url
+        link.download = template.templateName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    } catch (error) {
+      console.error('[BrandOverview] Download error:', error)
+    } finally {
+      setLoadingTemplate(null)
+    }
+  }, [])
 
   if (!config) return null
 
@@ -342,15 +380,29 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        className="text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                        onClick={() => handlePreview(template)}
+                        disabled={loadingTemplate === `preview-${template.id}`}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
                         style={{ color: '#0ea5e9' }}
                       >
+                        {loadingTemplate === `preview-${template.id}` ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <ExternalLink size={12} />
+                        )}
                         Preview
                       </button>
                       <button
-                        className="text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                        onClick={() => handleDownload(template)}
+                        disabled={loadingTemplate === `download-${template.id}`}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
                         style={{ color: 'var(--fl-color-text-muted)' }}
                       >
+                        {loadingTemplate === `download-${template.id}` ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Download size={12} />
+                        )}
                         Download
                       </button>
                     </div>
