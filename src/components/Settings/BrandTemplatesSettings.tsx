@@ -201,7 +201,11 @@ function BrandOverview({ onEditBrand }: { onEditBrand: () => void }) {
     try {
       const url = await getTemplateDownloadUrl(template.storagePath)
       if (url) {
-        window.open(url, '_blank')
+        // Use Microsoft Office Online Viewer for better Office document preview
+        // Google Docs Viewer: https://docs.google.com/viewer?url=ENCODED_URL
+        // Microsoft Office: https://view.officeapps.live.com/op/embed.aspx?src=ENCODED_URL
+        const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
+        window.open(viewerUrl, '_blank')
       }
     } catch (error) {
       console.error('[BrandOverview] Preview error:', error)
