@@ -20,8 +20,26 @@ interface SettingsPageProps {
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('api-keys')
   const { user } = useAuthStore()
+  const { profile, fetchProfile } = useProfileStore()
 
-  const tabs = [
+  // Fetch profile on mount to get super admin status
+  useEffect(() => {
+    if (user?.id) {
+      console.log('[Settings] Fetching profile for user:', user.id)
+      fetchProfile(user.id)
+    }
+  }, [user?.id, fetchProfile])
+
+  // Debug: Log profile state
+  useEffect(() => {
+    console.log('[Settings] Profile state:', {
+      id: profile?.id,
+      isSuperAdmin: profile?.isSuperAdmin,
+      userId: profile?.userId
+    })
+  }, [profile])
+
+  const allTabs = [
     { id: 'api-keys' as const, label: 'API Keys', icon: Key },
     { id: 'accounts' as const, label: 'Accounts', icon: Building2 },
     { id: 'profile' as const, label: 'Profile', icon: User },
@@ -30,6 +48,9 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     { id: 'security' as const, label: 'Security', icon: Shield },
     { id: 'admin-tools' as const, label: 'Tools (Admin)', icon: Wrench, admin: true },
   ]
+
+  // Filter tabs based on super admin status
+  const tabs = allTabs.filter(tab => !tab.admin || profile?.isSuperAdmin)
 
   return (
     <div
@@ -263,6 +284,13 @@ function ProfileSettings() {
               }}
             />
           </div>
+          {/* Super Admin Status */}
+          {profile?.isSuperAdmin && (
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-lg" style={{ background: 'rgba(168, 85, 247, 0.15)' }}>
+              <Shield size={16} className="text-purple-400" />
+              <span className="text-xs text-purple-300">Super Admin</span>
+            </div>
+          )}
         </div>
       </div>
 

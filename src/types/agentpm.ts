@@ -562,7 +562,45 @@ export interface TaskDependency {
 }
 
 // =============================================================================
-// KNOWLEDGE ENTRY
+// SYSTEM KNOWLEDGE (Global Level - Applies to ALL users)
+// =============================================================================
+
+export type SystemKnowledgeCategory =
+  | 'platform'      // General Funnelists platform info
+  | 'tool'          // Specific tool documentation
+  | 'integration'   // How tools work together
+  | 'workflow'      // Best practices and workflows
+  | 'best-practice' // Tips and recommendations
+
+export type FunnelistsTool = 'agentpm' | 'canvas' | 'radar' | 'leadgen'
+
+export interface SystemKnowledge {
+  id: string
+
+  // Categorization
+  category: SystemKnowledgeCategory
+  toolName?: FunnelistsTool // null for general platform knowledge
+
+  // Content
+  title: string
+  content: string
+
+  // Metadata
+  tags: string[]
+  priority: number // Lower = higher priority
+
+  // Status
+  isActive: boolean
+
+  // Audit
+  createdAt: string
+  createdBy?: string
+  updatedAt: string
+  updatedBy?: string
+}
+
+// =============================================================================
+// KNOWLEDGE ENTRY (Account/Team/Project Level)
 // =============================================================================
 
 export type KnowledgeType =
@@ -572,8 +610,17 @@ export type KnowledgeType =
   | 'reference'   // "Brand guidelines at /docs/brand.md"
   | 'glossary'    // "PRD = Product Requirements Document"
 
+// Knowledge scope determines visibility level
+export type KnowledgeScope =
+  | 'account'   // Visible to all users in the account
+  | 'team'      // Visible to team members (future)
+  | 'project'   // Visible only in the project context
+
 export interface KnowledgeEntry extends BaseEntity {
-  projectId: string
+  // Scope and hierarchy
+  scope: KnowledgeScope
+  projectId?: string  // Required for project-scope, optional for account/team
+  teamId?: string     // For team-scoped knowledge (future)
 
   knowledgeType: KnowledgeType
   content: string

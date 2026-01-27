@@ -196,19 +196,6 @@ export function SkillPickerModal({
     setIsBatchImporting(false)
   }
 
-  const handleImport = async (file: RepoSkillFile) => {
-    setImportingPath(file.path)
-    setError(null)
-    try {
-      await onImport(file)
-      setImportedPaths((prev) => new Set([...prev, file.path]))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed')
-    } finally {
-      setImportingPath(null)
-    }
-  }
-
   const getFileIcon = (file: RepoSkillFile) => {
     if (file.path.includes('/')) return <FolderOpen size={18} className="text-yellow-500" />
     return <FileText size={18} className="text-green-500" />

@@ -309,7 +309,6 @@ export function parseFrontmatter(content: string): { metadata: SkillMetadata; bo
   const lines = frontmatter.split('\n')
   let currentKey: string | null = null
   let currentValue: string[] = []
-  let isMultiline = false
   let multilineStyle: '|' | '>' | null = null
 
   const saveCurrentField = () => {
@@ -351,7 +350,6 @@ export function parseFrontmatter(content: string): { metadata: SkillMetadata; bo
     }
     currentKey = null
     currentValue = []
-    isMultiline = false
     multilineStyle = null
   }
 
@@ -370,10 +368,8 @@ export function parseFrontmatter(content: string): { metadata: SkillMetadata; bo
 
       // Check for multiline indicators
       if (valueAfterColon === '|' || valueAfterColon === '|+' || valueAfterColon === '|-') {
-        isMultiline = true
         multilineStyle = '|'
       } else if (valueAfterColon === '>' || valueAfterColon === '>+' || valueAfterColon === '>-') {
-        isMultiline = true
         multilineStyle = '>'
       } else if (valueAfterColon) {
         // Single line value

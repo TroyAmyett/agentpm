@@ -19,6 +19,10 @@ import {
   Trash2,
   MoreVertical,
   Search,
+  Square,
+  CheckSquare,
+  ChevronDown,
+  Copy,
 } from 'lucide-react'
 import type { Project, Task } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
@@ -56,9 +60,12 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
   const [editingKnowledgeId, setEditingKnowledgeId] = useState<string | null>(null)
   const [milestoneMenuOpen, setMilestoneMenuOpen] = useState<string | null>(null)
   const [knowledgeMenuOpen, setKnowledgeMenuOpen] = useState<string | null>(null)
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const [showMilestoneDropdown, setShowMilestoneDropdown] = useState(false)
+  const [docsPath, setDocsPath] = useState(project.repositoryPath ? `${project.repositoryPath}/docs` : '')
   const { formatDate } = useTimezoneFunctions()
   const { updateProject } = useProjectStore()
-  const { getTasksByProject, createTask } = useTaskStore()
+  const { getTasksByProject, createTask, updateTask } = useTaskStore()
   const { agents } = useAgentStore()
   const { skills } = useSkillStore()
   const { fetchMilestones, getMilestonesByProject, createMilestone, updateMilestone, deleteMilestone } = useMilestoneStore()
@@ -187,6 +194,7 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
     await createKnowledge({
       accountId: account.id,
       projectId: project.id,
+      scope: 'project',
       knowledgeType: entryData.knowledgeType,
       content: entryData.content,
       isVerified: entryData.isVerified,
@@ -223,6 +231,86 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
     if (!user?.id) return
     if (!window.confirm('Are you sure you want to delete this knowledge entry?')) return
     await deleteKnowledge(id, user.id)
+  }
+
+  // Clone a task list with all its tasks
+  const handleCloneMilestone = async (milestone: Milestone) => {
+    if (!account?.id || !user?.id) return
+
+    // Create the new milestone
+    const newMilestone = await createMilestone({
+      accountId: account.id,
+      projectId: project.id,
+      name: `${milestone.name} (Copy)`,
+      description: milestone.description,
+      status: 'not_started',
+      dueDate: undefined, // Clear due date for the clone
+      sortOrder: projectMilestones.length,
+      createdBy: user.id,
+      createdByType: 'user',
+      updatedBy: user.id,
+      updatedByType: 'user',
+    })
+
+    // Clone all tasks in this milestone
+    if (newMilestone) {
+      const milestoneTasks = projectTasks.filter(t => t.milestoneId === milestone.id)
+      for (const task of milestoneTasks) {
+        await createTask({
+          accountId: account.id,
+          projectId: project.id,
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          skillId: task.skillId,
+          milestoneId: newMilestone.id,
+          status: 'pending', // Reset status for cloned tasks
+          createdBy: user.id,
+          createdByType: 'user',
+          updatedBy: user.id,
+          updatedByType: 'user',
+        })
+      }
+    }
+  }
+
+  // Bulk assign tasks to milestone
+  const handleBulkAssignToMilestone = async (milestoneId: string | null) => {
+    if (!user?.id) return
+    const taskIds = Array.from(selectedTaskIds)
+    for (const taskId of taskIds) {
+      await updateTask(taskId, {
+        milestoneId: milestoneId || undefined,
+        updatedBy: user.id,
+        updatedByType: 'user',
+      })
+    }
+    setSelectedTaskIds(new Set())
+    setShowMilestoneDropdown(false)
+  }
+
+  // Toggle task selection
+  const toggleTaskSelection = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev)
+      if (next.has(taskId)) {
+        next.delete(taskId)
+      } else {
+        next.add(taskId)
+      }
+      return next
+    })
+  }
+
+  // Select all visible tasks
+  const selectAllTasks = (taskIds: string[]) => {
+    setSelectedTaskIds(new Set(taskIds))
+  }
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedTaskIds(new Set())
   }
 
   // Use calculated progress from actual tasks (fallback to stats for backwards compat)
@@ -438,23 +526,25 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
               </div>
             </div>
 
-            {/* Linked Items */}
+            {/* TODO: Replace with Project Knowledge section when Knowledge system is implemented
+                See: docs/prds/knowledge-system-notes.md
             <div className="bg-white dark:bg-surface-800 rounded-xl p-6 border border-surface-200 dark:border-surface-700">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-surface-500 uppercase tracking-wide">
-                  Linked Folders & Notes
+                  Project Knowledge
                 </h3>
                 <button className="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
                   <Plus size={14} />
-                  Link Items
+                  Add Knowledge
                 </button>
               </div>
               <div className="text-center py-8 text-surface-500">
                 <Link2 size={32} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No items linked yet</p>
-                <p className="text-xs mt-1">Link folders or notes to include them in this project</p>
+                <p className="text-sm">No knowledge added yet</p>
+                <p className="text-xs mt-1">Add documents, notes, or import client knowledge</p>
               </div>
             </div>
+            */}
           </div>
         )}
 
@@ -607,19 +697,98 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
 
               return (
                 <>
-                  {/* Results count */}
-                  <div className="text-sm text-surface-500 mb-2">
-                    {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
-                    {hasActiveFilters && ` (of ${projectTasks.length} total)`}
+                  {/* Bulk Action Bar */}
+                  {selectedTaskIds.size > 0 && (
+                    <div className="mb-4 p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+                          {selectedTaskIds.size} task{selectedTaskIds.size > 1 ? 's' : ''} selected
+                        </span>
+                        <button
+                          onClick={clearSelection}
+                          className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {/* Move to Task List dropdown */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowMilestoneDropdown(!showMilestoneDropdown)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            <Target size={14} />
+                            Move to Task List
+                            <ChevronDown size={14} />
+                          </button>
+                          {showMilestoneDropdown && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setShowMilestoneDropdown(false)}
+                              />
+                              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-surface-700 rounded-lg shadow-lg border border-surface-200 dark:border-surface-600 py-1 z-20">
+                                <button
+                                  onClick={() => handleBulkAssignToMilestone(null)}
+                                  className="w-full text-left px-3 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-600"
+                                >
+                                  Remove from Task List
+                                </button>
+                                {projectMilestones.length > 0 && (
+                                  <div className="border-t border-surface-200 dark:border-surface-600 my-1" />
+                                )}
+                                {projectMilestones.map((m) => (
+                                  <button
+                                    key={m.id}
+                                    onClick={() => handleBulkAssignToMilestone(m.id)}
+                                    className="w-full text-left px-3 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-600"
+                                  >
+                                    {m.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Results count with select all */}
+                  <div className="flex items-center justify-between text-sm text-surface-500 mb-2">
+                    <span>
+                      {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
+                      {hasActiveFilters && ` (of ${projectTasks.length} total)`}
+                    </span>
+                    {filteredTasks.length > 0 && selectedTaskIds.size === 0 && (
+                      <button
+                        onClick={() => selectAllTasks(filteredTasks.map(t => t.id))}
+                        className="text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        Select all
+                      </button>
+                    )}
                   </div>
                   <div className="bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700">
                     {filteredTasks.map((task) => (
                     <div
                       key={task.id}
                       onClick={() => onSelectTask?.(task.id)}
-                      className="p-4 hover:bg-surface-50 dark:hover:bg-surface-750 transition-colors cursor-pointer"
+                      className="p-4 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors cursor-pointer"
                     >
                       <div className="flex items-start gap-3">
+                        {/* Checkbox for selection */}
+                        <button
+                          onClick={(e) => toggleTaskSelection(task.id, e)}
+                          className="mt-0.5 flex-shrink-0 text-surface-400 hover:text-primary-500 transition-colors"
+                        >
+                          {selectedTaskIds.has(task.id) ? (
+                            <CheckSquare size={18} className="text-primary-500" />
+                          ) : (
+                            <Square size={18} />
+                          )}
+                        </button>
                         <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
                           task.status === 'completed' ? 'bg-green-500' :
                           task.status === 'in_progress' ? 'bg-blue-500' :
@@ -647,6 +816,12 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
                             <span className="capitalize">{task.status.replace('_', ' ')}</span>
                             {task.dueAt && (
                               <span>Due {formatDate(task.dueAt, 'short')}</span>
+                            )}
+                            {task.milestoneId && (
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                <Target size={12} />
+                                {projectMilestones.find(m => m.id === task.milestoneId)?.name || 'Task List'}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -750,6 +925,16 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
                                   </button>
                                   <button
                                     onClick={() => {
+                                      handleCloneMilestone(milestone)
+                                      setMilestoneMenuOpen(null)
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-600"
+                                  >
+                                    <Copy size={14} />
+                                    Clone
+                                  </button>
+                                  <button
+                                    onClick={() => {
                                       handleDeleteMilestone(milestone.id)
                                       setMilestoneMenuOpen(null)
                                     }}
@@ -835,10 +1020,10 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={settingsForm.repositoryPath ? `${settingsForm.repositoryPath}/docs` : ''}
-                      placeholder="C:\dev\myproject\docs or linked from repo path"
-                      disabled
-                      className="flex-1 px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 text-surface-600 dark:text-surface-400 text-sm font-mono"
+                      value={docsPath}
+                      onChange={(e) => setDocsPath(e.target.value)}
+                      placeholder="C:\dev\myproject\docs"
+                      className="flex-1 px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                     <button
                       disabled
@@ -849,7 +1034,7 @@ export function ProjectDetailView({ project, onBack, onSelectTask }: ProjectDeta
                     </button>
                   </div>
                   <p className="text-xs text-surface-400 mt-1">
-                    Set the repository path in Settings to auto-link docs folder. Sync feature coming soon.
+                    Path to your project documentation folder. Sync feature coming soon.
                   </p>
                 </div>
               </div>

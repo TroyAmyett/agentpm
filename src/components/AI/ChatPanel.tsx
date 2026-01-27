@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useUIStore } from '@/stores/uiStore'
 import { getCurrentNoteContext, useNotesStore } from '@/stores/notesStore'
-import { chatWithNotes, isAnthropicConfigured, setNoteOperationCallbacks, type ChatStatusCallback } from '@/services/ai/anthropic'
+import { useAccountStore } from '@/stores/accountStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useTaskStore } from '@/stores/taskStore'
+import { chatWithNotes, isAnthropicConfigured, setNoteOperationCallbacks, type ChatStatusCallback, type ChatContextOptions } from '@/services/ai/anthropic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ResizeHandle } from '@/components/ResizeHandle'
 import type { JSONContent } from '@tiptap/react'
@@ -17,6 +20,7 @@ import {
   Globe,
   Mic,
   MicOff,
+  CheckSquare,
 } from 'lucide-react'
 
 // Web Speech API types
@@ -76,12 +80,15 @@ const chatHistoryByNote = new Map<string | null, Message[]>()
 export function ChatPanel() {
   const { chatPanelOpen, setChatPanelOpen, chatPanelWidth, setChatPanelWidth } = useUIStore()
   const { updateNote, addNote, currentNoteId, notes } = useNotesStore()
+  const { currentAccountId } = useAccountStore()
+  const { user } = useAuthStore()
+  const { createTask } = useTaskStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeNoteTitle, setActiveNoteTitle] = useState<string | null>(null)
-  const [chatStatus, setChatStatus] = useState<'thinking' | 'searching' | 'updating-note'>('thinking')
+  const [chatStatus, setChatStatus] = useState<'thinking' | 'searching' | 'updating-note' | 'creating-task'>('thinking')
   const [isRecording, setIsRecording] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -169,12 +176,31 @@ export function ChatPanel() {
         const { currentNote } = getCurrentNoteContext()
         return currentNote?.content || ''
       },
+      // Task creation callback
+      createTask: async (taskData: { title: string; description?: string; priority?: string }) => {
+        if (!currentAccountId) throw new Error('No account selected')
+        const userId = user?.id || 'unknown'
+
+        const task = await createTask({
+          title: taskData.title,
+          description: taskData.description,
+          priority: (taskData.priority as 'critical' | 'high' | 'medium' | 'low') || 'medium',
+          accountId: currentAccountId,
+          status: 'draft',
+          createdBy: userId,
+          createdByType: 'user',
+          updatedBy: userId,
+          updatedByType: 'user',
+        })
+
+        return { id: task.id, title: task.title }
+      },
     })
 
     return () => {
       setNoteOperationCallbacks(null)
     }
-  }, [currentNoteId, notes, updateNote, addNote])
+  }, [currentNoteId, notes, updateNote, addNote, currentAccountId, createTask, user])
 
   // Check for speech recognition support
   useEffect(() => {
@@ -277,12 +303,22 @@ export function ChatPanel() {
         setChatStatus(status)
       }
 
-      const result = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory, handleStatusChange)
+      // Build context options for hierarchical knowledge injection
+      const contextOptions: ChatContextOptions = {
+        accountId: currentAccountId || undefined,
+        projectId: undefined, // TODO: Add project context when in project view
+        toolName: 'agentpm',
+      }
+
+      const result = await chatWithNotes(userMessage.content, currentNote, otherNotes, chatHistory, handleStatusChange, contextOptions)
 
       // Build response content with indicator if applicable
       let content = result.response
       if (result.webSearchUsed) {
         content = `🌐 ${content}`
+      }
+      if (result.taskCreated) {
+        content = `✅ ${content}`
       }
       if (result.noteUpdated) {
         content = `✏️ ${content}`
@@ -300,7 +336,7 @@ export function ChatPanel() {
       setMessages((prev) => [...prev, assistantMessage])
 
       // Refresh the active note title in case it changed
-      if (result.noteUpdated || result.noteCreated) {
+      if (result.noteUpdated || result.noteCreated || result.taskCreated) {
         const { currentNote: updatedNote } = getCurrentNoteContext()
         setActiveNoteTitle(updatedNote?.title || null)
       }
@@ -372,13 +408,13 @@ export function ChatPanel() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
             {messages.length === 0 && (
               <div className="text-center py-6">
-                <p className="text-sm text-surface-500 max-w-[220px] mx-auto">
+                <p className="text-sm text-surface-500 max-w-[240px] mx-auto">
                   {activeNoteTitle
-                    ? `Ask me to brainstorm ideas, suggest features, search the web, or update "${activeNoteTitle}" directly.`
-                    : 'Ask me anything! I can search the web and create new notes for you.'
+                    ? `Ask me to brainstorm ideas, create tasks, search the web, or update "${activeNoteTitle}" directly.`
+                    : 'Ask me anything! I can search the web, create notes, and track tasks for you.'
                   }
                 </p>
-                <div className="flex items-center justify-center gap-3 mt-3 text-xs">
+                <div className="flex items-center justify-center gap-3 mt-3 text-xs flex-wrap">
                   <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
                     <Globe size={12} />
                     <span>Web search</span>
@@ -386,6 +422,10 @@ export function ChatPanel() {
                   <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                     <FileText size={12} />
                     <span>{activeNoteTitle ? 'Edit note' : 'Create notes'}</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                    <CheckSquare size={12} />
+                    <span>Create tasks</span>
                   </span>
                 </div>
               </div>
@@ -436,6 +476,11 @@ export function ChatPanel() {
                       <>
                         <PenLine size={16} className="text-green-500 animate-pulse" />
                         <span className="text-sm text-surface-500">Updating note...</span>
+                      </>
+                    ) : chatStatus === 'creating-task' ? (
+                      <>
+                        <CheckSquare size={16} className="text-purple-500 animate-pulse" />
+                        <span className="text-sm text-surface-500">Creating task...</span>
                       </>
                     ) : (
                       <>

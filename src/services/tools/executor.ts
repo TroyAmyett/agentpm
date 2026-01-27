@@ -6,6 +6,7 @@ import { getToolByName } from './registry'
 import { checkDomainAvailability } from './implementations/domainChecker'
 import { fetchUrl } from './implementations/urlFetcher'
 import { dnsLookup } from './implementations/dnsLookup'
+import { createLandingPage, type LandingPageContent } from './implementations/landingPageCreator'
 
 /**
  * Execute a tool by name with given parameters
@@ -59,6 +60,15 @@ export async function executeTool(
           success: false,
           error: 'Web search requires API key configuration',
         }
+      }
+
+      case 'create_landing_page': {
+        const pageType = parameters.pageType as 'lead-capture' | 'waitlist' | 'product-purchase' | 'upsell'
+        const slug = parameters.slug as string
+        const content = parameters.content as LandingPageContent
+        const funnelId = parameters.funnelId as string | undefined
+        const publish = parameters.publish as boolean | undefined
+        return await createLandingPage({ pageType, slug, content, funnelId, publish })
       }
 
       default:

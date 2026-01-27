@@ -1,3 +1,6 @@
+import { buildKnowledgeContext } from '@/services/agentpm/knowledgeService'
+import type { FunnelistsTool } from '@/types/agentpm'
+
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 
 interface AnthropicMessage {
@@ -100,12 +103,39 @@ const NOTE_TOOLS: Tool[] = [
   },
 ]
 
-// Callbacks for note operations - will be set by ChatPanel
+// Task creation tool - allows AI to create tasks in AgentPM
+const TASK_TOOL: Tool = {
+  name: 'create_task',
+  description: 'Create a new task in AgentPM. Use this when the user asks you to create a task, add something to their to-do list, or wants to track an action item. Tasks are actionable work items that can be assigned to AI agents or humans.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        description: 'The title of the task. Should be clear, action-oriented, and start with a verb (e.g., "Create blog post about AI trends").',
+      },
+      description: {
+        type: 'string',
+        description: 'Optional detailed description of what needs to be done. Include requirements, context, and acceptance criteria.',
+      },
+      priority: {
+        type: 'string',
+        enum: ['critical', 'high', 'medium', 'low'],
+        description: 'Task priority. Defaults to medium if not specified.',
+      },
+    },
+    required: ['title'],
+  },
+}
+
+// Callbacks for note and task operations - will be set by ChatPanel
 export type NoteOperationCallbacks = {
   updateCurrentNote: (content: string, title?: string) => Promise<void>
   createNewNote: (title: string, content: string) => Promise<void>
   appendToNote: (content: string) => Promise<void>
   getCurrentNoteContent: () => string
+  // Task operations
+  createTask?: (task: { title: string; description?: string; priority?: string }) => Promise<{ id: string; title: string }>
 }
 
 let noteCallbacks: NoteOperationCallbacks | null = null
@@ -254,22 +284,50 @@ export async function performAIAction(
 }
 
 // Status callback type for chat progress updates
-export type ChatStatusCallback = (status: 'thinking' | 'searching' | 'updating-note') => void
+export type ChatStatusCallback = (status: 'thinking' | 'searching' | 'updating-note' | 'creating-task') => void
 
-// Chat with notes - focuses on the active note only to minimize token usage
+// Context options for hierarchical knowledge injection
+export interface ChatContextOptions {
+  accountId?: string
+  projectId?: string
+  toolName?: FunnelistsTool
+}
+
+// Chat with notes - focuses on the active note with hierarchical knowledge context
 export async function chatWithNotes(
   userMessage: string,
   activeNote: { title: string; content: string; id: string } | null,
   _otherNotesContext: string, // Deprecated - kept for API compatibility but not used
   chatHistory: AnthropicMessage[],
-  onStatusChange?: ChatStatusCallback
-): Promise<{ response: string; noteUpdated?: boolean; noteCreated?: boolean; webSearchUsed?: boolean }> {
+  onStatusChange?: ChatStatusCallback,
+  contextOptions?: ChatContextOptions
+): Promise<{ response: string; noteUpdated?: boolean; noteCreated?: boolean; webSearchUsed?: boolean; taskCreated?: boolean }> {
+  // Build hierarchical knowledge context
+  let knowledgeContext = ''
+  if (contextOptions?.accountId) {
+    try {
+      knowledgeContext = await buildKnowledgeContext({
+        accountId: contextOptions.accountId,
+        projectId: contextOptions.projectId,
+        toolName: contextOptions.toolName || 'agentpm',
+        includeSystemKnowledge: true,
+      })
+    } catch (error) {
+      console.warn('[chatWithNotes] Failed to build knowledge context:', error)
+    }
+  }
+
   let systemPrompt: string
+
+  // Base knowledge section (always included if available)
+  const knowledgeSection = knowledgeContext
+    ? `\n\n=== KNOWLEDGE BASE ===\nThe following knowledge will help you understand the system and context:\n\n${knowledgeContext}\n=== END KNOWLEDGE BASE ===\n\n`
+    : ''
 
   if (activeNote) {
     // User has a note open - focus on helping with that note only
-    systemPrompt = `You are an AI assistant helping the user work on their note titled "${activeNote.title}".
-
+    systemPrompt = `You are an AI assistant in AgentPM, helping the user work on their note titled "${activeNote.title}".
+${knowledgeSection}
 YOUR PRIMARY FOCUS: The user is currently working on the note below. Help them brainstorm ideas, expand on concepts, suggest features, answer questions about this content, or help in any way they need.
 
 == CURRENT NOTE: "${activeNote.title}" ==
@@ -281,8 +339,10 @@ CAPABILITIES:
 - You CAN update the current note using the update_current_note tool
 - You CAN append content to the current note using the append_to_note tool
 - You CAN create new notes using the create_new_note tool
+- You CAN create tasks using the create_task tool when the user wants to track action items
 - When the user asks you to "add this", "update the note", "write this down", etc., USE THE TOOLS to actually modify the note
 - For append_to_note, just include the NEW content to add - it will be appended to the existing content
+- When the user asks to "create a task", "add to my to-do list", "track this", etc., use the create_task tool
 
 WHEN TO SEARCH:
 - When asked about tools, services, products, or skills in a specific domain
@@ -290,21 +350,32 @@ WHEN TO SEARCH:
 - When asked to find or research something on the internet
 - When you don't have enough knowledge to answer accurately
 
+WHEN TO CREATE TASKS:
+- When the user explicitly asks to create a task or to-do item
+- When discussing action items that need to be tracked
+- When the user says "let's do this" or "we should do this" about a specific action
+
 Be helpful, creative, and proactive. If they ask a general question, relate it back to what they're working on when relevant. Suggest ideas, point out potential improvements, and help them develop their thoughts.`
   } else {
     // No active note - general assistant mode
-    systemPrompt = `You are an AI assistant. The user doesn't have a note open right now.
+    systemPrompt = `You are an AI assistant in AgentPM. The user doesn't have a note open right now.
+${knowledgeSection}
 Be helpful, concise, and accurate.
 
 CAPABILITIES:
 - You CAN search the web using the web_search tool to find current information
 - You CAN create new notes using the create_new_note tool if the user asks
+- You CAN create tasks using the create_task tool when the user wants to track action items
 
 WHEN TO SEARCH:
 - When asked about tools, services, products, or skills in a specific domain
 - When asked about current events or recent information
 - When asked to find or research something on the internet
 - When you don't have enough knowledge to answer accurately
+
+WHEN TO CREATE TASKS:
+- When the user explicitly asks to create a task or to-do item
+- When discussing action items that need to be tracked
 
 To help with a specific note, ask the user to open it first.`
   }
@@ -313,10 +384,10 @@ To help with a specific note, ask the user to open it first.`
     throw new Error('Anthropic API key not configured')
   }
 
-  // Build tools array - always include web search
+  // Build tools array - always include web search and task creation
   const tools = activeNote
-    ? [WEB_SEARCH_TOOL, ...NOTE_TOOLS]
-    : [WEB_SEARCH_TOOL, ...NOTE_TOOLS.filter(t => t.name === 'create_new_note')]
+    ? [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS]
+    : [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS.filter(t => t.name === 'create_new_note')]
 
   // Build messages array for API - this will be mutated during tool use loop
   const apiMessages: Array<{ role: 'user' | 'assistant'; content: string | ContentBlock[] }> = [
@@ -331,6 +402,7 @@ To help with a specific note, ask the user to open it first.`
   let noteUpdated = false
   let noteCreated = false
   let webSearchUsed = false
+  let taskCreated = false
   let iterationCount = 0
   const maxIterations = 5 // Prevent infinite loops
 
@@ -421,6 +493,18 @@ To help with a specific note, ask the user to open it first.`
           await noteCallbacks.appendToNote(content)
           noteUpdated = true
           toolResult = 'Content appended to note successfully.'
+        } else if (toolUse.name === 'create_task' && noteCallbacks?.createTask) {
+          onStatusChange?.('creating-task')
+          const taskData = {
+            title: toolUse.input.title as string,
+            description: toolUse.input.description as string | undefined,
+            priority: toolUse.input.priority as string | undefined,
+          }
+          const createdTask = await noteCallbacks.createTask(taskData)
+          taskCreated = true
+          toolResult = `Task "${createdTask.title}" created successfully (ID: ${createdTask.id}).`
+        } else if (toolUse.name === 'create_task' && !noteCallbacks?.createTask) {
+          toolResult = 'Task creation is not available in this context. The task tool requires proper callbacks to be set up.'
         } else {
           toolResult = `Tool ${toolUse.name} not available.`
         }
@@ -448,15 +532,18 @@ To help with a specific note, ask the user to open it first.`
   }
 
   // If only tool use happened, add a confirmation message
-  if (!textResponse && (noteUpdated || noteCreated)) {
-    if (noteUpdated) {
-      textResponse = "Done! I've updated your note."
-    } else if (noteCreated) {
-      textResponse = "Done! I've created a new note for you."
+  if (!textResponse && (noteUpdated || noteCreated || taskCreated)) {
+    const actions: string[] = []
+    if (noteUpdated) actions.push('updated your note')
+    if (noteCreated) actions.push('created a new note')
+    if (taskCreated) actions.push('created a task')
+
+    if (actions.length > 0) {
+      textResponse = `Done! I've ${actions.join(' and ')}.`
     }
   }
 
-  return { response: textResponse, noteUpdated, noteCreated, webSearchUsed }
+  return { response: textResponse, noteUpdated, noteCreated, webSearchUsed, taskCreated }
 }
 
 // Tag suggestions
