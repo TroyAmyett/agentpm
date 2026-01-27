@@ -8,12 +8,14 @@ export interface UserProfile {
   id: string
   userId: string
   fullName?: string
+  displayName?: string
   avatarUrl?: string
   language: string
   currency: string
   timezone: string
   dateFormat: string
   timeFormat: string
+  isSuperAdmin: boolean  // God mode: full access to all features across all apps
   createdAt: string
   updatedAt: string
 }
@@ -25,7 +27,7 @@ interface ProfileState {
 
   // Actions
   fetchProfile: (userId: string) => Promise<void>
-  updateProfile: (updates: Partial<Pick<UserProfile, 'fullName' | 'avatarUrl' | 'language' | 'currency' | 'timezone' | 'dateFormat' | 'timeFormat'>>) => Promise<void>
+  updateProfile: (updates: Partial<Pick<UserProfile, 'fullName' | 'displayName' | 'avatarUrl' | 'language' | 'currency' | 'timezone' | 'dateFormat' | 'timeFormat'>>) => Promise<void>
   clearError: () => void
 }
 
@@ -36,6 +38,7 @@ const DEFAULT_PROFILE: Omit<UserProfile, 'id' | 'userId' | 'createdAt' | 'update
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   dateFormat: 'MM/DD/YYYY',
   timeFormat: '12h',
+  isSuperAdmin: false,
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
@@ -64,11 +67,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     try {
       // Try to get existing profile
+      console.log('[ProfileStore] Fetching profile for user:', userId)
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
         .single()
+
+      console.log('[ProfileStore] Fetch result:', { data, error })
 
       if (error) {
         // Handle auth errors gracefully
@@ -119,6 +125,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
           const { data: newProfile, error: insertError } = await supabase
             .from('user_profiles')
             .insert({
+              id: userId,  // Legacy schema: id must equal user_id (FK to auth.users)
               user_id: userId,
               language: DEFAULT_PROFILE.language,
               currency: DEFAULT_PROFILE.currency,
@@ -131,7 +138,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
           if (insertError) {
             // If insert fails, just use local defaults
-            console.warn('Could not create profile, using defaults')
+            console.warn('Could not create profile, using defaults:', insertError.message, insertError.code, insertError.details)
             set({
               profile: {
                 id: 'local',
@@ -198,6 +205,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     try {
       const dbUpdates: Record<string, unknown> = {}
       if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName
+      if (updates.displayName !== undefined) dbUpdates.display_name = updates.displayName
       if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl
       if (updates.language !== undefined) dbUpdates.language = updates.language
       if (updates.currency !== undefined) dbUpdates.currency = updates.currency
@@ -235,12 +243,14 @@ function mapDbRowToProfile(row: Record<string, unknown>): UserProfile {
     id: row.id as string,
     userId: row.user_id as string,
     fullName: row.full_name as string | undefined,
+    displayName: row.display_name as string | undefined,
     avatarUrl: row.avatar_url as string | undefined,
     language: (row.language as string) || 'en',
     currency: (row.currency as string) || 'USD',
     timezone: (row.timezone as string) || 'UTC',
     dateFormat: (row.date_format as string) || 'MM/DD/YYYY',
     timeFormat: (row.time_format as string) || '12h',
+    isSuperAdmin: (row.is_super_admin as boolean) || false,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
