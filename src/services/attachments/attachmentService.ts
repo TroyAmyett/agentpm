@@ -22,6 +22,12 @@ export interface Attachment {
   source: AttachmentSource
   createdAt: string
   createdBy: string
+  // Version tracking (transparent to users)
+  version?: number
+  isCurrent?: boolean
+  // Inheritance tracking
+  isInherited?: boolean
+  inheritedFromTaskId?: string
 }
 
 export interface UploadResult {
@@ -210,7 +216,51 @@ export async function fetchAttachments(
     source: row.source,
     createdAt: row.created_at,
     createdBy: row.created_by,
+    version: row.version,
+    isCurrent: row.is_current,
   }))
+}
+
+// Fetch task attachments including inherited from parent tasks
+export async function fetchTaskAttachmentsWithInheritance(
+  taskId: string
+): Promise<Attachment[]> {
+  if (!supabase) return []
+
+  try {
+    const { data, error } = await supabase.rpc('get_task_attachments_with_inheritance', {
+      p_task_id: taskId,
+    })
+
+    if (error) {
+      console.error('[Attachment] Inheritance fetch failed:', error)
+      // Fallback to regular fetch if RPC not available
+      return fetchAttachments('task', taskId)
+    }
+
+    return (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      accountId: row.account_id as string,
+      entityType: row.entity_type as EntityType,
+      entityId: row.entity_id as string,
+      fileName: row.file_name as string,
+      fileType: row.file_type as string,
+      mimeType: row.mime_type as string,
+      fileSize: row.file_size as number,
+      storagePath: row.storage_path as string,
+      description: row.description as string | undefined,
+      source: row.source as AttachmentSource,
+      createdAt: row.created_at as string,
+      createdBy: row.created_by as string,
+      version: row.version as number,
+      isInherited: row.is_inherited as boolean,
+      inheritedFromTaskId: row.inherited_from_task_id as string | undefined,
+    }))
+  } catch (err) {
+    console.error('[Attachment] Inheritance fetch error:', err)
+    // Fallback to regular fetch
+    return fetchAttachments('task', taskId)
+  }
 }
 
 // Get download URL for an attachment

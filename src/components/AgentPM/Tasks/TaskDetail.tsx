@@ -28,6 +28,7 @@ import { TaskStatusBadge } from './TaskStatusBadge'
 import { TaskPriorityBadge } from './TaskPriorityBadge'
 import { TaskDependencies } from './TaskDependencies'
 import { ExecutionPanel } from './ExecutionPanel'
+import { TaskAttachmentsSection } from './TaskAttachmentsSection'
 import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface TaskDetailProps {
@@ -613,6 +614,16 @@ export function TaskDetail({
                   onDependencyChange={onDependencyChange}
                 />
               </div>
+            )}
+
+            {/* Attachments */}
+            {accountId && userId && (
+              <TaskAttachmentsSection
+                task={task}
+                allTasks={allTasks}
+                accountId={accountId}
+                userId={userId}
+              />
             )}
           </div>
         )}

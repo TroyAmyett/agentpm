@@ -186,7 +186,7 @@ export function TableListView({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+    <div className="flex flex-col h-full bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
       {/* Toolbar */}
       <div className="flex items-center gap-3 p-4 border-b border-surface-200 dark:border-surface-700">
         {/* Search */}
@@ -197,7 +197,7 @@ export function TableListView({
             placeholder="Search tasks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
@@ -205,7 +205,7 @@ export function TableListView({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as TaskStatus | 'all')}
-          className="px-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="px-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
@@ -220,7 +220,7 @@ export function TableListView({
         <select
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | 'all')}
-          className="px-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="px-3 py-2 text-sm rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Priority</option>
           <option value="critical">Critical</option>
@@ -274,12 +274,12 @@ export function TableListView({
                   <tr
                     key={task.id}
                     onClick={() => onTaskClick(task.id)}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-colors bg-surface-50 dark:bg-surface-800 ${
                       isExecuting
                         ? 'bg-primary-50 dark:bg-primary-900/20'
                         : isBlocked
                           ? 'bg-red-50/50 dark:bg-red-900/10'
-                          : 'hover:bg-surface-50 dark:hover:bg-surface-750'
+                          : 'hover:bg-surface-100 dark:hover:bg-surface-750'
                     }`}
                   >
                     {/* Task Name */}

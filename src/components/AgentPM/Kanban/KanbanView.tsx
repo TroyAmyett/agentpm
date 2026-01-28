@@ -36,9 +36,9 @@ interface Column {
 const DEFAULT_COLUMNS: Column[] = [
   { id: 'inbox', title: 'Inbox' },
   { id: 'ready', title: 'Ready' },
-  { id: 'queued', title: 'Queued', wipLimit: 5 },
-  { id: 'in_progress', title: 'In Progress', wipLimit: 3 },
-  { id: 'review', title: 'Review', wipLimit: 5 },
+  { id: 'queued', title: 'Queued' },
+  { id: 'in_progress', title: 'In Progress' },
+  { id: 'review', title: 'Review' },
   { id: 'done', title: 'Done' },
 ]
 

@@ -5,20 +5,28 @@ import { Plus, FolderKanban, Search, Filter } from 'lucide-react'
 import { useProjectStore } from '@/stores/projectStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useTaskStore } from '@/stores/taskStore'
+import { useAgentStore } from '@/stores/agentStore'
+import { useSkillStore } from '@/stores/skillStore'
 import { ProjectCard } from './ProjectCard'
 import { CreateProjectModal } from './CreateProjectModal'
 import { ProjectDetailView } from './ProjectDetailView'
+import { TaskDetail } from '../Tasks/TaskDetail'
 import type { Project, TaskPriority } from '@/types/agentpm'
 
 export function ProjectsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<Project['status'] | 'all'>('all')
 
   const { user } = useAuthStore()
   const { currentAccountId } = useAccountStore()
   const { projects, fetchProjects, createProject } = useProjectStore()
+  const { tasks, updateTaskStatus, deleteTask } = useTaskStore()
+  const { agents } = useAgentStore()
+  const { skills } = useSkillStore()
 
   const userId = user?.id || 'demo-user'
   const accountId = currentAccountId || 'demo-account-id'
@@ -73,13 +81,47 @@ export function ProjectsPage() {
     ? projects.find((p) => p.id === selectedProjectId)
     : null
 
-  // If a project is selected, show detail view
+  const selectedTask = selectedTaskId
+    ? tasks.find((t) => t.id === selectedTaskId)
+    : null
+
+  // If a project is selected, show detail view (with optional task panel)
   if (selectedProject) {
     return (
-      <ProjectDetailView
-        project={selectedProject}
-        onBack={() => setSelectedProjectId(null)}
-      />
+      <div className="h-full flex">
+        <div className={`flex-1 ${selectedTask ? 'w-1/2' : 'w-full'} transition-all`}>
+          <ProjectDetailView
+            project={selectedProject}
+            onBack={() => {
+              setSelectedProjectId(null)
+              setSelectedTaskId(null)
+            }}
+            onSelectTask={(taskId) => setSelectedTaskId(taskId)}
+          />
+        </div>
+        {selectedTask && (
+          <div className="w-1/2 border-l border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 overflow-auto">
+            <TaskDetail
+              task={selectedTask}
+              agent={selectedTask.assignedTo ? agents.find(a => a.id === selectedTask.assignedTo) : undefined}
+              skill={selectedTask.skillId ? skills.find(s => s.id === selectedTask.skillId) : undefined}
+              allTasks={tasks}
+              accountId={accountId}
+              userId={userId}
+              onClose={() => setSelectedTaskId(null)}
+              onUpdateStatus={async (taskId, status, note) => {
+                await updateTaskStatus(taskId, status, userId, note)
+              }}
+              onDelete={async (taskId) => {
+                if (window.confirm('Are you sure you want to delete this task?')) {
+                  await deleteTask(taskId, userId)
+                  setSelectedTaskId(null)
+                }
+              }}
+            />
+          </div>
+        )}
+      </div>
     )
   }
 

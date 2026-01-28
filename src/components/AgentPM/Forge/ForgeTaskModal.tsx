@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
-import type { TaskPriority, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
+import type { TaskPriority, AgentPersona, ForgeTaskInput, Project } from '@/types/agentpm'
 
 interface ForgeTaskModalProps {
   isOpen: boolean
@@ -29,6 +29,7 @@ interface ForgeTaskModalProps {
     input: ForgeTaskInput
   }) => Promise<void>
   agents: AgentPersona[]
+  projects: Project[]
   projectId?: string
   defaultPrdContent?: string
   defaultPrdNoteId?: string
@@ -39,19 +40,18 @@ export function ForgeTaskModal({
   onClose,
   onSubmit,
   agents,
-  projectId,
+  projects,
+  projectId: defaultProjectId,
   defaultPrdContent = '',
   defaultPrdNoteId,
 }: ForgeTaskModalProps) {
   // Basic task fields
   const [title, setTitle] = useState('')
   const [priority, setPriority] = useState<TaskPriority>('medium')
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || '')
 
   // Forge-specific fields
   const [prdContent, setPrdContent] = useState(defaultPrdContent)
-  const [repositoryPath, setRepositoryPath] = useState('')
-  const [repositoryUrl, setRepositoryUrl] = useState('')
-  const [baseBranch, setBaseBranch] = useState('main')
   const [targetBranch, setTargetBranch] = useState('')
   const [runTests, setRunTests] = useState(true)
   const [createPullRequest, setCreatePullRequest] = useState(true)
@@ -63,11 +63,24 @@ export function ForgeTaskModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Get selected project
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId),
+    [projects, selectedProjectId]
+  )
+
   // Find Forge agent
   const forgeAgent = useMemo(
     () => agents.find((a) => a.agentType === 'forge' && a.isActive && !a.pausedAt),
     [agents]
   )
+
+  // Auto-set test command from project settings
+  useEffect(() => {
+    if (selectedProject?.testCommand) {
+      setTestCommand(selectedProject.testCommand)
+    }
+  }, [selectedProject])
 
   // Reset form when modal opens
   useEffect(() => {
@@ -94,8 +107,12 @@ export function ForgeTaskModal({
       setError('PRD content is required')
       return
     }
-    if (!repositoryPath.trim()) {
-      setError('Repository path is required')
+    if (!selectedProject) {
+      setError('Please select a project with repository settings')
+      return
+    }
+    if (!selectedProject.repositoryPath) {
+      setError('Selected project does not have a repository path configured. Please update the project settings.')
       return
     }
     if (!forgeAgent) {
@@ -110,14 +127,14 @@ export function ForgeTaskModal({
       const input: ForgeTaskInput = {
         prdContent: prdContent.trim(),
         prdNoteId: defaultPrdNoteId,
-        repositoryPath: repositoryPath.trim(),
-        repositoryUrl: repositoryUrl.trim() || undefined,
-        baseBranch: baseBranch.trim() || 'main',
+        repositoryPath: selectedProject.repositoryPath,
+        repositoryUrl: selectedProject.repositoryUrl || undefined,
+        baseBranch: selectedProject.baseBranch || 'main',
         targetBranch: targetBranch.trim() || undefined,
         runTests,
         createPullRequest,
         autoCommit,
-        testCommand: testCommand.trim() || undefined,
+        testCommand: testCommand.trim() || selectedProject.testCommand || undefined,
       }
 
       await onSubmit({
@@ -126,7 +143,7 @@ export function ForgeTaskModal({
         priority,
         assignedTo: forgeAgent.id,
         assignedToType: 'agent',
-        projectId,
+        projectId: selectedProjectId,
         input,
       })
 
@@ -141,9 +158,7 @@ export function ForgeTaskModal({
   const handleClose = () => {
     setTitle('')
     setPrdContent('')
-    setRepositoryPath('')
-    setRepositoryUrl('')
-    setBaseBranch('main')
+    setSelectedProjectId(defaultProjectId || '')
     setTargetBranch('')
     setRunTests(true)
     setCreatePullRequest(true)
@@ -257,69 +272,70 @@ Implement a secure user authentication system...
                 />
               </div>
 
-              {/* Repository Settings */}
+              {/* Project Selection */}
               <div className="p-4 rounded-lg bg-surface-50 dark:bg-surface-900 space-y-4">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-surface-700 dark:text-surface-300">
                   <FolderGit2 size={16} />
-                  Repository Settings
+                  Project & Repository
                 </h3>
 
-                {/* Repository Path */}
+                {/* Project Dropdown */}
                 <div>
                   <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                    Local Repository Path <span className="text-red-500">*</span>
+                    Project <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Select a project...</option>
+                    {projects.filter(p => p.repositoryPath).map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                  {projects.filter(p => p.repositoryPath).length === 0 && (
+                    <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                      No projects with repository settings. Configure a project first.
+                    </p>
+                  )}
+                </div>
+
+                {/* Show project repo settings (read-only) */}
+                {selectedProject && (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-surface-600 dark:text-surface-400">
+                      <FolderGit2 size={14} className="flex-shrink-0" />
+                      <span className="font-mono truncate">{selectedProject.repositoryPath || 'Not configured'}</span>
+                    </div>
+                    {selectedProject.repositoryUrl && (
+                      <div className="flex items-center gap-2 text-surface-600 dark:text-surface-400">
+                        <GitBranch size={14} className="flex-shrink-0" />
+                        <span className="font-mono truncate">{selectedProject.repositoryUrl}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-surface-600 dark:text-surface-400">
+                      <GitBranch size={14} className="flex-shrink-0" />
+                      <span>Base: <span className="font-mono">{selectedProject.baseBranch || 'main'}</span></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Target Branch (task-specific) */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <GitBranch size={14} />
+                    Target Branch (optional)
                   </label>
                   <input
                     type="text"
-                    value={repositoryPath}
-                    onChange={(e) => setRepositoryPath(e.target.value)}
-                    placeholder="e.g., C:\dev\my-project or /home/user/my-project"
+                    value={targetBranch}
+                    onChange={(e) => setTargetBranch(e.target.value)}
+                    placeholder="Auto-generated if empty"
                     className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                   />
-                </div>
-
-                {/* Repository URL */}
-                <div>
-                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                    Repository URL (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={repositoryUrl}
-                    onChange={(e) => setRepositoryUrl(e.target.value)}
-                    placeholder="e.g., https://github.com/username/repo"
-                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                  />
-                </div>
-
-                {/* Branch Settings */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                      <GitBranch size={14} />
-                      Base Branch
-                    </label>
-                    <input
-                      type="text"
-                      value={baseBranch}
-                      onChange={(e) => setBaseBranch(e.target.value)}
-                      placeholder="main"
-                      className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                      <GitBranch size={14} />
-                      Target Branch (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={targetBranch}
-                      onChange={(e) => setTargetBranch(e.target.value)}
-                      placeholder="Auto-generated if empty"
-                      className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -422,7 +438,7 @@ Implement a secure user authentication system...
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !title.trim() || !prdContent.trim() || !repositoryPath.trim() || !forgeAgent}
+                  disabled={isSubmitting || !title.trim() || !prdContent.trim() || !selectedProject?.repositoryPath || !forgeAgent}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Hammer size={16} />

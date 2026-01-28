@@ -122,6 +122,46 @@ export const BUILT_IN_TOOLS: Tool[] = [
         required: ['domain']
       }
     }
+  },
+  {
+    id: 'create-landing-page',
+    name: 'create_landing_page',
+    displayName: 'Create Landing Page',
+    description: 'Create a landing page in funnelists-cms for marketing campaigns',
+    category: 'integration',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'create_landing_page',
+      description: 'Create a landing page in funnelists-cms. Supports lead capture forms, waitlist signups, product purchase pages with Stripe, and upsell pages. Pages can be linked into funnels.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          pageType: {
+            type: 'string',
+            description: 'Type of landing page to create',
+            enum: ['lead-capture', 'waitlist', 'product-purchase', 'upsell']
+          },
+          slug: {
+            type: 'string',
+            description: 'URL slug for the page (e.g., "agentforce-webinar")'
+          },
+          content: {
+            type: 'object',
+            description: 'Landing page content including hero, sections, form/pricing, and funnel config'
+          },
+          funnelId: {
+            type: 'string',
+            description: 'Optional funnel ID to link this page to a sales funnel sequence'
+          },
+          publish: {
+            type: 'boolean',
+            description: 'If true, immediately publish to CMS via GitHub (triggers Vercel build)'
+          }
+        },
+        required: ['pageType', 'slug', 'content']
+      }
+    }
   }
 ]
 

@@ -16,48 +16,42 @@ import { recordSkillUsage } from '@/services/skills'
 import { useApiKeysStore } from '@/stores/apiKeysStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useProfileStore } from '@/stores/profileStore'
+import {
+  resolveApiKey,
+  type AuthContext,
+  type ApiKeyResult,
+} from '@funnelists/auth'
 
 // Platform API key from environment (for platform-funded tiers)
 const PLATFORM_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 
-// Platform-funded plans that use the platform's API key
-const PLATFORM_FUNDED_PLANS = ['free'] as const
-
 /**
- * Check if user's plan is platform-funded (uses platform API key)
- * Based on architecture: free = platform-funded, starter/pro/enterprise = BYOK
+ * Build auth context from current app state
  */
-function isPlatformFundedPlan(): boolean {
+function buildAuthContext(userId?: string): AuthContext {
   const accountStore = useAccountStore.getState()
   const profileStore = useProfileStore.getState()
-
-  // Super admins always get platform-funded access
-  if (profileStore.profile?.isSuperAdmin) {
-    console.log('[Executor] Super admin - using platform-funded access')
-    return true
-  }
-
-  // Check account plan
   const account = accountStore.currentAccount()
-  const plan = account?.plan || 'free'
 
-  // Free plan and demo accounts are platform-funded
-  if (PLATFORM_FUNDED_PLANS.includes(plan as typeof PLATFORM_FUNDED_PLANS[number])) {
-    return true
+  return {
+    userId,
+    account: account ? {
+      id: account.id,
+      slug: account.slug,
+      plan: account.plan,
+    } : null,
+    profile: profileStore.profile ? {
+      id: profileStore.profile.id,
+      isSuperAdmin: profileStore.profile.isSuperAdmin,
+    } : null,
   }
-
-  // Demo/default accounts are platform-funded
-  if (account?.id?.startsWith('default-') || account?.slug === 'demo') {
-    return true
-  }
-
-  return false
 }
 
 /**
- * Get user's stored Anthropic API key
+ * Get user's stored Anthropic API key from local store
+ * This is used as a fallback/override for the shared service
  */
-async function getUserApiKey(userId: string): Promise<string | null> {
+async function getLocalUserApiKey(userId: string): Promise<string | null> {
   const store = useApiKeysStore.getState()
 
   // Make sure keys are loaded
@@ -82,43 +76,45 @@ async function getUserApiKey(userId: string): Promise<string | null> {
 
 /**
  * Get API key for execution based on subscription tier
+ * Uses shared @funnelists/auth package for tier logic
  *
- * Strategy (per architecture/TIER-MODEL.md):
+ * Strategy:
  * - Platform-funded tiers (free, demo, super admin): Use PLATFORM_API_KEY
  * - BYOK tiers (starter, professional, enterprise): Use user's stored key
  */
-async function getApiKey(userId?: string): Promise<{ key: string | null; source: 'platform' | 'user' | 'none'; error?: string }> {
-  const isPlatformFunded = isPlatformFundedPlan()
+async function getApiKey(userId?: string): Promise<ApiKeyResult> {
+  const context = buildAuthContext(userId)
 
-  if (isPlatformFunded) {
-    // Platform-funded: use platform key
-    if (PLATFORM_API_KEY) {
-      console.log('[Executor] Platform-funded tier - using platform API key')
-      return { key: PLATFORM_API_KEY, source: 'platform' }
-    }
-    // Platform key not configured - this is a deployment issue
-    return { key: null, source: 'none', error: 'Platform API key not configured. Please contact support.' }
-  }
+  // First try using the shared resolver with platform key
+  const result = await resolveApiKey({
+    provider: 'anthropic',
+    context,
+    config: {
+      platformKeys: { anthropic: PLATFORM_API_KEY },
+      // Override fetch to use local store for BYOK since we have keys locally
+      fetch: async (url: string | URL | Request, init?: RequestInit) => {
+        // If this is a BYOK key fetch and we have user ID, try local store first
+        if (userId && typeof url === 'string' && url.includes('/api/keys/get')) {
+          const localKey = await getLocalUserApiKey(userId)
+          if (localKey) {
+            return new Response(JSON.stringify({ key: localKey }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }
+        }
+        // Fall back to actual fetch for remote keys
+        return fetch(url, init)
+      },
+    },
+  })
 
-  // BYOK tier: must use user's stored key
-  if (!userId) {
-    return { key: null, source: 'none', error: 'User ID required for BYOK tier' }
-  }
-
-  const userKey = await getUserApiKey(userId)
-  if (userKey) {
-    console.log('[Executor] BYOK tier - using user\'s stored Anthropic API key')
-    return { key: userKey, source: 'user' }
-  }
-
-  // BYOK tier but no key configured
-  const account = useAccountStore.getState().currentAccount()
-  const planName = account?.plan || 'your'
+  // Map source for backwards compatibility
   return {
-    key: null,
-    source: 'none',
-    error: `Your ${planName} plan requires you to bring your own API key. Please add your Anthropic API key in Settings > API Keys.`
-  }
+    key: result.key,
+    source: result.source === 'byok' ? 'user' : result.source,
+    error: result.error,
+  } as ApiKeyResult & { source: 'platform' | 'user' | 'none' }
 }
 
 // Maximum tool use iterations to prevent infinite loops
@@ -505,8 +501,10 @@ export async function executeTask(
 // For platform-funded tiers, checks platform key
 // For BYOK tiers, returns true (actual key check happens at execution time)
 export function isExecutionConfigured(): boolean {
+  const context = buildAuthContext()
   // If platform-funded, check platform key
-  if (isPlatformFundedPlan()) {
+  const { isPlatformFunded } = require('@funnelists/auth')
+  if (isPlatformFunded(context)) {
     return !!PLATFORM_API_KEY
   }
   // For BYOK tiers, assume configured (will check user key at execution)
