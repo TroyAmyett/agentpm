@@ -13,8 +13,113 @@ import {
   type ToolResultMessage,
 } from '@/services/tools'
 import { recordSkillUsage } from '@/services/skills'
+import { useApiKeysStore } from '@/stores/apiKeysStore'
+import { useAccountStore } from '@/stores/accountStore'
+import { useProfileStore } from '@/stores/profileStore'
 
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+// Platform API key from environment (for platform-funded tiers)
+const PLATFORM_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+
+// Platform-funded plans that use the platform's API key
+const PLATFORM_FUNDED_PLANS = ['free'] as const
+
+/**
+ * Check if user's plan is platform-funded (uses platform API key)
+ * Based on architecture: free = platform-funded, starter/pro/enterprise = BYOK
+ */
+function isPlatformFundedPlan(): boolean {
+  const accountStore = useAccountStore.getState()
+  const profileStore = useProfileStore.getState()
+
+  // Super admins always get platform-funded access
+  if (profileStore.profile?.isSuperAdmin) {
+    console.log('[Executor] Super admin - using platform-funded access')
+    return true
+  }
+
+  // Check account plan
+  const account = accountStore.currentAccount()
+  const plan = account?.plan || 'free'
+
+  // Free plan and demo accounts are platform-funded
+  if (PLATFORM_FUNDED_PLANS.includes(plan as typeof PLATFORM_FUNDED_PLANS[number])) {
+    return true
+  }
+
+  // Demo/default accounts are platform-funded
+  if (account?.id?.startsWith('default-') || account?.slug === 'demo') {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Get user's stored Anthropic API key
+ */
+async function getUserApiKey(userId: string): Promise<string | null> {
+  const store = useApiKeysStore.getState()
+
+  // Make sure keys are loaded
+  if (store.keys.length === 0) {
+    await store.fetchKeys(userId)
+  }
+
+  // Find a valid Anthropic key
+  const anthropicKey = store.keys.find(
+    k => k.provider === 'anthropic' && k.isValid
+  )
+
+  if (anthropicKey) {
+    const decrypted = await store.getDecryptedKey(anthropicKey.id)
+    if (decrypted) {
+      return decrypted
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get API key for execution based on subscription tier
+ *
+ * Strategy (per architecture/TIER-MODEL.md):
+ * - Platform-funded tiers (free, demo, super admin): Use PLATFORM_API_KEY
+ * - BYOK tiers (starter, professional, enterprise): Use user's stored key
+ */
+async function getApiKey(userId?: string): Promise<{ key: string | null; source: 'platform' | 'user' | 'none'; error?: string }> {
+  const isPlatformFunded = isPlatformFundedPlan()
+
+  if (isPlatformFunded) {
+    // Platform-funded: use platform key
+    if (PLATFORM_API_KEY) {
+      console.log('[Executor] Platform-funded tier - using platform API key')
+      return { key: PLATFORM_API_KEY, source: 'platform' }
+    }
+    // Platform key not configured - this is a deployment issue
+    return { key: null, source: 'none', error: 'Platform API key not configured. Please contact support.' }
+  }
+
+  // BYOK tier: must use user's stored key
+  if (!userId) {
+    return { key: null, source: 'none', error: 'User ID required for BYOK tier' }
+  }
+
+  const userKey = await getUserApiKey(userId)
+  if (userKey) {
+    console.log('[Executor] BYOK tier - using user\'s stored Anthropic API key')
+    return { key: userKey, source: 'user' }
+  }
+
+  // BYOK tier but no key configured
+  const account = useAccountStore.getState().currentAccount()
+  const planName = account?.plan || 'your'
+  return {
+    key: null,
+    source: 'none',
+    error: `Your ${planName} plan requires you to bring your own API key. Please add your Anthropic API key in Settings > API Keys.`
+  }
+}
 
 // Maximum tool use iterations to prevent infinite loops
 const MAX_TOOL_ITERATIONS = 10
@@ -143,7 +248,10 @@ export async function executeTask(
   const enableTools = input.enableTools !== false
   const accountId = input.accountId || ''
 
-  if (!ANTHROPIC_API_KEY) {
+  // Get API key based on subscription tier
+  const { key: apiKey, source: keySource, error: keyError } = await getApiKey(input.userId)
+
+  if (!apiKey) {
     return {
       success: false,
       content: '',
@@ -153,9 +261,11 @@ export async function executeTask(
         outputTokens: 0,
         durationMs: Date.now() - startTime,
       },
-      error: 'Anthropic API key not configured',
+      error: keyError || 'No Anthropic API key configured.',
     }
   }
+
+  console.log(`[Executor] Using ${keySource} API key for execution`)
 
   try {
     onStatusChange?.('building_prompt')
@@ -207,7 +317,7 @@ export async function executeTask(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': ANTHROPIC_API_KEY,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
             'anthropic-dangerous-direct-browser-access': 'true',
           },
@@ -391,9 +501,22 @@ export async function executeTask(
   }
 }
 
-// Check if execution is configured
+// Check if execution is configured (sync check)
+// For platform-funded tiers, checks platform key
+// For BYOK tiers, returns true (actual key check happens at execution time)
 export function isExecutionConfigured(): boolean {
-  return !!ANTHROPIC_API_KEY
+  // If platform-funded, check platform key
+  if (isPlatformFundedPlan()) {
+    return !!PLATFORM_API_KEY
+  }
+  // For BYOK tiers, assume configured (will check user key at execution)
+  return true
+}
+
+// Async check that verifies actual key availability based on tier
+export async function isExecutionConfiguredAsync(userId?: string): Promise<boolean> {
+  const { key } = await getApiKey(userId)
+  return !!key
 }
 
 // Get the prompts that would be used (for preview/debugging)
