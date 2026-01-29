@@ -9,7 +9,8 @@ const ENCRYPTION_KEY = import.meta.env.VITE_ENCRYPTION_KEY || ''
 // Convert string to ArrayBuffer
 function stringToArrayBuffer(str: string): ArrayBuffer {
   const encoder = new TextEncoder()
-  return encoder.encode(str)
+  const encoded = encoder.encode(str)
+  return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength)
 }
 
 // Convert ArrayBuffer to string
@@ -109,7 +110,7 @@ export async function encryptApiKey(apiKey: string, userSecret?: string): Promis
 
   return {
     encrypted: arrayBufferToBase64(encrypted),
-    iv: arrayBufferToBase64(iv),
+    iv: arrayBufferToBase64(iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength)),
     hint: generateKeyHint(apiKey),
   }
 }
