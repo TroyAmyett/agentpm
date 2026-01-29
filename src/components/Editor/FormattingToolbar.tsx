@@ -50,7 +50,7 @@ function ToolbarDivider() {
 
 export function FormattingToolbar({ editor }: FormattingToolbarProps) {
   return (
-    <div className="flex items-center gap-0.5 p-2 mb-4 bg-surface-50 dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 flex-wrap">
+    <div className="flex items-center gap-0.5 flex-wrap">
       {/* Undo/Redo */}
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}
