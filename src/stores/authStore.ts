@@ -34,6 +34,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return
     }
 
+    // Always listen for auth changes (sign-in, sign-out, token refresh)
+    supabase.auth.onAuthStateChange((_event, session) => {
+      set({
+        user: session?.user ?? null,
+        session,
+      })
+    })
+
     try {
       const session = await authService.getSession()
       set({
@@ -42,19 +50,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         loading: false,
         initialized: true,
       })
-
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange((_event, session) => {
-        set({
-          user: session?.user ?? null,
-          session,
-        })
-      })
     } catch (error) {
+      // Session expired or refresh token invalid — clear state so
+      // the app shows the login page instead of hanging
+      console.warn('Auth init failed, clearing session:', error)
+      await supabase.auth.signOut().catch(() => {})
       set({
+        user: null,
+        session: null,
         loading: false,
         initialized: true,
-        error: error instanceof Error ? error.message : 'Failed to initialize auth',
+        error: null,
       })
     }
   },

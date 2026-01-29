@@ -4,7 +4,7 @@
 import type { ToolResult } from '../types'
 
 // GitHub configuration - loaded from environment
-const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || process.env.GITHUB_TOKEN
+const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || ''
 const GITHUB_OWNER = 'funnelists' // Adjust to your GitHub org/user
 const GITHUB_REPO = 'funnelists-cms'
 const GITHUB_BRANCH = 'main'

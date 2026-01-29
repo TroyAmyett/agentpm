@@ -64,6 +64,15 @@ export async function updatePassword(newPassword: string) {
 export async function getSession() {
   if (!supabase) return null
 
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { session }, error } = await supabase.auth.getSession()
+
+  if (error) {
+    // Invalid refresh token or expired session — clear it so the app
+    // shows the login page instead of hanging on "Loading..."
+    console.warn('Session retrieval failed, signing out:', error.message)
+    await supabase.auth.signOut().catch(() => {})
+    return null
+  }
+
   return session
 }
