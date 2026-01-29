@@ -214,6 +214,42 @@ aside {
   @apply line-through text-surface-400 dark:text-surface-500;
 }
 
+/* Table styles */
+.tiptap table {
+  @apply border-collapse w-full my-4;
+  border: 1px solid;
+  @apply border-surface-300 dark:border-surface-600;
+}
+
+.tiptap th,
+.tiptap td {
+  @apply border border-surface-300 dark:border-surface-600 p-2 text-left align-top;
+  min-width: 100px;
+}
+
+.tiptap th {
+  @apply bg-surface-100 dark:bg-surface-800 font-semibold;
+}
+
+.tiptap tr:nth-child(even) td {
+  @apply bg-surface-50 dark:bg-surface-900/50;
+}
+
+/* Table resize handles */
+.tiptap .tableWrapper {
+  @apply overflow-x-auto my-4;
+}
+
+.tiptap .column-resize-handle {
+  @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-primary-500 pointer-events-none;
+}
+
+.tiptap .selectedCell:after {
+  @apply absolute inset-0 bg-primary-100 dark:bg-primary-900/30 pointer-events-none;
+  content: "";
+  z-index: 2;
+}
+
 /* Selection styles */
 .tiptap ::selection {
   @apply bg-primary-200 dark:bg-primary-800;

@@ -4,6 +4,10 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import Table from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableHeader from '@tiptap/extension-table-header'
+import TableCell from '@tiptap/extension-table-cell'
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useNotesStore } from '@/stores/notesStore'
 import { useUIStore } from '@/stores/uiStore'
@@ -14,6 +18,7 @@ import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
 import { AttachmentManagerModal } from '@/components/Attachments'
+import { fetchAttachments } from '@/services/attachments/attachmentService'
 import { BookTemplate, Paperclip } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
@@ -74,6 +79,7 @@ export function BlockEditor() {
   const currentNote = notes.find((n) => n.id === currentNoteId)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false)
+  const [attachmentCount, setAttachmentCount] = useState(0)
 
   // Track right-click to prevent AI toolbar during context menu
   const isRightClickRef = useRef(false)
@@ -137,6 +143,31 @@ export function BlockEditor() {
     }
   }, [])
 
+  // Load attachment count for current note
+  const loadAttachmentCount = useCallback(async () => {
+    if (!currentNoteId) {
+      setAttachmentCount(0)
+      return
+    }
+    try {
+      const attachments = await fetchAttachments('note', currentNoteId)
+      setAttachmentCount(attachments.length)
+    } catch (err) {
+      console.error('[BlockEditor] Failed to load attachment count:', err)
+      setAttachmentCount(0)
+    }
+  }, [currentNoteId])
+
+  useEffect(() => {
+    loadAttachmentCount()
+  }, [loadAttachmentCount])
+
+  // Refresh count when attachment modal closes
+  const handleAttachmentsModalClose = useCallback(() => {
+    setShowAttachmentsModal(false)
+    loadAttachmentCount()
+  }, [loadAttachmentCount])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -156,6 +187,23 @@ export function BlockEditor() {
       TaskList,
       TaskItem.configure({
         nested: true,
+      }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse border border-surface-300 dark:border-surface-600',
+        },
+      }),
+      TableRow,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-surface-300 dark:border-surface-600 bg-surface-100 dark:bg-surface-800 p-2 font-semibold text-left',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-surface-300 dark:border-surface-600 p-2',
+        },
       }),
       SlashCommand,
     ],
@@ -281,10 +329,15 @@ export function BlockEditor() {
                     <div className="w-px h-6 bg-surface-200 dark:bg-surface-700 mx-1" />
                     <button
                       onClick={() => setShowAttachmentsModal(true)}
-                      title="Attachments"
-                      className="p-2 rounded-md hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-400 transition-colors"
+                      title={attachmentCount > 0 ? `Attachments (${attachmentCount})` : 'Attachments'}
+                      className="p-2 rounded-md hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-400 transition-colors relative"
                     >
                       <Paperclip size={18} />
+                      {attachmentCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-semibold bg-primary-500 text-white rounded-full">
+                          {attachmentCount > 9 ? '9+' : attachmentCount}
+                        </span>
+                      )}
                     </button>
                   </>
                 )}
@@ -335,7 +388,7 @@ export function BlockEditor() {
       {currentAccountId && user?.id && (
         <AttachmentManagerModal
           isOpen={showAttachmentsModal}
-          onClose={() => setShowAttachmentsModal(false)}
+          onClose={handleAttachmentsModalClose}
           entityType="note"
           entityId={currentNote.id}
           entityName={currentNote.title}

@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "record": "npx tsx scripts/record-radar.ts",
+    "record:list": "npx tsx scripts/record-radar.ts --list",
+    "record:all": "npx tsx scripts/record-radar.ts --all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -15,6 +18,10 @@
     "@supabase/supabase-js": "^2.47.10",
     "@tiptap/core": "^2.10.4",
     "@tiptap/extension-placeholder": "^2.10.4",
+    "@tiptap/extension-table": "^2.27.2",
+    "@tiptap/extension-table-cell": "^2.27.2",
+    "@tiptap/extension-table-header": "^2.27.2",
+    "@tiptap/extension-table-row": "^2.27.2",
     "@tiptap/extension-task-item": "^2.27.1",
     "@tiptap/extension-task-list": "^2.27.1",
     "@tiptap/extension-underline": "^2.10.4",
@@ -36,6 +43,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@types/node": "^25.1.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vercel/node": "^5.5.28",
@@ -47,6 +55,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
     "pg": "^8.17.2",
+    "playwright": "^1.58.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.2",

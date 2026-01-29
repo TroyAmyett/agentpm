@@ -7,10 +7,12 @@
  */
 export interface ToolParameterProperty {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object'
-  description: string
+  description?: string
   enum?: string[]
   items?: ToolParameterProperty
   default?: unknown
+  properties?: Record<string, ToolParameterProperty>  // For nested objects
+  required?: string[]  // For object types
 }
 
 export interface ToolParameters {
@@ -63,6 +65,7 @@ export interface ToolResult {
   metadata?: {
     executionTimeMs: number
     source?: string
+    [key: string]: unknown  // Allow additional metadata
   }
 }
 

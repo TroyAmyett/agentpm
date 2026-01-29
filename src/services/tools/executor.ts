@@ -7,6 +7,16 @@ import { checkDomainAvailability } from './implementations/domainChecker'
 import { fetchUrl } from './implementations/urlFetcher'
 import { dnsLookup } from './implementations/dnsLookup'
 import { createLandingPage, type LandingPageContent } from './implementations/landingPageCreator'
+import {
+  createVideoJobTool,
+  listVideoAvatarsTool,
+  listVideoVoicesTool,
+  submitVideoJobTool,
+  checkVideoStatusTool,
+  listVideoJobsTool,
+  recordScreenFlowTool,
+} from './implementations/videoProduction'
+import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
  * Execute a tool by name with given parameters
@@ -69,6 +79,79 @@ export async function executeTool(
         const funnelId = parameters.funnelId as string | undefined
         const publish = parameters.publish as boolean | undefined
         return await createLandingPage({ pageType, slug, content, funnelId, publish })
+      }
+
+      // ============================================
+      // VIDEO PRODUCTION TOOLS
+      // ============================================
+
+      case 'create_video_job': {
+        // Note: accountId and userId need to be passed from executor context
+        // For now, use placeholders - the actual implementation will get these from auth context
+        return await createVideoJobTool({
+          accountId: _accountId,
+          userId: parameters.userId as string || 'system',
+          title: parameters.title as string,
+          description: parameters.description as string | undefined,
+          videoType: parameters.videoType as VideoType,
+          script: parameters.script as VideoScript | undefined,
+          productInfo: parameters.productInfo as ProductInfo | undefined,
+        })
+      }
+
+      case 'list_video_avatars': {
+        return await listVideoAvatarsTool({
+          apiKey: parameters.apiKey as string | undefined,
+          filter: parameters.filter as string | undefined,
+        })
+      }
+
+      case 'list_video_voices': {
+        return await listVideoVoicesTool({
+          apiKey: parameters.apiKey as string | undefined,
+          language: parameters.language as string | undefined,
+          gender: parameters.gender as string | undefined,
+        })
+      }
+
+      case 'submit_video_job': {
+        return await submitVideoJobTool({
+          jobId: parameters.jobId as string,
+          avatarId: parameters.avatarId as string,
+          voiceId: parameters.voiceId as string,
+          apiKey: parameters.apiKey as string | undefined,
+          testMode: parameters.testMode as boolean | undefined,
+        })
+      }
+
+      case 'check_video_status': {
+        return await checkVideoStatusTool({
+          jobId: parameters.jobId as string,
+          apiKey: parameters.apiKey as string | undefined,
+        })
+      }
+
+      case 'list_video_jobs': {
+        return await listVideoJobsTool({
+          accountId: _accountId,
+          status: parameters.status as VideoJobStatus | undefined,
+          limit: parameters.limit as number | undefined,
+        })
+      }
+
+      case 'record_screen_flow': {
+        return await recordScreenFlowTool({
+          flowName: parameters.flowName as string | undefined,
+          customSteps: parameters.customSteps as Array<{
+            name: string
+            action: string
+            target?: string
+            value?: string
+            waitMs?: number
+          }> | undefined,
+          baseUrl: parameters.baseUrl as string | undefined,
+          accountId: _accountId,
+        })
       }
 
       default:
