@@ -13,8 +13,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { SlashCommand } from './SlashCommand'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
-import { AttachmentPanel } from '@/components/Attachments'
-import { BookTemplate } from 'lucide-react'
+import { AttachmentManagerModal } from '@/components/Attachments'
+import { BookTemplate, Paperclip } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
 interface DebouncedNoteUpdate {
@@ -73,6 +73,7 @@ export function BlockEditor() {
 
   const currentNote = notes.find((n) => n.id === currentNoteId)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false)
 
   // Track right-click to prevent AI toolbar during context menu
   const isRightClickRef = useRef(false)
@@ -274,6 +275,15 @@ export function BlockEditor() {
           <div className="flex-shrink-0 px-12 pt-4 pb-2" style={{ background: 'var(--fl-color-bg-base)' }}>
             <div className="max-w-4xl mx-auto flex items-center gap-2">
               <FormattingToolbar editor={editor} />
+              {isAuthenticated && currentAccountId && user?.id && (
+                <button
+                  onClick={() => setShowAttachmentsModal(true)}
+                  title="Attachments"
+                  className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors border border-surface-200 dark:border-surface-700"
+                >
+                  <Paperclip size={18} />
+                </button>
+              )}
               {isAuthenticated && currentNote?.content && (
                 <button
                   onClick={() => setShowTemplateModal(true)}
@@ -304,18 +314,6 @@ export function BlockEditor() {
               editor={editor}
               className="min-h-[calc(100vh-400px)]"
             />
-
-            {/* Attachments Panel */}
-            {currentAccountId && user?.id && (
-              <div className="mt-6">
-                <AttachmentPanel
-                  entityType="note"
-                  entityId={currentNote.id}
-                  accountId={currentAccountId}
-                  userId={user.id}
-                />
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -327,6 +325,19 @@ export function BlockEditor() {
         onSave={handleSaveTemplate}
         defaultName={currentNote.title !== 'Untitled' ? `${currentNote.title} Template` : ''}
       />
+
+      {/* Attachments Modal */}
+      {currentAccountId && user?.id && (
+        <AttachmentManagerModal
+          isOpen={showAttachmentsModal}
+          onClose={() => setShowAttachmentsModal(false)}
+          entityType="note"
+          entityId={currentNote.id}
+          entityName={currentNote.title}
+          accountId={currentAccountId}
+          userId={user.id}
+        />
+      )}
     </>
   )
 }

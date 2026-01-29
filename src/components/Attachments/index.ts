@@ -1,4 +1,5 @@
 export { AttachmentDropzone, AttachmentList } from './AttachmentDropzone'
 export { AttachmentItem } from './AttachmentItem'
+export { AttachmentManagerModal } from './AttachmentManagerModal'
 export { AttachmentPanel } from './AttachmentPanel'
 export { AttachmentPreviewModal } from './AttachmentPreviewModal'
