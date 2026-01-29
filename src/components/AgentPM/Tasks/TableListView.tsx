@@ -17,12 +17,13 @@ import {
   Calendar,
   Link2,
 } from 'lucide-react'
-import type { Task, TaskStatus, TaskPriority, AgentPersona } from '@/types/agentpm'
+import type { Task, TaskStatus, TaskPriority, AgentPersona, Project } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface TableListViewProps {
   tasks: Task[]
   agents: AgentPersona[]
+  projects: Project[]
   blockedTasks: Map<string, number>
   executingTaskIds: Set<string>
   onTaskClick: (taskId: string) => void
@@ -71,6 +72,7 @@ const statusConfig: Record<TaskStatus, { label: string; color: string; icon: Rea
 export function TableListView({
   tasks,
   agents,
+  projects,
   blockedTasks,
   executingTaskIds,
   onTaskClick,
@@ -88,6 +90,13 @@ export function TableListView({
     agents.forEach((agent) => map.set(agent.id, agent))
     return map
   }, [agents])
+
+  // Create project lookup map
+  const projectMap = useMemo(() => {
+    const map = new Map<string, Project>()
+    projects.forEach((project) => map.set(project.id, project))
+    return map
+  }, [projects])
 
   // Filter and sort tasks
   const filteredTasks = useMemo(() => {
@@ -250,6 +259,9 @@ export function TableListView({
             <thead className="sticky top-0 bg-surface-50 dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700">
               <tr>
                 <SortHeader field="title" label="Task" className="min-w-[280px]" />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                  Project
+                </th>
                 <SortHeader field="status" label="Status" />
                 <SortHeader field="priority" label="Priority" />
                 <SortHeader field="assignee" label="Assignee" />
@@ -294,6 +306,17 @@ export function TableListView({
                           </span>
                         )}
                       </div>
+                    </td>
+
+                    {/* Project */}
+                    <td className="px-4 py-3">
+                      {task.projectId ? (
+                        <span className="text-sm text-surface-700 dark:text-surface-300 truncate max-w-[120px] block">
+                          {projectMap.get(task.projectId)?.name || '—'}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-surface-400">—</span>
+                      )}
                     </td>
 
                     {/* Status */}

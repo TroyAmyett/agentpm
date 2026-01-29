@@ -797,6 +797,7 @@ export function AgentPMPage() {
                   <TableListView
                     tasks={filteredTasks}
                     agents={agents}
+                    projects={projects}
                     blockedTasks={blockedTasks}
                     executingTaskIds={executingTaskIds}
                     onTaskClick={setSelectedTaskId}
