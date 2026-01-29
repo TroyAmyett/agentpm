@@ -11,6 +11,7 @@ import {
   Loader2,
   FileCode,
   FileJson,
+  Eye,
 } from 'lucide-react'
 import type { Attachment } from '@/services/attachments/attachmentService'
 import { formatFileSize, getDownloadUrl, deleteAttachment } from '@/services/attachments/attachmentService'
@@ -18,6 +19,7 @@ import { formatFileSize, getDownloadUrl, deleteAttachment } from '@/services/att
 interface AttachmentItemProps {
   attachment: Attachment
   onDelete?: (id: string) => void
+  onPreview?: (attachment: Attachment) => void
   readOnly?: boolean
 }
 
@@ -63,7 +65,7 @@ function getFileTypeColor(fileType: string): string {
   }
 }
 
-export function AttachmentItem({ attachment, onDelete, readOnly }: AttachmentItemProps) {
+export function AttachmentItem({ attachment, onDelete, onPreview, readOnly }: AttachmentItemProps) {
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -140,6 +142,15 @@ export function AttachmentItem({ attachment, onDelete, readOnly }: AttachmentIte
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onPreview && (
+          <button
+            onClick={() => onPreview(attachment)}
+            className="p-1.5 rounded hover:bg-white/10 transition-colors"
+            title="Preview"
+          >
+            <Eye size={14} style={{ color: 'var(--fl-color-text-muted)' }} />
+          </button>
+        )}
         <button
           onClick={handleDownload}
           disabled={isDownloading}

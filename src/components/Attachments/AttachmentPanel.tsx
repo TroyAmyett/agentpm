@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ChevronDown, ChevronRight, Paperclip, Loader2 } from 'lucide-react'
 import { AttachmentItem } from './AttachmentItem'
 import { AttachmentDropzone } from './AttachmentDropzone'
+import { AttachmentPreviewModal } from './AttachmentPreviewModal'
 import {
   fetchAttachments,
   type Attachment,
@@ -31,6 +32,7 @@ export function AttachmentPanel({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null)
 
   // Fetch attachments on mount and when entity changes
   useEffect(() => {
@@ -136,6 +138,7 @@ export function AttachmentPanel({
                   key={attachment.id}
                   attachment={attachment}
                   onDelete={readOnly ? undefined : handleDelete}
+                  onPreview={setPreviewAttachment}
                   readOnly={readOnly}
                 />
               ))}
@@ -174,6 +177,13 @@ export function AttachmentPanel({
           )}
         </div>
       )}
+
+      {/* Preview Modal */}
+      <AttachmentPreviewModal
+        attachment={previewAttachment}
+        isOpen={previewAttachment !== null}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </div>
   )
 }
