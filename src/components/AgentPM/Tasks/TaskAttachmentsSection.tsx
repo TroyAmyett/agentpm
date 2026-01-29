@@ -14,6 +14,7 @@ import {
   Image,
   File,
   Link2,
+  Eye,
 } from 'lucide-react'
 import {
   fetchTaskAttachmentsWithInheritance,
@@ -23,6 +24,7 @@ import {
   type Attachment,
 } from '@/services/attachments/attachmentService'
 import { AttachmentDropzone } from '@/components/Attachments/AttachmentDropzone'
+import { AttachmentPreviewModal } from '@/components/Attachments/AttachmentPreviewModal'
 import type { Task } from '@/types/agentpm'
 
 interface TaskAttachmentsSectionProps {
@@ -63,6 +65,7 @@ export function TaskAttachmentsSection({
   const [isLoading, setIsLoading] = useState(true)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null)
 
   // Find parent task name by ID
   const getTaskName = useCallback((taskId: string): string => {
@@ -189,6 +192,13 @@ export function TaskAttachmentsSection({
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={() => setPreviewAttachment(attachment)}
+                        className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        title="Preview"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
                         onClick={() => handleDownload(attachment)}
                         disabled={isDownloading}
                         className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 transition-colors disabled:opacity-50"
@@ -255,6 +265,13 @@ export function TaskAttachmentsSection({
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={() => setPreviewAttachment(attachment)}
+                        className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        title="Preview"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
                         onClick={() => handleDownload(attachment)}
                         disabled={isDownloading}
                         className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 transition-colors disabled:opacity-50"
@@ -292,6 +309,13 @@ export function TaskAttachmentsSection({
           )}
         </div>
       )}
+
+      {/* Preview Modal */}
+      <AttachmentPreviewModal
+        attachment={previewAttachment}
+        isOpen={previewAttachment !== null}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </div>
   )
 }
