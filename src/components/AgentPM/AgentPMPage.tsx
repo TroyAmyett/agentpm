@@ -1,6 +1,6 @@
 // AgentPM Page - Main page combining all AgentPM features
 
-import { useState, useEffect, useCallback, useTransition } from 'react'
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -183,192 +183,225 @@ export function AgentPMPage() {
     }
   }, [activeTab])
 
-  // Queue watcher - auto-process queued tasks with assigned agents (PARALLEL for sizzle!)
-  const MAX_PARALLEL_TASKS = 3 // Process up to 3 tasks simultaneously
+  // === Refs for interval-based task processing ===
+  // These refs hold the latest values so interval callbacks can access current state
+  // without creating reactive dependency loops (tasks → updateTaskStatus → tasks → ...)
+  const tasksRef = useRef(tasks)
+  tasksRef.current = tasks
+  const agentsRef = useRef(agents)
+  agentsRef.current = agents
+  const skillsRef = useRef(skills)
+  skillsRef.current = skills
+
+  // Track which tasks each watcher has already processed to avoid duplicates
+  const queueStartedRef = useRef(new Set<string>())
+  const autoQueuedRef = useRef(new Set<string>())
+  const staleResetRef = useRef(new Set<string>())
+  const chainingProcessedRef = useRef(new Set<string>())
+
+  // Queue watcher - auto-process queued tasks with assigned agents (PARALLEL)
+  const MAX_PARALLEL_TASKS = 3
   useEffect(() => {
-    const activeCount = getActiveCount()
-    const availableSlots = MAX_PARALLEL_TASKS - activeCount
+    const interval = setInterval(() => {
+      const currentTasks = tasksRef.current
+      const activeCount = getActiveCount()
+      const availableSlots = MAX_PARALLEL_TASKS - activeCount
 
-    if (availableSlots <= 0) {
-      console.log(`[Queue Watcher] At capacity (${activeCount}/${MAX_PARALLEL_TASKS} running)`)
-      return
-    }
+      if (availableSlots <= 0) return
 
-    // Find ALL queued tasks with assigned agents (not already executing)
-    const queuedTasks = tasks.filter(
-      (t) => t.status === 'queued' &&
-             t.assignedTo &&
-             t.assignedToType === 'agent' &&
-             !isTaskExecuting(t.id)
-    )
+      const queuedTasks = currentTasks.filter(
+        (t) => t.status === 'queued' &&
+               t.assignedTo &&
+               t.assignedToType === 'agent' &&
+               !isTaskExecuting(t.id) &&
+               !queueStartedRef.current.has(t.id)
+      )
 
-    if (queuedTasks.length === 0) return
+      if (queuedTasks.length === 0) return
 
-    // Take up to availableSlots tasks
-    const tasksToStart = queuedTasks.slice(0, availableSlots)
-    console.log(`[Queue Watcher] Starting ${tasksToStart.length} tasks in parallel (${activeCount} already running)`)
+      const tasksToStart = queuedTasks.slice(0, availableSlots)
+      console.log(`[Queue Watcher] Starting ${tasksToStart.length} tasks in parallel (${activeCount} already running)`)
 
-    // Start all tasks in parallel for SIZZLE 🔥
-    tasksToStart.forEach((queuedTask) => {
-      const agent = agents.find((a) => a.id === queuedTask.assignedTo)
-      if (!agent) {
-        console.log(`[Queue Watcher] Task "${queuedTask.title}" has no matching agent`)
-        return
-      }
+      tasksToStart.forEach((queuedTask) => {
+        queueStartedRef.current.add(queuedTask.id)
+        const agent = agentsRef.current.find((a) => a.id === queuedTask.assignedTo)
+        if (!agent) return
 
-      console.log(`[Queue Watcher] Starting: "${queuedTask.title}" → ${agent.alias}`)
-      const skill = queuedTask.skillId ? skills.find((s) => s.id === queuedTask.skillId) : undefined
+        console.log(`[Queue Watcher] Starting: "${queuedTask.title}" → ${agent.alias}`)
+        const skill = queuedTask.skillId ? skillsRef.current.find((s) => s.id === queuedTask.skillId) : undefined
 
-      // Start execution (don't await - fire and forget for parallel execution)
-      updateTaskStatus(queuedTask.id, 'in_progress', userId, 'Auto-started from queue')
-        .then(() => runTask(queuedTask, agent, skill, accountId, userId))
-        .catch((err) => console.error(`[Queue Watcher] Failed to start "${queuedTask.title}":`, err))
-    })
-  }, [tasks, agents, skills, getActiveCount, isTaskExecuting, updateTaskStatus, runTask, accountId, userId])
+        updateTaskStatus(queuedTask.id, 'in_progress', userId, 'Auto-started from queue')
+          .then(() => runTask(queuedTask, agent, skill, accountId, userId))
+          .catch((err) => {
+            queueStartedRef.current.delete(queuedTask.id) // Allow retry on failure
+            console.error(`[Queue Watcher] Failed to start "${queuedTask.title}":`, err)
+          })
+      })
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [getActiveCount, isTaskExecuting, updateTaskStatus, runTask, accountId, userId])
 
   // Auto-queue pending tasks that already have agents assigned
-  // This catches tasks where routing assigned an agent but failed to move to queued
   useEffect(() => {
-    const pendingWithAgents = tasks.filter(
-      (t) => t.status === 'pending' &&
-             t.assignedTo &&
-             t.assignedToType === 'agent' &&
-             !isTaskBlocked(t.id)
-    )
+    const interval = setInterval(() => {
+      const currentTasks = tasksRef.current
+      const pendingWithAgents = currentTasks.filter(
+        (t) => t.status === 'pending' &&
+               t.assignedTo &&
+               t.assignedToType === 'agent' &&
+               !isTaskBlocked(t.id) &&
+               !autoQueuedRef.current.has(t.id)
+      )
 
-    if (pendingWithAgents.length === 0) return
+      if (pendingWithAgents.length === 0) return
 
-    console.log(`[Auto-Queue] Found ${pendingWithAgents.length} pending tasks with agents, moving to queued`)
+      console.log(`[Auto-Queue] Found ${pendingWithAgents.length} pending tasks with agents, moving to queued`)
 
-    pendingWithAgents.forEach((task) => {
-      const agent = agents.find((a) => a.id === task.assignedTo)
-      updateTaskStatus(
-        task.id,
-        'queued',
-        userId,
-        `Auto-queued: already assigned to ${agent?.alias || 'agent'}`
-      ).catch((err) => console.error(`[Auto-Queue] Failed to queue "${task.title}":`, err))
-    })
-  }, [tasks, agents, updateTaskStatus, userId, isTaskBlocked])
+      pendingWithAgents.forEach((task) => {
+        autoQueuedRef.current.add(task.id)
+        const agent = agentsRef.current.find((a) => a.id === task.assignedTo)
+        updateTaskStatus(
+          task.id,
+          'queued',
+          userId,
+          `Auto-queued: already assigned to ${agent?.alias || 'agent'}`
+        ).catch((err) => {
+          autoQueuedRef.current.delete(task.id)
+          console.error(`[Auto-Queue] Failed to queue "${task.title}":`, err)
+        })
+      })
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [updateTaskStatus, userId, isTaskBlocked])
 
   // Stale task detector - reset stuck in_progress tasks back to queued for retry
-  // A task is stale if it's been in_progress for >1 hour without active execution
   useEffect(() => {
     const ONE_HOUR = 60 * 60 * 1000
 
-    const staleInProgressTasks = tasks.filter((t) => {
-      if (t.status !== 'in_progress') return false
-      if (!t.assignedTo || t.assignedToType !== 'agent') return false
-      if (isTaskExecuting(t.id)) return false // Currently running, not stale
+    const interval = setInterval(() => {
+      const currentTasks = tasksRef.current
+      const staleInProgressTasks = currentTasks.filter((t) => {
+        if (t.status !== 'in_progress') return false
+        if (!t.assignedTo || t.assignedToType !== 'agent') return false
+        if (isTaskExecuting(t.id)) return false
+        if (staleResetRef.current.has(t.id)) return false
 
-      // Check last status update time
-      const lastUpdate = t.statusHistory?.[t.statusHistory.length - 1]
-      if (!lastUpdate) return false
+        const lastUpdate = t.statusHistory?.[t.statusHistory.length - 1]
+        if (!lastUpdate) return false
 
-      const timeSinceUpdate = Date.now() - new Date(lastUpdate.changedAt).getTime()
-      return timeSinceUpdate > ONE_HOUR
-    })
+        const timeSinceUpdate = Date.now() - new Date(lastUpdate.changedAt).getTime()
+        return timeSinceUpdate > ONE_HOUR
+      })
 
-    if (staleInProgressTasks.length === 0) return
+      if (staleInProgressTasks.length === 0) return
 
-    console.log(`[Stale Detector] Found ${staleInProgressTasks.length} stale in_progress tasks`)
+      console.log(`[Stale Detector] Found ${staleInProgressTasks.length} stale in_progress tasks`)
 
-    staleInProgressTasks.forEach((task) => {
-      console.log(`[Stale Detector] Resetting stale task "${task.title}" back to queued for retry`)
-      updateTaskStatus(
-        task.id,
-        'queued',
-        userId,
-        'Auto-reset: task was stuck in_progress for over 1 hour'
-      ).catch((err) => console.error(`[Stale Detector] Failed to reset "${task.title}":`, err))
-    })
-  }, [tasks, updateTaskStatus, userId, isTaskExecuting])
+      staleInProgressTasks.forEach((task) => {
+        staleResetRef.current.add(task.id)
+        console.log(`[Stale Detector] Resetting stale task "${task.title}" back to queued for retry`)
+        updateTaskStatus(
+          task.id,
+          'queued',
+          userId,
+          'Auto-reset: task was stuck in_progress for over 1 hour'
+        ).catch((err) => {
+          staleResetRef.current.delete(task.id)
+          console.error(`[Stale Detector] Failed to reset "${task.title}":`, err)
+        })
+      })
+    }, 60000) // Check every 60 seconds (stale = 1 hour, no rush)
+
+    return () => clearInterval(interval)
+  }, [updateTaskStatus, userId, isTaskExecuting])
 
   // Sub-task chaining - when a sub-task completes, queue unblocked dependents
   useEffect(() => {
-    // Find completed sub-tasks that might have dependents waiting
-    const completedSubTasks = tasks.filter(
-      (t) => (t.status === 'completed' || t.status === 'review') && t.parentTaskId
-    )
-
-    for (const completedTask of completedSubTasks) {
-      // Find sibling sub-tasks that are pending and assigned to an agent
-      const siblingTasks = tasks.filter(
-        (t) =>
-          t.parentTaskId === completedTask.parentTaskId &&
-          t.id !== completedTask.id &&
-          t.status === 'pending' &&
-          t.assignedTo &&
-          t.assignedToType === 'agent'
+    const interval = setInterval(() => {
+      const currentTasks = tasksRef.current
+      const completedSubTasks = currentTasks.filter(
+        (t) => (t.status === 'completed' || t.status === 'review') &&
+               t.parentTaskId &&
+               !chainingProcessedRef.current.has(t.id)
       )
 
-      // Find tasks that are now unblocked (dependencies satisfied)
-      // Use blockedTasks map to check if task is still blocked
-      const unblockedTasks = siblingTasks.filter((t) => !isTaskBlocked(t.id))
+      for (const completedTask of completedSubTasks) {
+        chainingProcessedRef.current.add(completedTask.id)
 
-      // Queue the first unblocked task (by creation order)
-      const nextTask = unblockedTasks.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      )[0]
+        const siblingTasks = currentTasks.filter(
+          (t) =>
+            t.parentTaskId === completedTask.parentTaskId &&
+            t.id !== completedTask.id &&
+            t.status === 'pending' &&
+            t.assignedTo &&
+            t.assignedToType === 'agent'
+        )
 
-      if (nextTask) {
-        // Queue the next unblocked sub-task
-        console.log(`Sub-task "${completedTask.title}" completed, queueing unblocked: "${nextTask.title}"`)
-        updateTaskStatus(nextTask.id, 'queued', userId, `Dependencies satisfied: ${completedTask.title} completed`)
-          .catch((err) => console.error('Failed to queue next sub-task:', err))
-      }
+        const unblockedTasks = siblingTasks.filter((t) => !isTaskBlocked(t.id))
 
-      // Check if all sub-tasks are complete - aggregate outputs and mark parent for review
-      const allSiblings = tasks.filter((t) => t.parentTaskId === completedTask.parentTaskId)
-      const allComplete = allSiblings.every((t) => t.status === 'completed' || t.status === 'review')
+        const nextTask = unblockedTasks.sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        )[0]
 
-      if (allComplete && allSiblings.length > 0) {
-        const parentTask = tasks.find((t) => t.id === completedTask.parentTaskId)
-        if (parentTask && parentTask.status === 'in_progress') {
-          console.log(`All sub-tasks complete for "${parentTask.title}", aggregating outputs...`)
+        if (nextTask) {
+          console.log(`Sub-task "${completedTask.title}" completed, queueing unblocked: "${nextTask.title}"`)
+          updateTaskStatus(nextTask.id, 'queued', userId, `Dependencies satisfied: ${completedTask.title} completed`)
+            .catch((err) => console.error('Failed to queue next sub-task:', err))
+        }
 
-          // Aggregate all subtask outputs into parent output
-          const subtaskOutputs = allSiblings
-            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-            .map((subtask) => ({
-              taskId: subtask.id,
-              title: subtask.title,
-              output: subtask.output,
-              completedAt: subtask.completedAt,
-            }))
+        // Check if all sub-tasks are complete - aggregate outputs and mark parent for review
+        const allSiblings = currentTasks.filter((t) => t.parentTaskId === completedTask.parentTaskId)
+        const allComplete = allSiblings.every((t) => t.status === 'completed' || t.status === 'review')
 
-          // Build aggregated content from subtask outputs
-          const aggregatedContent = subtaskOutputs
-            .map((s) => {
-              const content = s.output && typeof s.output === 'object' && 'content' in s.output
-                ? String(s.output.content)
-                : JSON.stringify(s.output)
-              return `## ${s.title}\n\n${content}`
+        if (allComplete && allSiblings.length > 0) {
+          const parentTask = currentTasks.find((t) => t.id === completedTask.parentTaskId)
+          if (parentTask && parentTask.status === 'in_progress') {
+            console.log(`All sub-tasks complete for "${parentTask.title}", aggregating outputs...`)
+
+            const subtaskOutputs = allSiblings
+              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+              .map((subtask) => ({
+                taskId: subtask.id,
+                title: subtask.title,
+                output: subtask.output,
+                completedAt: subtask.completedAt,
+              }))
+
+            const aggregatedContent = subtaskOutputs
+              .map((s) => {
+                const content = s.output && typeof s.output === 'object' && 'content' in s.output
+                  ? String(s.output.content)
+                  : JSON.stringify(s.output)
+                return `## ${s.title}\n\n${content}`
+              })
+              .join('\n\n---\n\n')
+
+            const aggregatedOutput = {
+              content: aggregatedContent,
+              subtasks: subtaskOutputs,
+              aggregatedAt: new Date().toISOString(),
+              subtaskCount: allSiblings.length,
+            }
+
+            updateTask(parentTask.id, {
+              output: aggregatedOutput,
+              updatedBy: userId,
+              updatedByType: 'user',
             })
-            .join('\n\n---\n\n')
-
-          const aggregatedOutput = {
-            content: aggregatedContent,
-            subtasks: subtaskOutputs,
-            aggregatedAt: new Date().toISOString(),
-            subtaskCount: allSiblings.length,
+              .then(() => {
+                console.log(`Aggregated ${allSiblings.length} subtask outputs into parent "${parentTask.title}"`)
+                return updateTaskStatus(parentTask.id, 'review', userId, 'All sub-tasks completed - outputs aggregated')
+              })
+              .catch((err) => console.error('Failed to aggregate and complete parent task:', err))
           }
-
-          // Update parent with aggregated output, then move to review
-          updateTask(parentTask.id, {
-            output: aggregatedOutput,
-            updatedBy: userId,
-            updatedByType: 'user',
-          })
-            .then(() => {
-              console.log(`Aggregated ${allSiblings.length} subtask outputs into parent "${parentTask.title}"`)
-              return updateTaskStatus(parentTask.id, 'review', userId, 'All sub-tasks completed - outputs aggregated')
-            })
-            .catch((err) => console.error('Failed to aggregate and complete parent task:', err))
         }
       }
-    }
-  }, [tasks, updateTask, updateTaskStatus, userId, isTaskBlocked])
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [updateTask, updateTaskStatus, userId, isTaskBlocked])
 
   // Handle task creation - new tasks go to Inbox (draft) by default
   const handleCreateTask = useCallback(
