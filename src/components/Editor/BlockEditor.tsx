@@ -219,22 +219,34 @@ export function BlockEditor() {
         },
       },
       // Transform pasted plain text to normalize line endings
+      // Convert single newlines to spaces, double newlines to paragraph breaks
       transformPastedText(text) {
-        return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        return text
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          // Collapse multiple newlines to double newline (paragraph break)
+          .replace(/\n{3,}/g, '\n\n')
+          // Single newlines become spaces (within a paragraph)
+          .replace(/(?<!\n)\n(?!\n)/g, ' ')
       },
-      // Clean up pasted HTML to fix spacing issues in lists
+      // Clean up pasted HTML to fix spacing issues
       transformPastedHTML(html) {
         return html
           // Remove empty paragraphs
           .replace(/<p>\s*<\/p>/g, '')
-          // Reduce double breaks
-          .replace(/<br\s*\/?>\s*<br\s*\/?>/g, '<br>')
+          .replace(/<p><br\s*\/?><\/p>/g, '')
+          // Reduce multiple breaks to single
+          .replace(/(<br\s*\/?>[\s\n]*){2,}/g, '<br>')
           // Remove p tags wrapping list item content (common cause of extra spacing)
           .replace(/(<li[^>]*>)\s*<p>/gi, '$1')
           .replace(/<\/p>\s*(<\/li>)/gi, '$1')
           // Clean up whitespace around list items
           .replace(/(<li[^>]*>)\s+/gi, '$1')
           .replace(/\s+(<\/li>)/gi, '$1')
+          // Remove divs that just wrap content (Google Docs does this)
+          .replace(/<div[^>]*>([^<]*)<\/div>/gi, '$1<br>')
+          // Clean up spans with just styling (common from copy/paste)
+          .replace(/<span[^>]*>([^<]*)<\/span>/gi, '$1')
       },
     },
     onUpdate: ({ editor }) => {
