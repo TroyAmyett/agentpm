@@ -202,7 +202,10 @@ function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: ToolD
       parts.push(`- ${tool.name}: ${tool.description}`)
     }
     parts.push(`\nCRITICAL INSTRUCTIONS:`)
-    parts.push(`- When a task involves publishing content (blog posts, landing pages), you MUST use the publish_blog_post or create_landing_page tool to actually publish it. Do not just write the content as text output.`)
+    parts.push(`- "Publishing" means using a tool to deploy content to funnelists.com. Choose the right tool:`)
+    parts.push(`  - Blog posts, articles, thought leadership → use publish_blog_post (commits to CMS, auto-deploys via Vercel)`)
+    parts.push(`  - Landing pages, lead capture, waitlist, product pages → use create_landing_page`)
+    parts.push(`  - Do NOT just write content as text output. Actually publish it with the tool.`)
     parts.push(`- When a task involves creating images, use the generate_image tool.`)
     parts.push(`- When a task requires research or web content, use fetch_url or web_search.`)
     parts.push(`- When a task involves domain names, use check_domain_availability and dns_lookup.`)
