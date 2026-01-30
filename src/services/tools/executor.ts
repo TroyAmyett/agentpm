@@ -17,6 +17,7 @@ import {
   recordScreenFlowTool,
 } from './implementations/videoProduction'
 import { generateImage } from './implementations/imageGenerator'
+import { publishBlogPost } from './implementations/blogPublisher'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -80,6 +81,26 @@ export async function executeTool(
         const funnelId = parameters.funnelId as string | undefined
         const publish = parameters.publish as boolean | undefined
         return await createLandingPage({ pageType, slug, content, funnelId, publish })
+      }
+
+      // ============================================
+      // BLOG PUBLISHING
+      // ============================================
+
+      case 'publish_blog_post': {
+        return await publishBlogPost({
+          title: parameters.title as string,
+          slug: parameters.slug as string,
+          content: parameters.content as string,
+          excerpt: parameters.excerpt as string,
+          category: parameters.category as string,
+          seoTitle: parameters.seoTitle as string | undefined,
+          metaDescription: parameters.metaDescription as string | undefined,
+          heroImageUrl: parameters.heroImageUrl as string | undefined,
+          heroImagePrompt: parameters.heroImagePrompt as string | undefined,
+          tags: parameters.tags as string[] | undefined,
+          publish: parameters.publish as boolean | undefined,
+        })
       }
 
       // ============================================

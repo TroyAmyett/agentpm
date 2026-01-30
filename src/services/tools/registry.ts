@@ -164,6 +164,76 @@ export const BUILT_IN_TOOLS: Tool[] = [
     }
   },
   // ============================================
+  // BLOG PUBLISHING
+  // ============================================
+  {
+    id: 'publish-blog-post',
+    name: 'publish_blog_post',
+    displayName: 'Publish Blog Post',
+    description: 'Publish a blog post to the funnelists.com website via GitHub/Vercel',
+    category: 'integration',
+    isBuiltIn: true,
+    isEnabled: true,
+    requiresApiKey: true,
+    apiKeyName: 'GITHUB_TOKEN',
+    definition: {
+      name: 'publish_blog_post',
+      description: 'Publish a blog post to funnelists.com. Creates a markdown file with frontmatter and commits it to the CMS repository. If a hero image URL is provided, the image is downloaded and committed alongside the post. Vercel automatically rebuilds the site after the commit.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Blog post title',
+          },
+          slug: {
+            type: 'string',
+            description: 'URL slug in kebab-case (e.g., "how-to-use-agentforce")',
+          },
+          content: {
+            type: 'string',
+            description: 'Blog post body in Markdown format. Use ## for headings, bullet points for lists, **bold** for emphasis.',
+          },
+          excerpt: {
+            type: 'string',
+            description: 'Brief summary for preview cards, 150-160 characters',
+          },
+          category: {
+            type: 'string',
+            description: 'Blog category (e.g., "AI", "Salesforce", "Product Updates", "Guides")',
+          },
+          seoTitle: {
+            type: 'string',
+            description: 'SEO-optimized page title, 50-60 characters',
+          },
+          metaDescription: {
+            type: 'string',
+            description: 'SEO meta description, 150-160 characters',
+          },
+          heroImageUrl: {
+            type: 'string',
+            description: 'URL of the hero image to include with the post. Use generate_image tool first to create one.',
+          },
+          heroImagePrompt: {
+            type: 'string',
+            description: 'The prompt used to generate the hero image (for metadata)',
+          },
+          tags: {
+            type: 'array',
+            description: 'Tags for the post',
+            items: { type: 'string' },
+          },
+          publish: {
+            type: 'boolean',
+            description: 'If true, publish immediately. If false, save as draft.',
+            default: true,
+          },
+        },
+        required: ['title', 'slug', 'content', 'excerpt', 'category'],
+      },
+    },
+  },
+  // ============================================
   // IMAGE GENERATION
   // ============================================
   {
