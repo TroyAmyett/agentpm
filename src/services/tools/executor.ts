@@ -16,6 +16,7 @@ import {
   listVideoJobsTool,
   recordScreenFlowTool,
 } from './implementations/videoProduction'
+import { generateImage } from './implementations/imageGenerator'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -79,6 +80,17 @@ export async function executeTool(
         const funnelId = parameters.funnelId as string | undefined
         const publish = parameters.publish as boolean | undefined
         return await createLandingPage({ pageType, slug, content, funnelId, publish })
+      }
+
+      // ============================================
+      // IMAGE GENERATION
+      // ============================================
+
+      case 'generate_image': {
+        const prompt = parameters.prompt as string
+        const size = parameters.size as string | undefined
+        const style = parameters.style as string | undefined
+        return await generateImage(prompt, size, style, _accountId)
       }
 
       // ============================================

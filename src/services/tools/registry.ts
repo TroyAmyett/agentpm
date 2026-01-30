@@ -164,6 +164,44 @@ export const BUILT_IN_TOOLS: Tool[] = [
     }
   },
   // ============================================
+  // IMAGE GENERATION
+  // ============================================
+  {
+    id: 'generate-image',
+    name: 'generate_image',
+    displayName: 'Generate Image',
+    description: 'Generate images from text prompts using AI (DALL-E 3 or Pollinations)',
+    category: 'integration',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'generate_image',
+      description: 'Generate an image from a text description. Creates logos, illustrations, banners, product images, social media graphics, and more. The image is stored permanently and a download URL is returned.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Detailed description of the image to generate. Be specific about style, colors, composition, and subject matter.',
+          },
+          size: {
+            type: 'string',
+            description: 'Image dimensions',
+            enum: ['1024x1024', '1792x1024', '1024x1792'],
+            default: '1024x1024',
+          },
+          style: {
+            type: 'string',
+            description: 'Image style: "vivid" for dramatic/artistic, "natural" for realistic/photographic',
+            enum: ['vivid', 'natural'],
+            default: 'vivid',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  // ============================================
   // VIDEO PRODUCTION TOOLS
   // ============================================
   {
