@@ -16,6 +16,7 @@ import {
   User,
   Calendar,
   Link2,
+  Plus,
 } from 'lucide-react'
 import type { Task, TaskStatus, TaskPriority, AgentPersona, Project } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
@@ -28,6 +29,7 @@ interface TableListViewProps {
   executingTaskIds: Set<string>
   onTaskClick: (taskId: string) => void
   onRunTask?: (taskId: string) => void
+  onAddTask?: () => void
 }
 
 type SortField = 'title' | 'status' | 'priority' | 'assignee' | 'dueAt' | 'createdAt' | 'updatedAt'
@@ -76,6 +78,7 @@ export function TableListView({
   blockedTasks,
   executingTaskIds,
   onTaskClick,
+  onAddTask,
 }: TableListViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortField, setSortField] = useState<SortField>('createdAt')
@@ -242,6 +245,17 @@ export function TableListView({
         <span className="text-sm text-surface-500">
           {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
         </span>
+
+        {/* Create Task */}
+        {onAddTask && (
+          <button
+            onClick={onAddTask}
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors"
+          >
+            <Plus size={16} />
+            <span>Create Task</span>
+          </button>
+        )}
       </div>
 
       {/* Table */}

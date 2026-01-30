@@ -844,6 +844,7 @@ export function AgentPMPage() {
                     blockedTasks={blockedTasks}
                     executingTaskIds={executingTaskIds}
                     onTaskClick={setSelectedTaskId}
+                    onAddTask={() => setIsCreateTaskOpen(true)}
                     onRunTask={(taskId) => {
                       const task = getTask(taskId)
                       if (!task?.assignedTo) return

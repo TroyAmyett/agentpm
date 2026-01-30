@@ -28,7 +28,7 @@ function toSnakeCase(str: string): string {
 function toSnakeCaseKeys<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+    if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
       result[toSnakeCase(key)] = obj[key]
     }
   }
