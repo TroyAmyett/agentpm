@@ -1,12 +1,45 @@
 // Image Generator Tool - Generates images using AI
 // Supports OpenAI DALL-E 3 (with API key) or Pollinations (free fallback)
+// Automatically injects brand context (colors, style) when available
 
 import type { ToolResult } from '../types'
 import { supabase } from '@/services/supabase/client'
+import { useBrandStore } from '@/stores/brandStore'
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string
 
 type ImageSize = '1024x1024' | '1792x1024' | '1024x1792'
+
+/**
+ * Enhance prompt with brand context (colors, transparent bg preference)
+ */
+function enhancePromptWithBrand(prompt: string): string {
+  const brandConfig = useBrandStore.getState().brandConfig
+  const colors = brandConfig?.brandConfig?.colors
+
+  const brandHints: string[] = []
+
+  if (colors) {
+    const colorList = [
+      colors.primary && `primary: ${colors.primary}`,
+      colors.secondary && `secondary: ${colors.secondary}`,
+      colors.accent && `accent: ${colors.accent}`,
+    ].filter(Boolean)
+    if (colorList.length > 0) {
+      brandHints.push(`Use these brand colors: ${colorList.join(', ')}`)
+    }
+  }
+
+  // Always prefer clean/transparent backgrounds for logos and icons
+  const isLogoOrIcon = /logo|icon|badge|emblem|symbol|mark/i.test(prompt)
+  if (isLogoOrIcon) {
+    brandHints.push('Use a clean, solid-color or transparent background (NOT black). Keep the design simple and scalable.')
+  }
+
+  if (brandHints.length === 0) return prompt
+
+  return `${prompt}\n\nBrand guidelines: ${brandHints.join('. ')}`
+}
 
 /**
  * Generate image using OpenAI DALL-E 3 and upload to Supabase storage
@@ -156,15 +189,18 @@ export async function generateImage(
 
   const provider = OPENAI_API_KEY ? 'dall-e-3' : 'pollinations'
 
+  // Enhance prompt with brand colors and style guidelines
+  const enhancedPrompt = enhancePromptWithBrand(prompt)
+
   try {
-    console.log(`[ImageGen] Generating with ${provider}: "${prompt.slice(0, 80)}..."`)
+    console.log(`[ImageGen] Generating with ${provider}: "${enhancedPrompt.slice(0, 100)}..."`)
 
     let result: ToolResult
 
     if (OPENAI_API_KEY) {
-      result = await generateWithDallE(prompt, validSize, validStyle, accountId)
+      result = await generateWithDallE(enhancedPrompt, validSize, validStyle, accountId)
     } else {
-      result = generateWithPollinations(prompt, validSize)
+      result = generateWithPollinations(enhancedPrompt, validSize)
     }
 
     // Add execution time

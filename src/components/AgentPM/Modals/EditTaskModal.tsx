@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Calendar, AlertTriangle } from 'lucide-react'
-import type { Task, TaskPriority } from '@/types/agentpm'
+import { X, Calendar, AlertTriangle, Bot, User, Sparkles, FolderOpen } from 'lucide-react'
+import type { Task, TaskPriority, AgentPersona, Skill, Project } from '@/types/agentpm'
 
 interface EditTaskModalProps {
   isOpen: boolean
@@ -13,8 +13,17 @@ interface EditTaskModalProps {
     description?: string
     priority: TaskPriority
     dueAt?: string
+    projectId?: string | null
+    assignedTo?: string | null
+    assignedToType?: 'user' | 'agent'
+    skillId?: string | null
   }) => Promise<void>
   task: Task
+  agents?: AgentPersona[]
+  projects?: Project[]
+  skills?: Skill[]
+  currentUserId?: string
+  currentUserName?: string
 }
 
 export function EditTaskModal({
@@ -22,11 +31,20 @@ export function EditTaskModal({
   onClose,
   onSubmit,
   task,
+  agents = [],
+  projects = [],
+  skills = [],
+  currentUserId,
+  currentUserName,
 }: EditTaskModalProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [dueAt, setDueAt] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
+  const [assignedToType, setAssignedToType] = useState<'user' | 'agent'>('agent')
+  const [skillId, setSkillId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,6 +55,10 @@ export function EditTaskModal({
       setDescription(task.description || '')
       setPriority(task.priority)
       setDueAt(task.dueAt ? task.dueAt.split('T')[0] : '')
+      setProjectId(task.projectId || '')
+      setAssignedTo(task.assignedTo || '')
+      setAssignedToType(task.assignedToType || 'agent')
+      setSkillId(task.skillId || '')
     }
   }, [isOpen, task])
 
@@ -56,6 +78,10 @@ export function EditTaskModal({
         description: description.trim() || undefined,
         priority,
         dueAt: dueAt || undefined,
+        projectId: projectId || null,
+        assignedTo: assignedTo || null,
+        assignedToType: assignedTo ? assignedToType : undefined,
+        skillId: skillId || null,
       })
       handleClose()
     } catch (err) {
@@ -182,6 +208,104 @@ export function EditTaskModal({
                   </div>
                 </div>
               </div>
+
+              {/* Project */}
+              {projects.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <FolderOpen size={14} className="inline mr-1.5 -mt-0.5" />
+                    Project
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No Project</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Assign To */}
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Assign To
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setAssignedToType('agent')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      assignedToType === 'agent'
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
+                    }`}
+                  >
+                    <Bot size={14} />
+                    Agent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignedToType('user')
+                      if (currentUserId) setAssignedTo(currentUserId)
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      assignedToType === 'user'
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-600'
+                    }`}
+                  >
+                    <User size={14} />
+                    User
+                  </button>
+                </div>
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Unassigned</option>
+                  {assignedToType === 'agent'
+                    ? agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.alias} - {a.agentType}
+                        </option>
+                      ))
+                    : currentUserId && (
+                        <option value={currentUserId}>
+                          {currentUserName || 'Me'}
+                        </option>
+                      )}
+                </select>
+              </div>
+
+              {/* Skill */}
+              {skills.length > 0 && assignedToType === 'agent' && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <Sparkles size={14} className="inline mr-1.5 -mt-0.5" />
+                    Skill (optional)
+                  </label>
+                  <select
+                    value={skillId}
+                    onChange={(e) => setSkillId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No skill - General task</option>
+                    {skills.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">

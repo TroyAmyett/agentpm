@@ -644,9 +644,20 @@ export function AgentPMPage() {
       description?: string
       priority: Task['priority']
       dueAt?: string
+      projectId?: string | null
+      assignedTo?: string | null
+      assignedToType?: 'user' | 'agent'
+      skillId?: string | null
     }) => {
       await updateTask(taskId, {
-        ...updates,
+        title: updates.title,
+        description: updates.description,
+        priority: updates.priority,
+        dueAt: updates.dueAt,
+        projectId: updates.projectId ?? undefined,
+        assignedTo: updates.assignedTo ?? undefined,
+        assignedToType: updates.assignedToType,
+        skillId: updates.skillId ?? undefined,
         updatedBy: userId,
         updatedByType: 'user',
       })
@@ -1331,6 +1342,11 @@ export function AgentPMPage() {
           onClose={() => setEditingTask(null)}
           onSubmit={(updates) => handleEditTask(editingTask.id, updates)}
           task={editingTask}
+          agents={agents}
+          projects={projects}
+          skills={skills}
+          currentUserId={userId}
+          currentUserName={user?.email?.split('@')[0] || 'Me'}
         />
       )}
 

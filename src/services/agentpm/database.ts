@@ -274,27 +274,39 @@ export async function createTask(task: Omit<CreateEntity<Task>, 'statusHistory'>
     }],
   }
 
+  const insertData = toSnakeCaseKeys(taskWithHistory as Record<string, unknown>)
+  console.log('[DB] Creating task with columns:', Object.keys(insertData).join(', '))
+
   const { data, error } = await supabase
     .from('tasks')
-    .insert(toSnakeCaseKeys(taskWithHistory as Record<string, unknown>))
+    .insert(insertData)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error('[DB] Task creation failed:', error.message, error.code, error.details, error.hint)
+    throw new Error(`Task creation failed: ${error.message}`)
+  }
   return toCamelCaseKeys<Task>(data)
 }
 
 export async function updateTask(id: string, updates: UpdateEntity<Task>): Promise<Task> {
   if (!supabase) throw new Error('Supabase not configured')
 
+  const updateData = toSnakeCaseKeys(updates as Record<string, unknown>)
+  console.log('[DB] Updating task', id, 'with columns:', Object.keys(updateData).join(', '))
+
   const { data, error } = await supabase
     .from('tasks')
-    .update(toSnakeCaseKeys(updates as Record<string, unknown>))
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error('[DB] Task update failed:', error.message, error.code, error.details, error.hint)
+    throw new Error(`Task update failed: ${error.message}`)
+  }
   return toCamelCaseKeys<Task>(data)
 }
 
