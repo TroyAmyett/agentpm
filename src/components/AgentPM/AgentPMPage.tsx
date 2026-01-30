@@ -243,6 +243,8 @@ export function AgentPMPage() {
   }, [getActiveCount, isTaskExecuting, updateTaskStatus, runTask, accountId, userId])
 
   // Auto-queue pending tasks that already have agents assigned
+  // NOTE: Sub-tasks (parentTaskId) are excluded - the sub-task chaining interval handles those
+  // to ensure dependencies are respected and predecessor outputs are available
   useEffect(() => {
     const interval = setInterval(() => {
       const currentTasks = tasksRef.current
@@ -250,6 +252,7 @@ export function AgentPMPage() {
         (t) => t.status === 'pending' &&
                t.assignedTo &&
                t.assignedToType === 'agent' &&
+               !t.parentTaskId && // Sub-tasks handled by chaining interval
                !isTaskBlocked(t.id) &&
                !autoQueuedRef.current.has(t.id)
       )
@@ -503,8 +506,8 @@ export function AgentPMPage() {
 
               if (!stepAgent) continue
 
-              // Determine if this step has a dependency
-              const hasDependency = step.dependsOnIndex !== undefined && step.dependsOnIndex >= 0
+              // Determine if this step has a dependency (handle both null and undefined from AI)
+              const hasDependency = step.dependsOnIndex != null && step.dependsOnIndex >= 0
 
               // Create the sub-task (use dispatchAgent.id for attribution, fallback to userId)
               const creatorId = dispatchAgent?.id || userId
@@ -533,9 +536,16 @@ export function AgentPMPage() {
                 console.log(`Created sub-task ${i + 1}/${decomposition.steps.length}: "${step.title}" → ${stepAgent.alias}`)
 
                 // Create TaskDependency if this step depends on a previous step
-                if (hasDependency && step.dependsOnIndex! < createdSubTaskIds.length - 1) {
+                if (hasDependency && step.dependsOnIndex! < createdSubTaskIds.length) {
                   const dependsOnTaskId = createdSubTaskIds[step.dependsOnIndex!]
                   try {
+                    // Pre-register block synchronously so auto-queue/chaining see it
+                    // before the async DB call in createTaskDependency completes
+                    const taskStore = useTaskStore.getState()
+                    const preBlocked = new Map(taskStore.blockedTasks)
+                    preBlocked.set(subTask.id, (preBlocked.get(subTask.id) || 0) + 1)
+                    useTaskStore.setState({ blockedTasks: preBlocked })
+
                     await createTaskDependency(subTask.id, dependsOnTaskId, accountId, creatorId)
                     console.log(`Created dependency: "${step.title}" depends on step ${step.dependsOnIndex! + 1}`)
                   } catch (depErr) {
