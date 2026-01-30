@@ -161,7 +161,7 @@ export type ExecutionStatusCallback = (
 ) => void
 
 // Build system prompt from agent persona
-function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, hasTools = false): string {
+function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: ToolDefinition[] = []): string {
   const parts: string[] = []
 
   // Agent identity
@@ -193,21 +193,26 @@ function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, hasTools = f
     parts.push(`== END SKILL ==`)
   }
 
-  // Tool instructions
-  if (hasTools) {
+  // Tool instructions - dynamically list all available tools
+  if (tools.length > 0) {
     parts.push(`\n\n== TOOLS ==`)
-    parts.push(`You have access to tools that can help you complete tasks more accurately.`)
-    parts.push(`Use tools when you need real-time information, verification, or external data.`)
-    parts.push(`For example:`)
-    parts.push(`- Use check_domain_availability to verify if domain names are actually available`)
-    parts.push(`- Use dns_lookup to check DNS records`)
-    parts.push(`- Use fetch_url to read content from web pages`)
-    parts.push(`Always use relevant tools before making claims that require verification.`)
+    parts.push(`You have access to ${tools.length} tools. You MUST use the appropriate tools to complete your task - do NOT just write about what you would do, actually DO it using the tools.`)
+    parts.push(`\nAvailable tools:`)
+    for (const tool of tools) {
+      parts.push(`- ${tool.name}: ${tool.description}`)
+    }
+    parts.push(`\nCRITICAL INSTRUCTIONS:`)
+    parts.push(`- When a task involves publishing content (blog posts, landing pages), you MUST use the publish_blog_post or create_landing_page tool to actually publish it. Do not just write the content as text output.`)
+    parts.push(`- When a task involves creating images, use the generate_image tool.`)
+    parts.push(`- When a task requires research or web content, use fetch_url or web_search.`)
+    parts.push(`- When a task involves domain names, use check_domain_availability and dns_lookup.`)
+    parts.push(`- Always EXECUTE the action using tools rather than describing what could be done.`)
+    parts.push(`- If a tool fails, report the error clearly so it can be fixed.`)
     parts.push(`== END TOOLS ==`)
   }
 
   // Output instructions
-  parts.push(`\n\nIMPORTANT: Provide your complete output. Be thorough and deliver exactly what the task asks for.`)
+  parts.push(`\n\nIMPORTANT: Provide your complete output. Be thorough and deliver exactly what the task asks for. If you have tools available, USE them to take real action - don't just describe what you would do.`)
 
   return parts.join('\n')
 }
@@ -278,8 +283,7 @@ export async function executeTask(
       console.log(`[Executor] ${tools.length} tools available for execution`)
     }
 
-    const hasTools = tools.length > 0
-    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, hasTools)
+    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, tools)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)
 
     // Track tool usage across iterations
@@ -307,7 +311,7 @@ export async function executeTask(
       }
 
       // Add tools if available
-      if (hasTools) {
+      if (tools.length > 0) {
         requestBody.tools = tools
       }
 
@@ -532,7 +536,7 @@ export function previewExecution(input: ExecutionInput): {
     : []
 
   return {
-    systemPrompt: buildAgentSystemPrompt(input.agent, input.skill, tools.length > 0),
+    systemPrompt: buildAgentSystemPrompt(input.agent, input.skill, getToolDefinitions(tools)),
     userPrompt: buildTaskPrompt(input.task, input.additionalContext),
     toolsAvailable: tools.map(t => t.name),
   }
