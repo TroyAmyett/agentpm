@@ -14,8 +14,10 @@ import {
   AlertTriangle,
   Shield,
   Target,
+  Lock,
+  Unlock,
 } from 'lucide-react'
-import type { AgentPersona } from '@/types/agentpm'
+import type { AgentPersona, AutonomyLevel } from '@/types/agentpm'
 import { AgentStatusBadge } from '../Agents/AgentStatusBadge'
 
 interface AgentDetailModalProps {
@@ -26,6 +28,8 @@ interface AgentDetailModalProps {
   onResume: (agentId: string) => Promise<void>
   onResetHealth: (agentId: string) => Promise<void>
   onAssignTask: (agentId: string) => void
+  onSetAutonomyOverride?: (agentId: string, level: AutonomyLevel) => Promise<void>
+  onClearAutonomyOverride?: (agentId: string) => Promise<void>
 }
 
 export function AgentDetailModal({
@@ -36,6 +40,8 @@ export function AgentDetailModal({
   onResume,
   onResetHealth,
   onAssignTask,
+  onSetAutonomyOverride,
+  onClearAutonomyOverride,
 }: AgentDetailModalProps) {
   const isPaused = !!agent.pausedAt
 
@@ -150,18 +156,61 @@ export function AgentDetailModal({
                 </div>
               )}
 
-              {/* Autonomy Level */}
+              {/* Autonomy Level - Interactive Dial */}
               <div>
-                <h3 className="text-sm font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">
-                  Autonomy Level
-                </h3>
-                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${autonomy.bg}`}>
-                  <Shield size={16} className={autonomy.color} />
-                  <div>
-                    <p className={`font-medium ${autonomy.color}`}>{autonomy.label}</p>
-                    <p className="text-xs text-surface-500">{autonomy.description}</p>
-                  </div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
+                    Autonomy Level
+                  </h3>
+                  {agent.autonomyOverride && onClearAutonomyOverride && (
+                    <button
+                      onClick={() => onClearAutonomyOverride(agent.id)}
+                      className="flex items-center gap-1 text-xs text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
+                      title="Remove manual override and let the system auto-adjust"
+                    >
+                      <Unlock size={12} />
+                      Clear override
+                    </button>
+                  )}
                 </div>
+                {/* Segmented Control */}
+                {onSetAutonomyOverride ? (
+                  <div className="space-y-2">
+                    <div className="flex rounded-lg border border-surface-200 dark:border-surface-700 overflow-hidden">
+                      {(['supervised', 'semi-autonomous', 'autonomous'] as AutonomyLevel[]).map((level) => {
+                        const config = autonomyConfig[level]
+                        const isActive = agent.autonomyLevel === level
+                        return (
+                          <button
+                            key={level}
+                            onClick={() => onSetAutonomyOverride(agent.id, level)}
+                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors
+                              ${isActive
+                                ? `${config.bg} ${config.color} border-r border-surface-200 dark:border-surface-700`
+                                : 'bg-white dark:bg-surface-800 text-surface-500 hover:bg-surface-50 dark:hover:bg-surface-700/50 border-r border-surface-200 dark:border-surface-700'
+                              } last:border-r-0`}
+                          >
+                            <Shield size={14} />
+                            {config.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-surface-500 dark:text-surface-400">
+                      {agent.autonomyOverride && <Lock size={10} className="inline mr-1" />}
+                      {agent.autonomyOverride ? 'Manual override active — ' : ''}
+                      {autonomy.description}
+                    </p>
+                  </div>
+                ) : (
+                  <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${autonomy.bg}`}>
+                    <Shield size={16} className={autonomy.color} />
+                    <div>
+                      <p className={`font-medium ${autonomy.color}`}>{autonomy.label}</p>
+                      <p className="text-xs text-surface-500">{autonomy.description}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Capabilities */}

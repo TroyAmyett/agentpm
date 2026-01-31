@@ -1,125 +1,28 @@
 // Agent Executor Service
-// Executes tasks using Claude API based on agent persona and skill
+// Executes tasks using LLM API based on agent persona and skill
 // Supports tool use for real-time capabilities
+// LLM-agnostic: uses provider abstraction layer
 
 import type { Task, AgentPersona, Skill } from '@/types/agentpm'
-import { fetchWithRetry } from './apiRetry'
 import {
   getAvailableTools,
-  getToolDefinitions,
   processToolUses,
-  type ToolDefinition,
+  type Tool,
   type ToolUseRequest,
   type ToolResultMessage,
 } from '@/services/tools'
 import { recordSkillUsage } from '@/services/skills'
-import { useApiKeysStore } from '@/stores/apiKeysStore'
-import { useAccountStore } from '@/stores/accountStore'
-import { useProfileStore } from '@/stores/profileStore'
-
-// Platform API key from environment (for platform-funded tiers)
-const PLATFORM_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-
-// Platform-funded plans that use the platform's API key
-const PLATFORM_FUNDED_PLANS = ['free', 'beta', 'trial', 'demo'] as const
-
-/**
- * Check if user's plan is platform-funded (uses platform API key)
- * Based on architecture: free/beta/trial/demo = platform-funded, starter/pro/enterprise = BYOK
- */
-function isPlatformFundedPlan(): boolean {
-  const accountStore = useAccountStore.getState()
-  const profileStore = useProfileStore.getState()
-
-  // Super admins always get platform-funded access
-  if (profileStore.profile?.isSuperAdmin) {
-    console.log('[Executor] Super admin - using platform-funded access')
-    return true
-  }
-
-  // Check account plan
-  const account = accountStore.currentAccount()
-  const plan = account?.plan || 'free'
-
-  // Free plan and demo accounts are platform-funded
-  if (PLATFORM_FUNDED_PLANS.includes(plan as typeof PLATFORM_FUNDED_PLANS[number])) {
-    return true
-  }
-
-  // Demo/default accounts are platform-funded
-  if (account?.id?.startsWith('default-') || account?.slug === 'demo') {
-    return true
-  }
-
-  return false
-}
-
-/**
- * Get user's stored Anthropic API key
- */
-async function getUserApiKey(userId: string): Promise<string | null> {
-  const store = useApiKeysStore.getState()
-
-  // Make sure keys are loaded
-  if (store.keys.length === 0) {
-    await store.fetchKeys(userId)
-  }
-
-  // Find a valid Anthropic key
-  const anthropicKey = store.keys.find(
-    k => k.provider === 'anthropic' && k.isValid
-  )
-
-  if (anthropicKey) {
-    const decrypted = await store.getDecryptedKey(anthropicKey.id)
-    if (decrypted) {
-      return decrypted
-    }
-  }
-
-  return null
-}
-
-/**
- * Get API key for execution based on subscription tier
- *
- * Strategy (per architecture/TIER-MODEL.md):
- * - Platform-funded tiers (free, demo, super admin): Use PLATFORM_API_KEY
- * - BYOK tiers (starter, professional, enterprise): Use user's stored key
- */
-async function getApiKey(userId?: string): Promise<{ key: string | null; source: 'platform' | 'user' | 'none'; error?: string }> {
-  const isPlatformFunded = isPlatformFundedPlan()
-
-  if (isPlatformFunded) {
-    // Platform-funded: use platform key
-    if (PLATFORM_API_KEY) {
-      console.log('[Executor] Platform-funded tier - using platform API key')
-      return { key: PLATFORM_API_KEY, source: 'platform' }
-    }
-    // Platform key not configured - this is a deployment issue
-    return { key: null, source: 'none', error: 'Platform API key not configured. Please contact support.' }
-  }
-
-  // BYOK tier: must use user's stored key
-  if (!userId) {
-    return { key: null, source: 'none', error: 'User ID required for BYOK tier' }
-  }
-
-  const userKey = await getUserApiKey(userId)
-  if (userKey) {
-    console.log('[Executor] BYOK tier - using user\'s stored Anthropic API key')
-    return { key: userKey, source: 'user' }
-  }
-
-  // BYOK tier but no key configured
-  const account = useAccountStore.getState().currentAccount()
-  const planName = account?.plan || 'your'
-  return {
-    key: null,
-    source: 'none',
-    error: `Your ${planName} plan requires you to bring your own API key. Please add your Anthropic API key in Settings > API Keys.`
-  }
-}
+import {
+  createLLMAdapter,
+  resolveLLMConfig,
+  isLLMConfigured,
+  type LLMMessage,
+  type LLMContentBlock,
+  type LLMToolDefinition,
+  type LLMResponse,
+} from '@/services/llm'
+import { getToolsForAgent } from '@/services/tools/agentToolBindings'
+import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
 
 // Maximum tool use iterations to prevent infinite loops
 const MAX_TOOL_ITERATIONS = 10
@@ -132,6 +35,7 @@ export interface ExecutionInput {
   accountId?: string // Required for tool execution
   userId?: string // Required for skill usage tracking
   enableTools?: boolean // Enable tool use (default: true)
+  executionId?: string // For audit trail correlation
 }
 
 export interface ToolUsage {
@@ -161,7 +65,7 @@ export type ExecutionStatusCallback = (
 ) => void
 
 // Build system prompt from agent persona
-function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: ToolDefinition[] = []): string {
+function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: LLMToolDefinition[] = []): string {
   const parts: string[] = []
 
   // Agent identity
@@ -247,6 +151,17 @@ function buildTaskPrompt(task: Task, additionalContext?: string): string {
   return parts.join('\n')
 }
 
+/**
+ * Convert Tool objects to LLMToolDefinition format
+ */
+function toLLMToolDefs(tools: Tool[]): LLMToolDefinition[] {
+  return tools.map(t => ({
+    name: t.definition.name,
+    description: t.definition.description,
+    parameters: t.definition.input_schema as LLMToolDefinition['parameters'],
+  }))
+}
+
 // Execute a task with an agent
 export async function executeTask(
   input: ExecutionInput,
@@ -256,10 +171,10 @@ export async function executeTask(
   const enableTools = input.enableTools !== false
   const accountId = input.accountId || ''
 
-  // Get API key based on subscription tier
-  const { key: apiKey, source: keySource, error: keyError } = await getApiKey(input.userId)
+  // Resolve LLM config (provider + API key) based on subscription tier
+  const resolved = await resolveLLMConfig('task-execution', input.userId)
 
-  if (!apiKey) {
+  if (!resolved.config) {
     return {
       success: false,
       content: '',
@@ -269,25 +184,57 @@ export async function executeTask(
         outputTokens: 0,
         durationMs: Date.now() - startTime,
       },
-      error: keyError || 'No Anthropic API key configured.',
+      error: resolved.error || 'No LLM API key configured.',
     }
   }
 
-  console.log(`[Executor] Using ${keySource} API key for execution`)
+  const { config, source: keySource } = resolved
+  console.log(`[Executor] Using ${keySource} ${config.provider} key (model: ${config.model})`)
+
+  // Skill provider compatibility check
+  if (input.skill?.compatibleProviders && input.skill.compatibleProviders.length > 0) {
+    const compatible = input.skill.compatibleProviders
+    if (!compatible.includes('universal') && !compatible.includes(config.provider as typeof compatible[number])) {
+      console.warn(`[Executor] Skill "${input.skill.name}" is not compatible with provider "${config.provider}" (requires: ${compatible.join(', ')})`)
+    }
+  }
 
   try {
     onStatusChange?.('building_prompt')
 
-    // Get available tools for this account
-    let tools: ToolDefinition[] = []
+    // Get available tools filtered by agent type
+    let tools: Tool[] = []
     if (enableTools && accountId) {
-      const availableTools = getAvailableTools(accountId, true)
-      tools = getToolDefinitions(availableTools)
-      console.log(`[Executor] ${tools.length} tools available for execution`)
+      const allowedToolNames = getToolsForAgent(input.agent)
+      const allTools = getAvailableTools(accountId, true)
+      tools = allowedToolNames.length > 0
+        ? allTools.filter(tool => allowedToolNames.includes(tool.name))
+        : allTools  // If no bindings defined, allow all (backward compat)
+
+      // Skill tool binding: ensure required tools are included
+      if (input.skill?.requiredTools && input.skill.requiredTools.length > 0) {
+        const toolNames = new Set(tools.map(t => t.name))
+        const missing = input.skill.requiredTools.filter(name => !toolNames.has(name))
+        if (missing.length > 0) {
+          // Add missing required tools from the full set
+          const extraTools = allTools.filter(t => missing.includes(t.name))
+          tools = [...tools, ...extraTools]
+          if (extraTools.length < missing.length) {
+            const stillMissing = missing.filter(name => !allTools.some(t => t.name === name))
+            console.warn(`[Executor] Skill "${input.skill.name}" requires tools not available: ${stillMissing.join(', ')}`)
+          }
+        }
+      }
+
+      console.log(`[Executor] ${tools.length} tools available for ${input.agent.alias} (${input.agent.agentType})`)
     }
 
-    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, tools)
+    const llmToolDefs = toLLMToolDefs(tools)
+    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)
+
+    // Create LLM adapter
+    const adapter = createLLMAdapter(config)
 
     // Track tool usage across iterations
     const toolsUsed: ToolUsage[] = []
@@ -295,9 +242,8 @@ export async function executeTask(
     let totalOutputTokens = 0
     let iterations = 0
 
-    // Build initial messages
-    type MessageContent = string | Array<{ type: string; text?: string; tool_use_id?: string; content?: string; is_error?: boolean; id?: string; name?: string; input?: Record<string, unknown> }>
-    const messages: Array<{ role: string; content: MessageContent }> = [
+    // Build initial messages in universal format
+    const messages: LLMMessage[] = [
       { role: 'user', content: userPrompt }
     ]
 
@@ -306,99 +252,119 @@ export async function executeTask(
       iterations++
       onStatusChange?.('calling_api', iterations > 1 ? `iteration ${iterations}` : undefined)
 
-      const requestBody: Record<string, unknown> = {
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8192,
+      const iterationStart = Date.now()
+      const response: LLMResponse = await adapter.chat(messages, {
         system: systemPrompt,
-        messages,
+        tools: llmToolDefs.length > 0 ? llmToolDefs : undefined,
+        maxTokens: 8192,
+      })
+      const iterationDurationMs = Date.now() - iterationStart
+
+      totalInputTokens += response.usage.inputTokens
+      totalOutputTokens += response.usage.outputTokens
+
+      // Audit: log each LLM call
+      if (accountId) {
+        logLLMCall({
+          executionId: input.executionId,
+          accountId,
+          agentId: input.agent.id,
+          taskId: input.task.id,
+          provider: config.provider,
+          model: response.model || config.model,
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          durationMs: iterationDurationMs,
+          stepIndex: iterations,
+        })
       }
 
-      // Add tools if available
-      if (tools.length > 0) {
-        requestBody.tools = tools
-      }
-
-      const response = await fetchWithRetry(
-        'https://api.anthropic.com/v1/messages',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify(requestBody),
-        }
+      // Check if LLM wants to use tools
+      const toolUseBlocks = response.content.filter(
+        (block: LLMContentBlock) => block.type === 'tool_use'
       )
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error?.message || `API error: ${response.status}`)
-      }
+      if (toolUseBlocks.length > 0 && response.stopReason === 'tool_use') {
+        // LLM wants to use tools
+        const toolNames = toolUseBlocks.map((t: LLMContentBlock) => t.toolName || 'unknown').join(', ')
+        onStatusChange?.('using_tools', toolNames)
+        console.log(`[Executor] LLM requesting tools: ${toolNames}`)
 
-      const data = await response.json()
-      totalInputTokens += data.usage?.input_tokens || 0
-      totalOutputTokens += data.usage?.output_tokens || 0
-
-      // Check if Claude wants to use tools
-      const toolUseBlocks = (data.content || []).filter(
-        (block: { type: string }) => block.type === 'tool_use'
-      ) as ToolUseRequest[]
-
-      if (toolUseBlocks.length > 0 && data.stop_reason === 'tool_use') {
-        // Claude wants to use tools
-        onStatusChange?.('using_tools', toolUseBlocks.map((t: ToolUseRequest) => t.name).join(', '))
-        console.log(`[Executor] Claude requesting tools: ${toolUseBlocks.map((t: ToolUseRequest) => t.name).join(', ')}`)
+        // Convert LLM tool blocks to ToolUseRequest format
+        const toolUseRequests: ToolUseRequest[] = toolUseBlocks.map((block: LLMContentBlock) => ({
+          type: 'tool_use' as const,
+          id: block.toolCallId || `tool_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          name: block.toolName || '',
+          input: (block.toolInput || {}) as Record<string, unknown>,
+        }))
 
         // Execute the tools
-        const toolResults = await processToolUses(toolUseBlocks, accountId)
+        const toolExecStart = Date.now()
+        const toolResults = await processToolUses(toolUseRequests, accountId)
+        const toolExecDuration = Date.now() - toolExecStart
 
-        // Track tool usage
-        for (let i = 0; i < toolUseBlocks.length; i++) {
+        // Track tool usage and audit log each tool call
+        for (let i = 0; i < toolUseRequests.length; i++) {
+          const success = !toolResults[i].is_error
           toolsUsed.push({
-            name: toolUseBlocks[i].name,
-            input: toolUseBlocks[i].input,
-            success: !toolResults[i].is_error,
+            name: toolUseRequests[i].name,
+            input: toolUseRequests[i].input,
+            success,
             error: toolResults[i].is_error ? toolResults[i].content : undefined,
           })
+
+          // Audit: log each tool invocation
+          if (accountId) {
+            logToolCall({
+              executionId: input.executionId,
+              accountId,
+              agentId: input.agent.id,
+              taskId: input.task.id,
+              toolName: toolUseRequests[i].name,
+              toolInput: toolUseRequests[i].input,
+              toolOutput: toolResults[i].content,
+              toolSuccess: success,
+              durationMs: Math.round(toolExecDuration / toolUseRequests.length),
+              stepIndex: iterations,
+            })
+          }
         }
 
-        // Add assistant's response (with tool_use blocks) to messages
+        // Add assistant's response to messages (with tool_use blocks)
         messages.push({
           role: 'assistant',
-          content: data.content,
+          content: response.content,
         })
 
         // Add tool results to messages
         messages.push({
           role: 'user',
           content: toolResults.map((result: ToolResultMessage) => ({
-            type: 'tool_result',
-            tool_use_id: result.tool_use_id,
-            content: result.content,
-            is_error: result.is_error,
+            type: 'tool_result' as const,
+            toolCallId: result.tool_use_id,
+            text: result.content,
+            isError: result.is_error,
           })),
         })
 
-        // Continue loop to get Claude's response with tool results
+        // Continue loop to get LLM's response with tool results
         continue
       }
 
-      // Claude returned a final response (no more tool use)
+      // LLM returned a final response (no more tool use)
       onStatusChange?.('processing')
 
       // Extract text content from response
-      const textBlocks = (data.content || []).filter(
-        (block: { type: string }) => block.type === 'text'
+      const textBlocks = response.content.filter(
+        (block: LLMContentBlock) => block.type === 'text'
       )
-      const content = textBlocks.map((block: { text: string }) => block.text).join('\n')
+      const content = textBlocks.map((block: LLMContentBlock) => block.text || '').join('\n')
 
       const result: ExecutionResult = {
         success: true,
         content,
         metadata: {
-          model: data.model || 'claude-sonnet-4-20250514',
+          model: response.model || config.model,
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           durationMs: Date.now() - startTime,
@@ -420,7 +386,7 @@ export async function executeTask(
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
             durationMs: Date.now() - startTime,
-            modelUsed: data.model || 'claude-sonnet-4-20250514',
+            modelUsed: response.model || config.model,
             toolsUsed: toolsUsed.map(t => ({ name: t.name, success: t.success })),
           })
         } catch (trackingError) {
@@ -436,7 +402,7 @@ export async function executeTask(
       success: false,
       content: '',
       metadata: {
-        model: 'claude-sonnet-4-20250514',
+        model: config.model,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         durationMs: Date.now() - startTime,
@@ -460,7 +426,7 @@ export async function executeTask(
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           durationMs: Date.now() - startTime,
-          modelUsed: 'claude-sonnet-4-20250514',
+          modelUsed: config.model,
           toolsUsed: toolsUsed.map(t => ({ name: t.name, success: t.success })),
         })
       } catch (trackingError) {
@@ -470,16 +436,28 @@ export async function executeTask(
 
     return maxIterResult
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     const errorResult: ExecutionResult = {
       success: false,
       content: '',
       metadata: {
-        model: 'claude-sonnet-4-20250514',
+        model: config.model,
         inputTokens: 0,
         outputTokens: 0,
         durationMs: Date.now() - startTime,
       },
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage,
+    }
+
+    // Audit: log execution error
+    if (accountId) {
+      logExecutionError({
+        executionId: input.executionId,
+        accountId,
+        agentId: input.agent.id,
+        taskId: input.task.id,
+        errorMessage,
+      })
     }
 
     // Track skill usage for errors
@@ -496,7 +474,7 @@ export async function executeTask(
           inputTokens: 0,
           outputTokens: 0,
           durationMs: Date.now() - startTime,
-          modelUsed: 'claude-sonnet-4-20250514',
+          modelUsed: config.model,
           toolsUsed: [],
         })
       } catch (trackingError) {
@@ -509,21 +487,14 @@ export async function executeTask(
 }
 
 // Check if execution is configured (sync check)
-// For platform-funded tiers, checks platform key
-// For BYOK tiers, returns true (actual key check happens at execution time)
 export function isExecutionConfigured(): boolean {
-  // If platform-funded, check platform key
-  if (isPlatformFundedPlan()) {
-    return !!PLATFORM_API_KEY
-  }
-  // For BYOK tiers, assume configured (will check user key at execution)
-  return true
+  return isLLMConfigured()
 }
 
 // Async check that verifies actual key availability based on tier
 export async function isExecutionConfiguredAsync(userId?: string): Promise<boolean> {
-  const { key } = await getApiKey(userId)
-  return !!key
+  const resolved = await resolveLLMConfig('task-execution', userId)
+  return !!resolved.config
 }
 
 // Get the prompts that would be used (for preview/debugging)
@@ -534,12 +505,18 @@ export function previewExecution(input: ExecutionInput): {
 } {
   const accountId = input.accountId || ''
   const enableTools = input.enableTools !== false
-  const tools = enableTools && accountId
-    ? getAvailableTools(accountId, true)
-    : []
+
+  let tools: Tool[] = []
+  if (enableTools && accountId) {
+    const allowedToolNames = getToolsForAgent(input.agent)
+    const allTools = getAvailableTools(accountId, true)
+    tools = allowedToolNames.length > 0
+      ? allTools.filter(tool => allowedToolNames.includes(tool.name))
+      : allTools
+  }
 
   return {
-    systemPrompt: buildAgentSystemPrompt(input.agent, input.skill, getToolDefinitions(tools)),
+    systemPrompt: buildAgentSystemPrompt(input.agent, input.skill, toLLMToolDefs(tools)),
     userPrompt: buildTaskPrompt(input.task, input.additionalContext),
     toolsAvailable: tools.map(t => t.name),
   }

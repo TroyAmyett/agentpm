@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "record": "npx tsx scripts/record-radar.ts",
     "record:list": "npx tsx scripts/record-radar.ts --list",
-    "record:all": "npx tsx scripts/record-radar.ts --all"
+    "record:all": "npx tsx scripts/record-radar.ts --all",
+    "heygen": "npx tsx scripts/produce-heygen.ts",
+    "heygen:upload": "npx tsx scripts/produce-heygen.ts --upload",
+    "heygen:produce": "npx tsx scripts/produce-heygen.ts --produce",
+    "heygen:status": "npx tsx scripts/produce-heygen.ts --status",
+    "heygen:download": "npx tsx scripts/produce-heygen.ts --download"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

@@ -36,6 +36,9 @@ import { ProjectsPage } from './Projects'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
 import { routeTask, analyzeTaskForDecomposition } from '@/services/agents/dispatcher'
+import { generatePlan } from '@/services/planner'
+import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
+import { createSubtasksFromPlan, createNextStep, advancePlanStep, storePlanOnTask, getPlanCurrentStep } from '@/services/planner/planExecutor'
 import { BUILT_IN_TOOLS } from '@/services/tools'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
@@ -92,7 +95,7 @@ export function AgentPMPage() {
 
   const { user } = useAuthStore()
   const { accounts, currentAccountId, fetchAccounts, initializeUserAccounts } = useAccountStore()
-  const { agents, fetchAgents, subscribeToAgents, pauseAgent, resumeAgent, resetAgentHealth } = useAgentStore()
+  const { agents, fetchAgents, subscribeToAgents, pauseAgent, resumeAgent, resetAgentHealth, setAutonomyOverride, clearAutonomyOverride, getAgent: getAgentFromStore } = useAgentStore()
   const { projects, fetchProjects } = useProjectStore()
   const { taskViewMode, setTaskViewMode } = useUIStore()
   const { skills, fetchSkills } = useSkillStore()
@@ -479,48 +482,89 @@ export function AgentPMPage() {
         // Find the Dispatch/orchestrator agent for createdBy attribution
         const dispatchAgent = agents.find((a) => a.agentType === 'orchestrator' && a.isActive)
 
-        // Check if this is a multi-step task that needs decomposition
-        // Only decompose root tasks (no parentTaskId) to avoid recursive decomposition
-        // Also check if subtasks already exist (prevents duplicate decomposition on re-renders)
+        // Dynamic Planner: Generate an action plan based on available agents, tools, and trust scores
+        // Only plan root tasks (no parentTaskId) to avoid recursive planning
+        // Also check if subtasks already exist (prevents duplicate planning on re-renders)
         const existingSubtasks = tasks.filter(t => t.parentTaskId === task.id)
         if (!task.parentTaskId && existingSubtasks.length === 0) {
+          console.log(`[Planner] Generating plan for "${task.title}"...`)
+          const plan = await generatePlan(task, agents, accountId)
+
+          if (plan && plan.steps.length > 0) {
+            console.log(`[Planner] Plan: ${plan.steps.length} steps, confidence: ${(plan.confidence.score * 100).toFixed(0)}% (${plan.executionMode})`)
+
+            if (plan.executionMode === 'auto' && plan.steps.length > 1) {
+              // HIGH CONFIDENCE: Create all subtasks and auto-execute
+              await updateTaskStatus(taskId, 'in_progress', userId,
+                `Auto-executing plan (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
+              await storePlanOnTask(taskId, plan)
+
+              const createTaskFn = async (data: Record<string, unknown>) => {
+                return createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
+              }
+              const createdIds = await createSubtasksFromPlan(
+                plan.steps, task, accountId, userId, createTaskFn, createTaskDependency
+              )
+              console.log(`[Planner] Auto-executing: created ${createdIds.length} subtasks`)
+              return
+            }
+
+            if (plan.executionMode === 'plan-then-execute' && plan.steps.length > 1) {
+              // MEDIUM CONFIDENCE: Store plan, show for approval
+              await storePlanOnTask(taskId, plan)
+              await updateTaskStatus(taskId, 'review', userId,
+                `Plan generated - awaiting approval (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
+              console.log(`[Planner] Plan-then-execute: awaiting approval`)
+              return
+            }
+
+            if (plan.executionMode === 'step-by-step' && plan.steps.length > 1) {
+              // LOW CONFIDENCE: Store plan, create only first step
+              await storePlanOnTask(taskId, plan)
+              await updateTaskStatus(taskId, 'review', userId,
+                `Step-by-step mode - approve each step (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
+              console.log(`[Planner] Step-by-step: awaiting step 1 approval`)
+              return
+            }
+
+            // Single-step plan: route directly to the assigned agent
+            if (plan.steps.length === 1) {
+              const step = plan.steps[0]
+              console.log(`[Planner] Single-step plan → ${step.agentAlias} (${plan.confidence.reasoning})`)
+              await storePlanOnTask(taskId, plan)
+              await assignTask(taskId, step.agentId, 'agent', userId)
+              await updateTaskStatus(taskId, 'queued', userId,
+                `Planned → ${step.agentAlias} (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
+              return
+            }
+          }
+
+          // Fallback: if planner returned null, try legacy decomposition
+          console.log(`[Planner] Falling back to legacy decomposition...`)
           const decomposition = await analyzeTaskForDecomposition(task, agents)
-          console.log(`[Dispatch] Decomposition result:`, decomposition)
-
           if (decomposition.isMultiStep && decomposition.steps.length > 1) {
-            // Mark parent as in_progress IMMEDIATELY to prevent race conditions
-            // (otherwise a re-render could trigger decomposition again while creating subtasks)
             await updateTaskStatus(taskId, 'in_progress', userId, 'Decomposing into sub-tasks...')
-            console.log(`Dispatch decomposing task into ${decomposition.steps.length} steps: ${decomposition.reasoning}`)
 
-            // Create sub-tasks for each step
             const createdSubTaskIds: string[] = []
-
             for (let i = 0; i < decomposition.steps.length; i++) {
               const step = decomposition.steps[i]
-
-              // Find the appropriate agent for this step
               const stepAgent = agents.find(
                 (a) => a.agentType === step.agentType && a.isActive && !a.pausedAt
               ) || agents.find((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
 
               if (!stepAgent) continue
 
-              // Determine if this step has a dependency (handle both null and undefined from AI)
               const hasDependency = step.dependsOnIndex != null && step.dependsOnIndex >= 0
-
-              // Create the sub-task (use dispatchAgent.id for attribution, fallback to userId)
               const creatorId = dispatchAgent?.id || userId
               const creatorType = dispatchAgent ? 'agent' as const : 'user' as const
 
-              const subTaskData = {
+              const subTask = await createTask({
                 title: step.title,
                 description: `${step.description}\n\n---\nPart of: ${task.title}`,
                 priority: task.priority,
                 projectId: task.projectId,
                 parentTaskId: task.id,
                 accountId,
-                // First task (or task with no deps) goes to queued, others wait for dependencies
                 status: (i === 0 || !hasDependency) ? 'queued' as const : 'pending' as const,
                 assignedTo: stepAgent.id,
                 assignedToType: 'agent' as const,
@@ -528,37 +572,19 @@ export function AgentPMPage() {
                 createdByType: creatorType,
                 updatedBy: creatorId,
                 updatedByType: creatorType,
-              }
+              } as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
 
-              const subTask = await createTask(subTaskData as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
               if (subTask) {
                 createdSubTaskIds.push(subTask.id)
-                console.log(`Created sub-task ${i + 1}/${decomposition.steps.length}: "${step.title}" → ${stepAgent.alias}`)
-
-                // Create TaskDependency if this step depends on a previous step
                 if (hasDependency && step.dependsOnIndex! < createdSubTaskIds.length) {
-                  const dependsOnTaskId = createdSubTaskIds[step.dependsOnIndex!]
                   try {
-                    // Pre-register block synchronously so auto-queue/chaining see it
-                    // before the async DB call in createTaskDependency completes
-                    const taskStore = useTaskStore.getState()
-                    const preBlocked = new Map(taskStore.blockedTasks)
-                    preBlocked.set(subTask.id, (preBlocked.get(subTask.id) || 0) + 1)
-                    useTaskStore.setState({ blockedTasks: preBlocked })
-
-                    await createTaskDependency(subTask.id, dependsOnTaskId, accountId, creatorId)
-                    console.log(`Created dependency: "${step.title}" depends on step ${step.dependsOnIndex! + 1}`)
+                    await createTaskDependency(subTask.id, createdSubTaskIds[step.dependsOnIndex!], accountId, creatorId)
                   } catch (depErr) {
                     console.error('Failed to create task dependency:', depErr)
                   }
                 }
               }
             }
-
-            // Update the status note to show decomposition is complete
-            // (task was already marked in_progress above to prevent race conditions)
-            console.log(`[Dispatch] Decomposed "${task.title}" into ${createdSubTaskIds.length} sub-tasks`)
-
             return
           }
         }
@@ -621,6 +647,33 @@ export function AgentPMPage() {
       setAssignAgentTask(null)
     },
     [assignAgentTask, assignTask, updateTaskStatus, userId, agents, isTaskExecuting, skills, runTask, accountId]
+  )
+
+  // Handle plan approval - creates subtasks from the stored plan
+  const handleApprovePlan = useCallback(
+    async (taskId: string, plan: ExecutionPlan) => {
+      const task = getTask(taskId)
+      if (!task) return
+
+      const createTaskFn = async (data: Record<string, unknown>) => {
+        return await createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
+      }
+
+      if (plan.executionMode === 'step-by-step') {
+        // Step-by-step: create next step only
+        const currentStep = getPlanCurrentStep(task)
+        const stepId = await createNextStep(plan, currentStep, task, accountId, userId, createTaskFn)
+        if (stepId) {
+          await advancePlanStep(taskId)
+          await updateTaskStatus(taskId, 'in_progress', userId, `Approved step ${currentStep + 1} of ${plan.steps.length}`)
+        }
+      } else {
+        // Plan-then-execute: create all subtasks at once
+        await createSubtasksFromPlan(plan.steps, task, accountId, userId, createTaskFn, createTaskDependency)
+        await updateTaskStatus(taskId, 'in_progress', userId, 'Plan approved - executing all steps')
+      }
+    },
+    [getTask, createTask, accountId, userId, updateTaskStatus, createTaskDependency]
   )
 
   // Handle task deletion
@@ -896,11 +949,13 @@ export function AgentPMPage() {
                           allTasks={tasks}
                           accountId={accountId}
                           userId={userId}
+                          agents={agents}
                           onClose={() => setSelectedTaskId(null)}
                           onUpdateStatus={handleUpdateStatus}
                           onDelete={() => handleDeleteTask(selectedTask.id)}
                           onEdit={() => setEditingTask(selectedTask)}
                           onDependencyChange={() => fetchTasks(accountId)}
+                          onApprovePlan={handleApprovePlan}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full text-surface-500">
@@ -978,11 +1033,13 @@ export function AgentPMPage() {
                   allTasks={tasks}
                   accountId={accountId}
                   userId={userId}
+                  agents={agents}
                   onClose={() => setSelectedTaskId(null)}
                   onUpdateStatus={handleUpdateStatus}
                   onDelete={() => handleDeleteTask(selectedTask.id)}
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
+                  onApprovePlan={handleApprovePlan}
                 />
               </div>
             )}
@@ -997,11 +1054,13 @@ export function AgentPMPage() {
                   allTasks={tasks}
                   accountId={accountId}
                   userId={userId}
+                  agents={agents}
                   onClose={() => setSelectedTaskId(null)}
                   onUpdateStatus={handleUpdateStatus}
                   onDelete={() => handleDeleteTask(selectedTask.id)}
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
+                  onApprovePlan={handleApprovePlan}
                 />
               </div>
             )}
@@ -1016,11 +1075,13 @@ export function AgentPMPage() {
                   allTasks={tasks}
                   accountId={accountId}
                   userId={userId}
+                  agents={agents}
                   onClose={() => setSelectedTaskId(null)}
                   onUpdateStatus={handleUpdateStatus}
                   onDelete={() => handleDeleteTask(selectedTask.id)}
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
+                  onApprovePlan={handleApprovePlan}
                 />
               </div>
             )}
@@ -1372,6 +1433,16 @@ export function AgentPMPage() {
             setSelectedAgent(null)
             setPreselectedAgentId(agentId)
             setIsCreateTaskOpen(true)
+          }}
+          onSetAutonomyOverride={async (agentId, level) => {
+            await setAutonomyOverride(agentId, level, userId)
+            const updated = getAgentFromStore(agentId)
+            if (updated) setSelectedAgent(updated)
+          }}
+          onClearAutonomyOverride={async (agentId) => {
+            await clearAutonomyOverride(agentId, userId)
+            const updated = getAgentFromStore(agentId)
+            if (updated) setSelectedAgent(updated)
           }}
         />
       )}

@@ -1,5 +1,5 @@
 // API Retry Utility - Handles rate limiting with exponential backoff
-// Anthropic API has a 5 requests/minute rate limit, so we need longer delays
+// LLM APIs often have rate limits, so we use longer delays with jitter
 
 export interface RetryConfig {
   maxRetries: number
@@ -100,29 +100,3 @@ export async function fetchWithRetry(
   throw lastError || new Error('API request failed after max retries')
 }
 
-// Wrapper specifically for Anthropic API calls
-export async function anthropicFetchWithRetry(
-  body: object,
-  config: RetryConfig = DEFAULT_CONFIG
-): Promise<Response> {
-  const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('Anthropic API key not configured')
-  }
-
-  return fetchWithRetry(
-    'https://api.anthropic.com/v1/messages',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
-    },
-    config
-  )
-}

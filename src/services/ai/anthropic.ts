@@ -1,7 +1,6 @@
 import { buildKnowledgeContext } from '@/services/agentpm/knowledgeService'
 import type { FunnelistsTool } from '@/types/agentpm'
-
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+import { createLLMAdapter, resolveLLMConfig, type LLMMessage, type LLMContentBlock } from '@/services/llm'
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -16,11 +15,6 @@ interface ContentBlock {
   input?: Record<string, unknown>
   tool_use_id?: string
   content?: string
-}
-
-interface AnthropicResponse {
-  content: ContentBlock[]
-  stop_reason: 'end_turn' | 'tool_use' | 'max_tokens'
 }
 
 interface Tool {
@@ -178,39 +172,46 @@ async function performWebSearch(query: string): Promise<WebSearchResult[]> {
   return data.results || []
 }
 
-export const isAnthropicConfigured = () => !!ANTHROPIC_API_KEY
+export const isAnthropicConfigured = () => {
+  // With LLM abstraction, check if any provider is configured
+  const envKey = import.meta.env.VITE_ANTHROPIC_API_KEY || import.meta.env.VITE_OPENAI_API_KEY
+  return !!envKey
+}
 
 export async function callClaude(
   messages: AnthropicMessage[],
   systemPrompt?: string
 ): Promise<string> {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('Anthropic API key not configured')
+  const resolved = await resolveLLMConfig('chat-assistant')
+  if (!resolved.config) {
+    throw new Error(resolved.error || 'No LLM API key configured')
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app. Be concise and helpful.',
-      messages,
-    }),
+  const adapter = createLLMAdapter(resolved.config)
+
+  // Convert AnthropicMessage format to LLMMessage format
+  const llmMessages: LLMMessage[] = messages.map(m => ({
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content : m.content.map(b => ({
+      type: b.type as LLMContentBlock['type'],
+      text: b.text,
+      toolCallId: b.id || b.tool_use_id,
+      toolName: b.name,
+      toolInput: b.input,
+    })),
+  }))
+
+  const response = await adapter.chat(llmMessages, {
+    system: systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app. Be concise and helpful.',
+    maxTokens: 4096,
   })
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || 'Failed to call Claude API')
-  }
+  const textContent = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text || '')
+    .join('')
 
-  const data: AnthropicResponse = await response.json()
-  return data.content[0]?.text || ''
+  return textContent
 }
 
 // AI writing actions
@@ -293,6 +294,17 @@ export interface ChatContextOptions {
   toolName?: FunnelistsTool
 }
 
+/**
+ * Convert local Tool definitions to LLM tool format
+ */
+function toLLMTools(tools: Tool[]) {
+  return tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.input_schema as { type: 'object'; properties: Record<string, unknown>; required?: string[] },
+  }))
+}
+
 // Chat with notes - focuses on the active note with hierarchical knowledge context
 export async function chatWithNotes(
   userMessage: string,
@@ -325,7 +337,6 @@ export async function chatWithNotes(
     : ''
 
   if (activeNote) {
-    // User has a note open - focus on helping with that note only
     systemPrompt = `You are an AI assistant in AgentPM, helping the user work on their note titled "${activeNote.title}".
 ${knowledgeSection}
 YOUR PRIMARY FOCUS: The user is currently working on the note below. Help them brainstorm ideas, expand on concepts, suggest features, answer questions about this content, or help in any way they need.
@@ -357,7 +368,6 @@ WHEN TO CREATE TASKS:
 
 Be helpful, creative, and proactive. If they ask a general question, relate it back to what they're working on when relevant. Suggest ideas, point out potential improvements, and help them develop their thoughts.`
   } else {
-    // No active note - general assistant mode
     systemPrompt = `You are an AI assistant in AgentPM. The user doesn't have a note open right now.
 ${knowledgeSection}
 Be helpful, concise, and accurate.
@@ -380,20 +390,33 @@ WHEN TO CREATE TASKS:
 To help with a specific note, ask the user to open it first.`
   }
 
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('Anthropic API key not configured')
+  // Resolve LLM config
+  const resolved = await resolveLLMConfig('chat-assistant')
+  if (!resolved.config) {
+    throw new Error(resolved.error || 'No LLM API key configured')
   }
 
+  const adapter = createLLMAdapter(resolved.config)
+
   // Build tools array - always include web search and task creation
-  const tools = activeNote
+  const localTools = activeNote
     ? [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS]
     : [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS.filter(t => t.name === 'create_new_note')]
 
-  // Build messages array for API - this will be mutated during tool use loop
-  const apiMessages: Array<{ role: 'user' | 'assistant'; content: string | ContentBlock[] }> = [
+  const llmTools = toLLMTools(localTools)
+
+  // Build messages array for API
+  const apiMessages: LLMMessage[] = [
     ...chatHistory.map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: typeof m.content === 'string' ? m.content : m.content.map((b: ContentBlock) => ({
+        type: b.type as LLMContentBlock['type'],
+        text: b.text || b.content,
+        toolCallId: b.id || b.tool_use_id,
+        toolName: b.name,
+        toolInput: b.input,
+        isError: false,
+      })),
     })),
     { role: 'user' as const, content: userMessage },
   ]
@@ -404,56 +427,37 @@ To help with a specific note, ask the user to open it first.`
   let webSearchUsed = false
   let taskCreated = false
   let iterationCount = 0
-  const maxIterations = 5 // Prevent infinite loops
+  const maxIterations = 5
 
-  // Tool use loop - continue until Claude finishes or we hit max iterations
+  // Tool use loop
   while (iterationCount < maxIterations) {
     iterationCount++
     onStatusChange?.('thinking')
 
-    // Call Claude with tools
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: apiMessages,
-        tools,
-      }),
+    const response = await adapter.chat(apiMessages, {
+      system: systemPrompt,
+      tools: llmTools,
+      maxTokens: 4096,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error?.message || 'Failed to call Claude API')
-    }
-
-    const data: AnthropicResponse = await response.json()
 
     // Collect tool uses and text from this response
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
-    for (const block of data.content) {
+    for (const block of response.content) {
       if (block.type === 'text' && block.text) {
         textResponse += block.text
-      } else if (block.type === 'tool_use' && block.id && block.name && block.input) {
-        toolUses.push({ id: block.id, name: block.name, input: block.input })
+      } else if (block.type === 'tool_use' && block.toolCallId && block.toolName && block.toolInput) {
+        toolUses.push({ id: block.toolCallId, name: block.toolName, input: block.toolInput })
       }
     }
 
     // If no tool use, we're done
-    if (data.stop_reason !== 'tool_use' || toolUses.length === 0) {
+    if (response.stopReason !== 'tool_use' || toolUses.length === 0) {
       break
     }
 
     // Process tool uses and collect results
-    const toolResults: ContentBlock[] = []
+    const toolResults: LLMContentBlock[] = []
 
     for (const toolUse of toolUses) {
       let toolResult = ''
@@ -515,15 +519,15 @@ To help with a specific note, ask the user to open it first.`
 
       toolResults.push({
         type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: toolResult,
+        toolCallId: toolUse.id,
+        text: toolResult,
       })
     }
 
     // Add assistant response and tool results to messages for next iteration
     apiMessages.push({
       role: 'assistant',
-      content: data.content,
+      content: response.content,
     })
     apiMessages.push({
       role: 'user',

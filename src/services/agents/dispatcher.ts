@@ -1,11 +1,10 @@
 // Dispatcher Service - Smart task routing to agents
 // Analyzes tasks and assigns to the best-suited agent based on capabilities
 // Supports multi-step task decomposition for complex workflows
+// LLM-agnostic: uses provider abstraction layer
 
 import type { Task, AgentPersona } from '@/types/agentpm'
-import { fetchWithRetry } from './apiRetry'
-
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+import { createLLMAdapter, resolveLLMConfig, type LLMMessage } from '@/services/llm'
 
 export interface RoutingDecision {
   agentId: string
@@ -81,12 +80,16 @@ export async function routeTask(input: RoutingInput): Promise<RoutingDecision | 
     }
   }
 
-  if (!ANTHROPIC_API_KEY) {
+  // Try to resolve LLM config for routing
+  const resolved = await resolveLLMConfig('task-routing')
+  if (!resolved.config) {
     // Fallback: simple keyword matching
     return fallbackRouting(task, availableAgents)
   }
 
   try {
+    const adapter = createLLMAdapter(resolved.config)
+
     const systemPrompt = `You are Dispatch, an AI orchestrator responsible for routing tasks to the right agent.
 
 Analyze the task and select the BEST agent to handle it based on their capabilities and specializations.
@@ -114,32 +117,19 @@ Description: ${task.description || 'No description'}
 Priority: ${task.priority}
 ${task.input ? `Additional Context: ${JSON.stringify(task.input)}` : ''}`
 
-    const response = await fetchWithRetry(
-      'https://api.anthropic.com/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
-      }
-    )
+    const messages: LLMMessage[] = [
+      { role: 'user', content: userPrompt },
+    ]
 
-    if (!response.ok) {
-      console.error('Routing API error:', response.status)
-      return fallbackRouting(task, availableAgents)
-    }
+    const response = await adapter.chat(messages, {
+      system: systemPrompt,
+      maxTokens: 500,
+    })
 
-    const data = await response.json()
-    const content = data.content?.[0]?.text || ''
+    const content = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text || '')
+      .join('')
 
     // Parse JSON response
     const jsonMatch = content.match(/\{[\s\S]*\}/)
@@ -216,7 +206,9 @@ function fallbackRouting(task: Task, agents: AgentPersona[]): RoutingDecision {
 
 // Check if dispatcher is configured
 export function isDispatcherConfigured(): boolean {
-  return !!ANTHROPIC_API_KEY
+  // With the LLM abstraction, we can always attempt routing
+  // If no LLM is configured, fallback routing will be used
+  return true
 }
 
 // Analyze a task to determine if it needs to be decomposed into multiple steps
@@ -254,12 +246,15 @@ export async function analyzeTaskForDecomposition(
     }
   }
 
-  // If no API key, use fallback decomposition
-  if (!ANTHROPIC_API_KEY) {
+  // Try to resolve LLM config for decomposition
+  const resolved = await resolveLLMConfig('decomposition')
+  if (!resolved.config) {
     return fallbackDecomposition(task, agents)
   }
 
   try {
+    const adapter = createLLMAdapter(resolved.config)
+
     const availableAgentTypes = [...new Set(
       agents
         .filter((a) => a.isActive && !a.pausedAt && a.agentType !== 'orchestrator')
@@ -307,32 +302,19 @@ Rules:
 Title: ${task.title}
 Description: ${task.description || 'No description'}`
 
-    const response = await fetchWithRetry(
-      'https://api.anthropic.com/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
-      }
-    )
+    const messages: LLMMessage[] = [
+      { role: 'user', content: userPrompt },
+    ]
 
-    if (!response.ok) {
-      console.error('Decomposition API error:', response.status)
-      return fallbackDecomposition(task, agents)
-    }
+    const response = await adapter.chat(messages, {
+      system: systemPrompt,
+      maxTokens: 1000,
+    })
 
-    const data = await response.json()
-    const content = data.content?.[0]?.text || ''
+    const content = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text || '')
+      .join('')
 
     // Parse JSON response
     const jsonMatch = content.match(/\{[\s\S]*\}/)

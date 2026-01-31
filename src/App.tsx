@@ -18,6 +18,7 @@ import { AgentPMPage } from '@/components/AgentPM'
 import { SettingsPage } from '@/components/Settings/SettingsPage'
 import { AccountSwitcher } from '@/components/AccountSwitcher/AccountSwitcher'
 import { ChangelogBadge, ChangelogDrawer, WhatsNewModal } from '@/components/Changelog'
+import { ResetPasswordPage } from '@/components/Auth/ResetPasswordPage'
 // AcceptInvitation component available at: @/components/Auth/AcceptInvitation
 import { Loader2 } from 'lucide-react'
 import {
@@ -229,6 +230,12 @@ function HorizontalNav({
 function App() {
   const { initialized, isAuthenticated } = useAuth()
   const { session } = useAuthStore()
+
+  // Detect password recovery flow from URL pathname
+  // Supabase redirects here with recovery tokens in the URL hash
+  if (window.location.pathname === '/reset-password') {
+    return <ResetPasswordPage />
+  }
   useSyncQueue()
 
   const [currentView, setCurrentView] = useState<AppView>(getViewFromHash)

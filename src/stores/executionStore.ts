@@ -6,6 +6,7 @@ import type { Task, AgentPersona, Skill } from '@/types/agentpm'
 import { executeTask, type ExecutionResult, type ExecutionStatusCallback } from '@/services/agents/executor'
 import { parseAgentOutput } from '@/services/agents/outputParser'
 import { uploadAgentOutputFiles, type Attachment } from '@/services/attachments/attachmentService'
+import { processExecutionOutcome } from '@/services/trust/annealingLoop'
 import { useTaskStore } from './taskStore'
 
 export type ExecutionStatus =
@@ -387,6 +388,24 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
           updatedAt: new Date().toISOString(),
         })
       }
+
+      // Self-annealing: feed execution outcome into trust engine
+      // This updates agent health, streaks, autonomy, and pattern learning
+      processExecutionOutcome({
+        executionId,
+        taskId: task.id,
+        agentId: agent.id,
+        accountId,
+        success: result.success,
+        toolsUsed: (result.metadata.toolsUsed || []).map(t => ({
+          name: t.name,
+          success: t.success,
+        })),
+        durationMs: result.metadata.durationMs,
+        inputTokens: result.metadata.inputTokens,
+        outputTokens: result.metadata.outputTokens,
+        patternKey: (task.input as Record<string, unknown>)?.planPatternKey as string | undefined,
+      }).catch(err => console.warn('[Execution] Annealing loop error (non-fatal):', err))
 
       // Parse agent output for files and upload to storage
       let attachments: Attachment[] = []

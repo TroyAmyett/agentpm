@@ -41,6 +41,7 @@ function createDemoAgents(accountId: string): AgentPersona[] {
     canSpawnAgents: partial.canSpawnAgents || false,
     canModifySelf: partial.canModifySelf || false,
     consecutiveFailures: partial.consecutiveFailures || 0,
+    consecutiveSuccesses: partial.consecutiveSuccesses || 0,
     maxConsecutiveFailures: partial.maxConsecutiveFailures || 5,
     healthStatus: partial.healthStatus || 'healthy',
     isActive: partial.isActive ?? true,
@@ -48,11 +49,12 @@ function createDemoAgents(accountId: string): AgentPersona[] {
     showInOrgChart: partial.showInOrgChart ?? true,
     sortOrder: partial.sortOrder || index + 1,
     reportsTo: partial.reportsTo,
+    tools: partial.tools,
     stats: {
-      tasksCompleted: Math.floor(Math.random() * 50) + 5,
-      tasksFailed: Math.floor(Math.random() * 5),
-      successRate: 0.85 + Math.random() * 0.14,
-      avgExecutionTime: 5000 + Math.random() * 55000,
+      tasksCompleted: 0,
+      tasksFailed: 0,
+      successRate: 1.0, // Start trusted; real stats computed from task_executions
+      avgExecutionTime: 0,
     },
   }))
 }
@@ -74,6 +76,8 @@ interface AgentState {
   pauseAgent: (id: string, userId: string, reason: string) => Promise<void>
   resumeAgent: (id: string, userId: string) => Promise<void>
   resetAgentHealth: (id: string, userId: string) => Promise<void>
+  setAutonomyOverride: (id: string, level: AgentPersona['autonomyLevel'], userId: string) => Promise<void>
+  clearAutonomyOverride: (id: string, userId: string) => Promise<void>
 
   // Realtime handlers
   handleRemoteAgentChange: (agent: AgentPersona) => void
@@ -177,8 +181,30 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   resetAgentHealth: async (id, userId) => {
     await get().updateAgent(id, {
       consecutiveFailures: 0,
+      consecutiveSuccesses: 0,
       healthStatus: 'healthy',
       lastHealthCheck: new Date().toISOString(),
+      updatedBy: userId,
+      updatedByType: 'user',
+    })
+  },
+
+  setAutonomyOverride: async (id, level, userId) => {
+    await get().updateAgent(id, {
+      autonomyLevel: level,
+      autonomyOverride: level,
+      autonomyOverrideBy: userId,
+      autonomyOverrideAt: new Date().toISOString(),
+      updatedBy: userId,
+      updatedByType: 'user',
+    })
+  },
+
+  clearAutonomyOverride: async (id, userId) => {
+    await get().updateAgent(id, {
+      autonomyOverride: undefined,
+      autonomyOverrideBy: undefined,
+      autonomyOverrideAt: undefined,
       updatedBy: userId,
       updatedByType: 'user',
     })

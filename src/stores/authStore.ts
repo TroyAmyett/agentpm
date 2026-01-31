@@ -9,6 +9,7 @@ interface AuthState {
   loading: boolean
   error: string | null
   initialized: boolean
+  isPasswordRecovery: boolean
 
   // Actions
   initialize: () => Promise<void>
@@ -16,6 +17,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
+  updatePassword: (newPassword: string) => Promise<void>
   clearError: () => void
 }
 
@@ -25,6 +27,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   error: null,
   initialized: false,
+  isPasswordRecovery: false,
 
   initialize: async () => {
     if (get().initialized) return
@@ -35,10 +38,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     // Always listen for auth changes (sign-in, sign-out, token refresh)
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       set({
         user: session?.user ?? null,
         session,
+        // Set recovery flag when Supabase detects a password recovery token
+        isPasswordRecovery: event === 'PASSWORD_RECOVERY' ? true : get().isPasswordRecovery,
       })
     })
 
@@ -111,6 +116,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ loading: false })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Password reset failed'
+      set({ loading: false, error: message })
+      throw err
+    }
+  },
+
+  updatePassword: async (newPassword) => {
+    set({ loading: true, error: null })
+    try {
+      await authService.updatePassword(newPassword)
+      set({ loading: false, isPasswordRecovery: false })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Password update failed'
       set({ loading: false, error: message })
       throw err
     }

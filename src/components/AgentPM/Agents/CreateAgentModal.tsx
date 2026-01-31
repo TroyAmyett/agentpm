@@ -107,6 +107,7 @@ export function CreateAgentModal({
         canModifySelf: false,
         isActive: true,
         consecutiveFailures: 0,
+        consecutiveSuccesses: 0,
         maxConsecutiveFailures: 5,
         healthStatus: 'healthy',
         showOnDashboard: true,

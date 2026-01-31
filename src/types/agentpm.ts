@@ -152,6 +152,8 @@ export type AutonomyLevel = 'supervised' | 'semi-autonomous' | 'autonomous'
 
 export type HealthStatus = 'healthy' | 'degraded' | 'failing' | 'stopped'
 
+export type ExecutionMode = 'auto' | 'plan-then-execute' | 'step-by-step'
+
 export interface AgentPersona extends BaseEntity {
   agentType: AgentType | string
 
@@ -174,6 +176,7 @@ export interface AgentPersona extends BaseEntity {
   capabilities: string[]
   restrictions: string[]
   triggers: string[]
+  tools?: string[] // Tool names this agent can use. undefined = all tools (backward compat)
 
   // Autonomy Settings (ASI Safety)
   autonomyLevel: AutonomyLevel
@@ -189,11 +192,18 @@ export interface AgentPersona extends BaseEntity {
   pausedBy?: string
   pauseReason?: string
   consecutiveFailures: number
+  consecutiveSuccesses: number
   maxConsecutiveFailures: number
   lastHealthCheck?: string
+  lastExecutionAt?: string
   healthStatus: HealthStatus
 
-  // Stats (computed)
+  // Trust & Autonomy override
+  autonomyOverride?: AutonomyLevel  // User's manual override, null = auto-computed
+  autonomyOverrideBy?: string
+  autonomyOverrideAt?: string
+
+  // Stats (computed from task_executions)
   stats?: AgentStats
 
   // Display
@@ -777,12 +787,14 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     tagline: 'Mission control',
     capabilities: ['route-tasks', 'coordinate-agents', 'monitor'],
     restrictions: ['write-content', 'publish'],
+    tools: [],
     triggers: ['task-queue', 'schedule:hourly'],
     autonomyLevel: 'semi-autonomous',
     requiresApproval: ['spawn-agent'],
     canSpawnAgents: true,
     canModifySelf: false,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
     maxConsecutiveFailures: 5,
     healthStatus: 'healthy',
     isActive: true,
@@ -798,12 +810,14 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     tagline: 'Your content autopilot',
     capabilities: ['web-research', 'write-content', 'generate-images', 'post-to-cms'],
     restrictions: ['edit-production', 'delete-records'],
+    tools: ['web_search', 'fetch_url', 'publish_blog_post', 'generate_image', 'create_landing_page'],
     triggers: ['manual', 'task-queue'],
     autonomyLevel: 'semi-autonomous',
     requiresApproval: ['publish', 'delete', 'send-email'],
     canSpawnAgents: false,
     canModifySelf: false,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
     maxConsecutiveFailures: 5,
     healthStatus: 'healthy',
     isActive: true,
@@ -818,12 +832,14 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     tagline: 'On-brand visuals, instantly',
     capabilities: ['generate-images', 'edit-images'],
     restrictions: ['delete-records'],
+    tools: ['generate_image'],
     triggers: ['manual', 'task-queue'],
     autonomyLevel: 'semi-autonomous',
     requiresApproval: ['publish'],
     canSpawnAgents: false,
     canModifySelf: false,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
     maxConsecutiveFailures: 5,
     healthStatus: 'healthy',
     isActive: true,
@@ -838,12 +854,14 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     tagline: 'Intel on demand',
     capabilities: ['web-research', 'summarize', 'report'],
     restrictions: ['write-content', 'publish'],
+    tools: ['web_search', 'fetch_url', 'dns_lookup', 'check_domain_availability'],
     triggers: ['manual', 'task-queue'],
     autonomyLevel: 'autonomous',
     requiresApproval: [],
     canSpawnAgents: false,
     canModifySelf: false,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
     maxConsecutiveFailures: 5,
     healthStatus: 'healthy',
     isActive: true,
@@ -874,6 +892,7 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
       'delete-repositories',
       'modify-ci-config',
     ],
+    tools: ['web_search', 'fetch_url'],
     triggers: ['manual', 'task-queue'],
     autonomyLevel: 'semi-autonomous',
     requiresApproval: ['push-to-remote', 'create-pull-request'],
@@ -882,6 +901,7 @@ export const DEFAULT_AGENT_PERSONAS: Partial<AgentPersona>[] = [
     canSpawnAgents: false,
     canModifySelf: false,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
     maxConsecutiveFailures: 3,
     healthStatus: 'healthy',
     isActive: true,
@@ -942,6 +962,12 @@ export interface Skill {
   tier: SkillTier // Subscription tier required
   builderConversation?: SkillBuilderMessage[] // Chat history for editing
 
+  // Tool & Provider binding
+  requiredTools?: string[] // Tool names this skill needs (e.g., ['web_search', 'publish_blog_post'])
+  compatibleProviders?: SkillAgent[] // LLM providers this skill works with (default: ['universal'])
+  inputSchema?: SkillIOSchema // Structured input definition
+  outputSchema?: SkillIOSchema // Structured output definition
+
   // Timestamps
   createdAt: string
   updatedAt: string
@@ -949,6 +975,20 @@ export interface Skill {
 
   // Soft delete
   deletedAt?: string
+}
+
+// Structured I/O schema for skills
+export interface SkillIOField {
+  name: string
+  type: 'text' | 'number' | 'boolean' | 'url' | 'email' | 'json' | 'markdown'
+  required: boolean
+  description: string
+  default?: unknown
+}
+
+export interface SkillIOSchema {
+  type: 'text' | 'json' | 'markdown'
+  fields?: SkillIOField[]
 }
 
 export interface ProjectSkill {
