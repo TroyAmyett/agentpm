@@ -2,25 +2,29 @@
 
 import { create } from 'zustand'
 import type { AgentPersona, UpdateEntity } from '@/types/agentpm'
-import { DEFAULT_AGENT_PERSONAS, DEMO_ORCHESTRATOR_ID } from '@/types/agentpm'
+import { DEFAULT_AGENT_PERSONAS } from '@/types/agentpm'
 import * as db from '@/services/agentpm/database'
-import { isAuthError, handleAuthError } from '@/services/supabase/client'
+import { supabase, isAuthError, handleAuthError } from '@/services/supabase/client'
 
-// Fixed UUIDs for demo agents (deterministic so they persist across reloads)
-// Index 0 = orchestrator (Atlas), must match DEMO_ORCHESTRATOR_ID
-const DEMO_AGENT_UUIDS = [
-  DEMO_ORCHESTRATOR_ID, // Atlas (orchestrator)
-  '00000000-0000-0000-0000-000000000001', // Maverick
-  '00000000-0000-0000-0000-000000000002', // Pixel
-  '00000000-0000-0000-0000-000000000003', // Scout
-  '00000000-0000-0000-0000-000000000004', // Forge
-]
+// Generate deterministic UUIDs for demo agents based on account ID
+// Uses the first 8 chars of account_id as prefix to avoid cross-account conflicts
+function getDemoAgentUUIDs(accountId: string): string[] {
+  const prefix = accountId.substring(0, 8)
+  return [
+    `${prefix}-0000-0000-0000-000000000000`, // Atlas (orchestrator)
+    `${prefix}-0000-0000-0000-000000000001`, // Maverick
+    `${prefix}-0000-0000-0000-000000000002`, // Pixel
+    `${prefix}-0000-0000-0000-000000000003`, // Scout
+    `${prefix}-0000-0000-0000-000000000004`, // Forge
+  ]
+}
 
 // Generate demo agents with full data for development
 function createDemoAgents(accountId: string): AgentPersona[] {
   const now = new Date().toISOString()
+  const uuids = getDemoAgentUUIDs(accountId)
   return DEFAULT_AGENT_PERSONAS.map((partial, index) => ({
-    id: DEMO_AGENT_UUIDS[index] || `00000000-0000-0000-0000-00000000000${index + 1}`,
+    id: uuids[index] || `${accountId.substring(0, 8)}-0000-0000-0000-00000000000${index + 1}`,
     accountId,
     createdAt: now,
     createdBy: 'system',
@@ -105,10 +109,60 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const agents = await db.fetchAgentPersonas(accountId)
       console.log(`[AgentStore] Fetched ${agents.length} agents from database`)
 
-      // If no agents in database, use demo agents for development
+      // If no agents in database, seed demo agents into DB and use them
       if (agents.length === 0) {
-        console.log('[AgentStore] No agents found, using demo agents')
-        set({ agents: createDemoAgents(accountId), isLoading: false })
+        console.log('[AgentStore] No agents found, seeding demo agents into database')
+        const demoAgents = createDemoAgents(accountId)
+        set({ agents: demoAgents, isLoading: false })
+
+        // Persist demo agents to DB so FK constraints on task_executions are satisfied
+        if (supabase) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser()
+            const userId = user?.id
+            if (userId) {
+              const rows = demoAgents.map((a) => ({
+                id: a.id,
+                account_id: a.accountId,
+                agent_type: a.agentType,
+                alias: a.alias,
+                tagline: a.tagline || null,
+                avatar: a.avatar || null,
+                description: a.description || null,
+                capabilities: a.capabilities || [],
+                restrictions: a.restrictions || [],
+                triggers: a.triggers || [],
+                autonomy_level: a.autonomyLevel || 'supervised',
+                requires_approval: a.requiresApproval || [],
+                can_spawn_agents: a.canSpawnAgents || false,
+                can_modify_self: a.canModifySelf || false,
+                consecutive_failures: a.consecutiveFailures || 0,
+                max_consecutive_failures: a.maxConsecutiveFailures || 5,
+                health_status: a.healthStatus || 'healthy',
+                is_active: a.isActive ?? true,
+                show_on_dashboard: a.showOnDashboard ?? true,
+                show_in_org_chart: a.showInOrgChart ?? true,
+                sort_order: a.sortOrder,
+                reports_to: a.reportsTo || null,
+                tools: a.tools || null,
+                created_by: userId,
+                created_by_type: 'user',
+                updated_by: userId,
+                updated_by_type: 'user',
+              }))
+              const { error: seedError } = await supabase
+                .from('agent_personas')
+                .insert(rows)
+              if (seedError) {
+                console.warn('[AgentStore] Failed to seed demo agents:', seedError)
+              } else {
+                console.log(`[AgentStore] Seeded ${rows.length} demo agents into database`)
+              }
+            }
+          } catch (seedErr) {
+            console.warn('[AgentStore] Error seeding demo agents:', seedErr)
+          }
+        }
       } else {
         set({ agents, isLoading: false })
       }

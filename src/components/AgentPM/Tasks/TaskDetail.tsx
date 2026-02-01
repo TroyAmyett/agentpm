@@ -1,6 +1,6 @@
 // Task Detail - Full task view with status history and actions
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   X,
@@ -26,6 +26,7 @@ import {
   Shield,
   ArrowRight,
   Wrench,
+  ChevronDown,
 } from 'lucide-react'
 import type { Task, TaskStatus, AgentPersona, Skill } from '@/types/agentpm'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
@@ -75,12 +76,25 @@ export function TaskDetail({
   const [statusNote, setStatusNote] = useState('')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [showRawOutput, setShowRawOutput] = useState(false)
+  const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const statusMenuRef = useRef<HTMLDivElement>(null)
 
   // Update default tab when task changes
   useEffect(() => {
     const newDefault: TabType = task.status === 'review' || task.output ? 'output' : 'details'
     setActiveTab(newDefault)
   }, [task.id, task.status, task.output])
+
+  // Close status menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+        setShowStatusMenu(false)
+      }
+    }
+    if (showStatusMenu) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showStatusMenu])
 
   const { formatDateTime, formatDate } = useTimezoneFunctions()
 
@@ -400,7 +414,38 @@ export function TaskDetail({
             {task.title}
           </h3>
           <div className="flex items-center gap-1">
-            <TaskStatusBadge status={task.status} size="sm" />
+            {/* Clickable status dropdown */}
+            <div className="relative" ref={statusMenuRef}>
+              <button
+                onClick={() => setShowStatusMenu(!showStatusMenu)}
+                className="inline-flex items-center gap-0.5 cursor-pointer hover:ring-1 hover:ring-primary-400/50 rounded-full transition-all"
+              >
+                <TaskStatusBadge status={task.status} size="sm" />
+                <ChevronDown size={12} className="text-surface-400 -ml-0.5 mr-0.5" />
+              </button>
+              {showStatusMenu && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-600 rounded-lg shadow-lg py-1 min-w-[140px]">
+                  {(['draft', 'pending', 'queued', 'in_progress', 'review', 'completed', 'cancelled'] as TaskStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        if (s !== task.status && onUpdateStatus) {
+                          onUpdateStatus(task.id, s, statusNote || undefined)
+                          setStatusNote('')
+                        }
+                        setShowStatusMenu(false)
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors ${
+                        s === task.status ? 'font-semibold' : ''
+                      }`}
+                    >
+                      <TaskStatusBadge status={s} size="sm" />
+                      {s === task.status && <Check size={12} className="ml-auto text-primary-500" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <TaskPriorityBadge priority={task.priority} size="sm" />
           </div>
         </div>
@@ -579,7 +624,7 @@ export function TaskDetail({
                                   {step.toolsRequired.length} tool{step.toolsRequired.length > 1 ? 's' : ''}
                                 </span>
                               )}
-                              {step.dependsOnIndex !== undefined && (
+                              {step.dependsOnIndex != null && (
                                 <span className="flex items-center gap-1 text-xs text-surface-400">
                                   <ArrowRight size={10} />
                                   after step {step.dependsOnIndex + 1}

@@ -322,9 +322,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       const existingIndex = state.tasks.findIndex((t) => t.id === remoteTask.id)
       if (existingIndex >= 0) {
-        // Update existing
+        // Merge remote changes with existing local task to preserve fields
+        // that may not be included in partial realtime updates (e.g., input, output)
+        const existing = state.tasks[existingIndex]
         const newTasks = [...state.tasks]
-        newTasks[existingIndex] = remoteTask
+        newTasks[existingIndex] = { ...existing, ...remoteTask }
         return { tasks: newTasks }
       } else {
         // Insert new at beginning

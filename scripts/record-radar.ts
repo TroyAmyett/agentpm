@@ -30,7 +30,7 @@ import * as path from 'path'
 
 interface RecordingStep {
   name: string
-  action: 'navigate' | 'click' | 'type' | 'wait' | 'screenshot' | 'scroll'
+  action: 'navigate' | 'click' | 'type' | 'wait' | 'screenshot' | 'scroll' | 'evaluate'
   target?: string
   value?: string
   waitMs?: number
@@ -63,18 +63,28 @@ const RADAR_FLOWS: Record<string, RecordingScript> = {
     description: 'Overview of the Radar dashboard and main features',
     baseUrl: 'https://radar.funnelists.com',
     steps: [
-      { name: 'Navigate to dashboard', action: 'navigate', target: '/dashboard' },
+      // Dashboard is the root route
+      { name: 'Navigate to dashboard', action: 'navigate', target: '/' },
+      { name: 'Wait for content load', action: 'wait', waitMs: 3000 },
+      { name: 'Screenshot dashboard', action: 'screenshot', screenshotName: '01-dashboard-overview.png' },
+      // Show topic filter bar
+      { name: 'Screenshot topic filters', action: 'screenshot', screenshotName: '02-topic-filters.png' },
+      // Scroll down to show content cards
+      { name: 'Scroll to content', action: 'scroll' },
+      { name: 'Wait', action: 'wait', waitMs: 800 },
+      { name: 'Screenshot content cards', action: 'screenshot', screenshotName: '03-content-cards.png' },
+      // Navigate to Sources page
+      { name: 'Navigate to sources', action: 'navigate', target: '/sources' },
+      { name: 'Wait for sources', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot sources', action: 'screenshot', screenshotName: '04-sources-page.png' },
+      // Navigate to Settings to show topics
+      { name: 'Navigate to settings', action: 'navigate', target: '/settings' },
+      { name: 'Wait for settings', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot settings/topics', action: 'screenshot', screenshotName: '05-settings-topics.png' },
+      // Back to dashboard
+      { name: 'Navigate back to dashboard', action: 'navigate', target: '/' },
       { name: 'Wait for load', action: 'wait', waitMs: 2000 },
-      { name: 'Screenshot dashboard', action: 'screenshot', screenshotName: '01-dashboard.png' },
-      { name: 'Scroll to sources', action: 'scroll', target: '#sources-section' },
-      { name: 'Wait', action: 'wait', waitMs: 800 },
-      { name: 'Screenshot sources', action: 'screenshot', screenshotName: '02-sources-section.png' },
-      { name: 'Scroll to topics', action: 'scroll', target: '#topics-section' },
-      { name: 'Wait', action: 'wait', waitMs: 800 },
-      { name: 'Screenshot topics', action: 'screenshot', screenshotName: '03-topics-section.png' },
-      { name: 'Navigate to feed', action: 'navigate', target: '/feed' },
-      { name: 'Wait for feed', action: 'wait', waitMs: 2000 },
-      { name: 'Screenshot feed', action: 'screenshot', screenshotName: '04-feed-overview.png' },
+      { name: 'Screenshot final dashboard', action: 'screenshot', screenshotName: '06-dashboard-final.png' },
     ],
   },
 
@@ -84,17 +94,28 @@ const RADAR_FLOWS: Record<string, RecordingScript> = {
     baseUrl: 'https://radar.funnelists.com',
     steps: [
       { name: 'Navigate to sources', action: 'navigate', target: '/sources' },
-      { name: 'Wait for load', action: 'wait', waitMs: 1500 },
+      { name: 'Wait for load', action: 'wait', waitMs: 2000 },
       { name: 'Screenshot sources page', action: 'screenshot', screenshotName: '01-sources-page.png' },
-      { name: 'Click add source', action: 'click', target: '[data-testid="add-source-btn"], button:has-text("Add Source")' },
-      { name: 'Wait for modal', action: 'wait', waitMs: 600 },
-      { name: 'Screenshot modal', action: 'screenshot', screenshotName: '02-add-source-modal.png' },
-      { name: 'Type URL', action: 'type', target: 'input[name="url"], input[placeholder*="URL"]', value: 'https://techcrunch.com/feed/' },
+      // "Add Source" button contains a <span>Add Source</span>
+      { name: 'Click add source', action: 'click', target: 'button:has-text("Add Source")' },
+      { name: 'Wait for modal', action: 'wait', waitMs: 800 },
+      { name: 'Screenshot add source modal', action: 'screenshot', screenshotName: '02-add-source-modal.png' },
+      // URL input has specific placeholder
+      { name: 'Type RSS URL', action: 'type', target: 'input[placeholder*="Paste URL"]', value: 'https://techcrunch.com/feed/' },
       { name: 'Wait', action: 'wait', waitMs: 500 },
-      { name: 'Screenshot with URL', action: 'screenshot', screenshotName: '03-url-entered.png' },
-      { name: 'Click confirm', action: 'click', target: '[data-testid="confirm-add-source"], button:has-text("Add"), button[type="submit"]' },
-      { name: 'Wait for add', action: 'wait', waitMs: 2000 },
-      { name: 'Screenshot success', action: 'screenshot', screenshotName: '04-source-added.png' },
+      { name: 'Screenshot URL entered', action: 'screenshot', screenshotName: '03-url-entered.png' },
+      // Click Lookup to detect source type
+      { name: 'Click lookup', action: 'click', target: 'button:has-text("Lookup")' },
+      { name: 'Wait for lookup', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot source detected', action: 'screenshot', screenshotName: '04-source-detected.png' },
+      // Select a topic from the dropdown
+      { name: 'Select topic', action: 'click', target: 'select.glass-input' },
+      { name: 'Wait', action: 'wait', waitMs: 400 },
+      { name: 'Screenshot topic selected', action: 'screenshot', screenshotName: '05-topic-selected.png' },
+      // Submit - button text is "Add RSS Feed" for RSS sources
+      { name: 'Click add', action: 'click', target: 'button:has-text("Add RSS Feed"), button:has-text("Add YouTube"), button[type="submit"]' },
+      { name: 'Wait for add', action: 'wait', waitMs: 2500 },
+      { name: 'Screenshot source added', action: 'screenshot', screenshotName: '06-source-added.png' },
     ],
   },
 
@@ -103,37 +124,45 @@ const RADAR_FLOWS: Record<string, RecordingScript> = {
     description: 'How to create topics to filter and organize your content',
     baseUrl: 'https://radar.funnelists.com',
     steps: [
-      { name: 'Navigate to topics', action: 'navigate', target: '/topics' },
-      { name: 'Wait for load', action: 'wait', waitMs: 1500 },
-      { name: 'Screenshot topics page', action: 'screenshot', screenshotName: '01-topics-page.png' },
-      { name: 'Click add topic', action: 'click', target: '[data-testid="add-topic-btn"], button:has-text("Add Topic"), button:has-text("Create Topic")' },
-      { name: 'Wait for modal', action: 'wait', waitMs: 600 },
-      { name: 'Screenshot modal', action: 'screenshot', screenshotName: '02-add-topic-modal.png' },
-      { name: 'Type name', action: 'type', target: 'input[name="name"], input[placeholder*="name"]', value: 'AI in Sales' },
+      // Topics are managed on the Settings page
+      { name: 'Navigate to settings', action: 'navigate', target: '/settings' },
+      { name: 'Wait for load', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot settings page', action: 'screenshot', screenshotName: '01-settings-topics.png' },
+      // Topic name input has placeholder "Topic name"
+      { name: 'Type topic name', action: 'type', target: 'input[placeholder="Topic name"]', value: 'AI in Sales' },
+      { name: 'Wait for auto-icon', action: 'wait', waitMs: 600 },
+      { name: 'Screenshot name entered', action: 'screenshot', screenshotName: '02-topic-name.png' },
+      // Click a color button (purple = 2nd in the color row)
+      { name: 'Click color', action: 'evaluate', value: "document.querySelectorAll('button.rounded-full[style]')[1].click()" },
       { name: 'Wait', action: 'wait', waitMs: 400 },
-      { name: 'Type keywords', action: 'type', target: 'input[name="keywords"], textarea[name="keywords"], input[placeholder*="keyword"]', value: 'artificial intelligence, machine learning, sales automation, GPT, LLM' },
-      { name: 'Wait', action: 'wait', waitMs: 400 },
-      { name: 'Screenshot form filled', action: 'screenshot', screenshotName: '03-topic-form.png' },
-      { name: 'Click save', action: 'click', target: '[data-testid="save-topic"], button:has-text("Save"), button:has-text("Create"), button[type="submit"]' },
-      { name: 'Wait for save', action: 'wait', waitMs: 1500 },
-      { name: 'Screenshot created', action: 'screenshot', screenshotName: '04-topic-created.png' },
+      { name: 'Screenshot color selected', action: 'screenshot', screenshotName: '03-color-selected.png' },
+      // Submit with "Add Topic" button
+      { name: 'Click add topic', action: 'click', target: 'button:has-text("Add Topic")' },
+      { name: 'Wait for save', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot topic created', action: 'screenshot', screenshotName: '04-topic-created.png' },
     ],
   },
 
   aiSummaries: {
-    name: 'AI Summaries',
-    description: 'How AI-powered summaries help you quickly understand articles',
+    name: 'AI Deep Dive Analysis',
+    description: 'How AI-powered analysis helps you quickly understand articles',
     baseUrl: 'https://radar.funnelists.com',
     steps: [
-      { name: 'Navigate to feed', action: 'navigate', target: '/feed' },
-      { name: 'Wait for load', action: 'wait', waitMs: 2500 },
-      { name: 'Screenshot feed', action: 'screenshot', screenshotName: '01-feed-view.png' },
-      { name: 'Click first article', action: 'click', target: '.article-card:first-child, [data-testid="article-item"]:first-child, article:first-child' },
-      { name: 'Wait for expand', action: 'wait', waitMs: 800 },
-      { name: 'Screenshot expanded', action: 'screenshot', screenshotName: '02-article-expanded.png' },
-      { name: 'Click summary', action: 'click', target: '[data-testid="show-summary"], button:has-text("Summary"), button:has-text("Summarize")' },
-      { name: 'Wait for AI', action: 'wait', waitMs: 3000 },
-      { name: 'Screenshot summary', action: 'screenshot', screenshotName: '03-ai-summary.png' },
+      // Content is on the main dashboard
+      { name: 'Navigate to dashboard', action: 'navigate', target: '/' },
+      { name: 'Wait for content load', action: 'wait', waitMs: 3000 },
+      { name: 'Screenshot content feed', action: 'screenshot', screenshotName: '01-content-feed.png' },
+      // Deep Dive button has title="Deep Dive Analysis" (Sparkles icon)
+      { name: 'Click deep dive', action: 'click', target: 'button[title="Deep Dive Analysis"]' },
+      { name: 'Wait for modal', action: 'wait', waitMs: 1000 },
+      { name: 'Screenshot loading', action: 'screenshot', screenshotName: '02-deep-dive-loading.png' },
+      // Wait for AI analysis to complete
+      { name: 'Wait for AI analysis', action: 'wait', waitMs: 8000 },
+      { name: 'Screenshot analysis result', action: 'screenshot', screenshotName: '03-deep-dive-analysis.png' },
+      // Scroll down in modal to show more sections
+      { name: 'Scroll modal', action: 'scroll', target: '.glass-card.max-w-2xl' },
+      { name: 'Wait', action: 'wait', waitMs: 800 },
+      { name: 'Screenshot analysis continued', action: 'screenshot', screenshotName: '04-deep-dive-sections.png' },
     ],
   },
 
@@ -143,19 +172,28 @@ const RADAR_FLOWS: Record<string, RecordingScript> = {
     baseUrl: 'https://radar.funnelists.com',
     steps: [
       { name: 'Navigate to settings', action: 'navigate', target: '/settings' },
-      { name: 'Wait for load', action: 'wait', waitMs: 1500 },
-      { name: 'Screenshot settings', action: 'screenshot', screenshotName: '01-settings-page.png' },
-      { name: 'Click digest tab', action: 'click', target: '[data-testid="digest-tab"], button:has-text("Digest"), [role="tab"]:has-text("Digest")' },
+      { name: 'Wait for load', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot settings page', action: 'screenshot', screenshotName: '01-settings-page.png' },
+      // Scroll to Email Digests section
+      { name: 'Scroll to digest section', action: 'scroll', target: 'text=Email Digests' },
       { name: 'Wait', action: 'wait', waitMs: 600 },
-      { name: 'Screenshot digest', action: 'screenshot', screenshotName: '02-digest-settings.png' },
-      { name: 'Toggle on', action: 'click', target: '[data-testid="digest-toggle"], input[type="checkbox"], [role="switch"]' },
+      { name: 'Screenshot digest disabled', action: 'screenshot', screenshotName: '02-digest-disabled.png' },
+      // Toggle enable - click the label wrapping the sr-only checkbox
+      { name: 'Toggle digest on', action: 'click', target: 'label:has(input.sr-only)' },
+      { name: 'Wait for controls', action: 'wait', waitMs: 800 },
+      { name: 'Screenshot digest enabled', action: 'screenshot', screenshotName: '03-digest-enabled.png' },
+      // Click "Daily" frequency button
+      { name: 'Click daily frequency', action: 'click', target: 'button:has-text("Daily")' },
       { name: 'Wait', action: 'wait', waitMs: 400 },
-      { name: 'Click time picker', action: 'click', target: '[data-testid="digest-time"], select, input[type="time"]' },
+      { name: 'Screenshot frequency', action: 'screenshot', screenshotName: '04-frequency-daily.png' },
+      // Set delivery time
+      { name: 'Set delivery time', action: 'type', target: 'input[type="time"]', value: '07:00' },
       { name: 'Wait', action: 'wait', waitMs: 400 },
-      { name: 'Screenshot time', action: 'screenshot', screenshotName: '03-time-picker.png' },
-      { name: 'Click save', action: 'click', target: '[data-testid="save-settings"], button:has-text("Save")' },
-      { name: 'Wait for save', action: 'wait', waitMs: 1500 },
-      { name: 'Screenshot saved', action: 'screenshot', screenshotName: '04-digest-configured.png' },
+      { name: 'Screenshot time set', action: 'screenshot', screenshotName: '05-time-set.png' },
+      // Save digest preferences
+      { name: 'Click save', action: 'click', target: 'button:has-text("Save Digest Preferences")' },
+      { name: 'Wait for save', action: 'wait', waitMs: 2000 },
+      { name: 'Screenshot saved', action: 'screenshot', screenshotName: '06-digest-saved.png' },
     ],
   },
 }
@@ -236,11 +274,15 @@ class RadarRecorder {
 
     console.log(`  Auth: Logging in as ${this.auth.email}...`)
 
-    await this.page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
-    await this.page.fill('input[type="email"]', this.auth.email)
-    await this.page.fill('input[type="password"]', this.auth.password)
-    await this.page.click('button[type="submit"]')
-    await this.page.waitForNavigation({ waitUntil: 'networkidle' })
+    await this.page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle', timeout: 30000 })
+    // Radar login: input#email, input#password, button with "Sign in"
+    await this.page.fill('input#email', this.auth.email)
+    await this.page.fill('input#password', this.auth.password)
+    await this.page.click('button:has-text("Sign in")')
+    // Wait for redirect away from login page
+    await this.page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30000 })
+    // Wait for page to stabilize
+    await this.page.waitForTimeout(2000)
 
     console.log(`  Auth: Logged in successfully`)
   }
@@ -408,6 +450,12 @@ class RadarRecorder {
         } else {
           await this.page.evaluate(() => window.scrollBy(0, 400))
         }
+        break
+      }
+
+      case 'evaluate': {
+        if (!step.value) throw new Error('Evaluate requires value (JS code)')
+        await this.page.evaluate(step.value)
         break
       }
 

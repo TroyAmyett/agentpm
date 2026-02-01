@@ -252,12 +252,16 @@ export function AgentPMPage() {
     const interval = setInterval(() => {
       const currentTasks = tasksRef.current
       const pendingWithAgents = currentTasks.filter(
-        (t) => t.status === 'pending' &&
-               t.assignedTo &&
-               t.assignedToType === 'agent' &&
-               !t.parentTaskId && // Sub-tasks handled by chaining interval
-               !isTaskBlocked(t.id) &&
-               !autoQueuedRef.current.has(t.id)
+        (t) => {
+          if (t.status !== 'pending' || !t.assignedTo || t.assignedToType !== 'agent') return false
+          if (t.parentTaskId) return false // Sub-tasks handled by chaining interval
+          if (isTaskBlocked(t.id)) return false
+          if (autoQueuedRef.current.has(t.id)) return false
+          // Skip orchestrator-assigned tasks - the dynamic planner handles those
+          const assignedAgent = agentsRef.current.find((a) => a.id === t.assignedTo)
+          if (assignedAgent?.agentType === 'orchestrator') return false
+          return true
+        }
       )
 
       if (pendingWithAgents.length === 0) return
@@ -334,8 +338,6 @@ export function AgentPMPage() {
       )
 
       for (const completedTask of completedSubTasks) {
-        chainingProcessedRef.current.add(completedTask.id)
-
         const siblingTasks = currentTasks.filter(
           (t) =>
             t.parentTaskId === completedTask.parentTaskId &&
@@ -347,14 +349,19 @@ export function AgentPMPage() {
 
         const unblockedTasks = siblingTasks.filter((t) => !isTaskBlocked(t.id))
 
-        const nextTask = unblockedTasks.sort(
-          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        )[0]
-
-        if (nextTask) {
+        // Queue ALL unblocked siblings (supports parallel steps)
+        for (const nextTask of unblockedTasks) {
           console.log(`Sub-task "${completedTask.title}" completed, queueing unblocked: "${nextTask.title}"`)
           updateTaskStatus(nextTask.id, 'queued', userId, `Dependencies satisfied: ${completedTask.title} completed`)
             .catch((err) => console.error('Failed to queue next sub-task:', err))
+        }
+
+        // Only mark as processed if there are no more pending siblings,
+        // or all pending siblings were successfully queued.
+        // If siblings remain blocked (stale blockedTasks map), retry next interval.
+        const stillBlockedSiblings = siblingTasks.filter((t) => isTaskBlocked(t.id))
+        if (stillBlockedSiblings.length === 0) {
+          chainingProcessedRef.current.add(completedTask.id)
         }
 
         // Check if all sub-tasks are complete - aggregate outputs and mark parent for review
@@ -475,9 +482,12 @@ export function AgentPMPage() {
       if (!task) return
 
       // SMART ROUTING: When moving to 'pending' (Ready column), analyze and route
-      if (status === 'pending' && (!task.assignedTo || task.assignedToType !== 'agent')) {
+      // Triggers for: unassigned tasks OR tasks assigned to an orchestrator agent
+      const assignedAgent = task.assignedTo ? agents.find((a) => a.id === task.assignedTo) : null
+      const isOrchestratorAssigned = assignedAgent?.agentType === 'orchestrator'
+      if (status === 'pending' && (!task.assignedTo || task.assignedToType !== 'agent' || isOrchestratorAssigned)) {
         console.log(`[Dispatch] Task "${task.title}" moved to Ready - analyzing for decomposition...`)
-        console.log(`[Dispatch] Task has assignedTo: ${task.assignedTo}, type: ${task.assignedToType}, parentTaskId: ${task.parentTaskId}`)
+        console.log(`[Dispatch] Task has assignedTo: ${task.assignedTo}, type: ${task.assignedToType}, isOrchestrator: ${isOrchestratorAssigned}`)
 
         // Find the Dispatch/orchestrator agent for createdBy attribution
         const dispatchAgent = agents.find((a) => a.agentType === 'orchestrator' && a.isActive)
@@ -891,8 +901,17 @@ export function AgentPMPage() {
                   tasks={filteredTasks}
                   agents={agentNameMap}
                   onTaskClick={setSelectedTaskId}
-                  onAddTask={(columnStatus) => {
-                    setCreateTaskInitialStatus(columnStatus as Task['status'])
+                  onAddTask={(columnId) => {
+                    // Map column IDs to task statuses (e.g., 'inbox' → 'draft', 'ready' → 'pending')
+                    const COLUMN_TO_STATUS: Record<string, Task['status']> = {
+                      inbox: 'draft',
+                      ready: 'pending',
+                      queued: 'queued',
+                      in_progress: 'in_progress',
+                      review: 'review',
+                      done: 'completed',
+                    }
+                    setCreateTaskInitialStatus(COLUMN_TO_STATUS[columnId] || 'draft')
                     setIsCreateTaskOpen(true)
                   }}
                   onStatusChange={(taskId, status) => handleUpdateStatus(taskId, status)}

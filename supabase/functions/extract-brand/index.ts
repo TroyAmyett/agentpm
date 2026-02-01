@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,7 +96,12 @@ serve(async (req) => {
     })
 
     // 4. Download and upload logos to Supabase Storage
-    const uploadedLogos = await uploadLogos(brandResult.logos, body.accountId, url)
+    const uploadedLogos = await uploadLogos(
+      brandResult.logos,
+      body.accountId,
+      url,
+      brandResult.logoDesignedForDarkBackground || false
+    )
     console.log('[extract-brand] Uploaded logos:', uploadedLogos.length)
 
     // 5. Build final result
@@ -497,7 +503,12 @@ function fallbackExtraction(pageData: ParsedPageData, url: string): Omit<BrandEx
 // UPLOAD LOGOS
 // ============================================================================
 
-async function uploadLogos(logos: DetectedLogo[], accountId: string, sourceUrl: string): Promise<DetectedLogo[]> {
+async function uploadLogos(
+  logos: DetectedLogo[],
+  accountId: string,
+  sourceUrl: string,
+  createInvertedVersion: boolean
+): Promise<DetectedLogo[]> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -534,7 +545,7 @@ async function uploadLogos(logos: DetectedLogo[], accountId: string, sourceUrl: 
       }
 
       const contentType = imageResponse.headers.get('content-type') || 'image/png'
-      const imageBlob = await imageResponse.blob()
+      const imageBuffer = await imageResponse.arrayBuffer()
 
       // Determine file extension
       let ext = 'png'
@@ -546,10 +557,10 @@ async function uploadLogos(logos: DetectedLogo[], accountId: string, sourceUrl: 
 
       const storagePath = `${accountId}/logos/${logo.type}.${ext}`
 
-      // Upload to storage
+      // Upload original to storage
       const { error: uploadError } = await supabase.storage
         .from('brands')
-        .upload(storagePath, imageBlob, {
+        .upload(storagePath, new Uint8Array(imageBuffer), {
           contentType,
           upsert: true,
         })
@@ -568,6 +579,39 @@ async function uploadLogos(logos: DetectedLogo[], accountId: string, sourceUrl: 
       })
 
       console.log('[extract-brand] Uploaded logo:', logo.type, urlData.publicUrl)
+
+      // Create inverted version if requested (for primary logos only, PNG format)
+      if (createInvertedVersion && logo.type === 'primary' && (ext === 'png' || ext === 'webp')) {
+        try {
+          const invertedBuffer = await invertLogoColors(new Uint8Array(imageBuffer))
+          if (invertedBuffer) {
+            const invertedPath = `${accountId}/logos/secondary.png`
+
+            const { error: invertError } = await supabase.storage
+              .from('brands')
+              .upload(invertedPath, invertedBuffer, {
+                contentType: 'image/png',
+                upsert: true,
+              })
+
+            if (!invertError) {
+              const { data: invertedUrlData } = supabase.storage.from('brands').getPublicUrl(invertedPath)
+
+              uploadedLogos.push({
+                url: logoUrl,
+                type: 'secondary',
+                uploadedUrl: invertedUrlData.publicUrl,
+              })
+
+              console.log('[extract-brand] Created inverted logo:', invertedUrlData.publicUrl)
+            } else {
+              console.warn('[extract-brand] Failed to upload inverted logo:', invertError.message)
+            }
+          }
+        } catch (invertErr) {
+          console.warn('[extract-brand] Failed to invert logo:', invertErr)
+        }
+      }
     } catch (error) {
       console.warn('[extract-brand] Error uploading logo:', logo.url, error)
     }
@@ -577,5 +621,52 @@ async function uploadLogos(logos: DetectedLogo[], accountId: string, sourceUrl: 
   return logos.map(logo => {
     const uploaded = uploadedLogos.find(u => u.type === logo.type)
     return uploaded || logo
-  })
+  }).concat(
+    // Add secondary logo if it was created
+    uploadedLogos.filter(l => l.type === 'secondary' && !logos.some(orig => orig.type === 'secondary'))
+  )
+}
+
+// ============================================================================
+// LOGO COLOR INVERSION
+// ============================================================================
+
+/**
+ * Inverts the colors of a logo image while preserving transparency.
+ * White becomes black, black becomes white - useful for creating
+ * light-background versions of dark-background logos.
+ */
+async function invertLogoColors(imageBuffer: Uint8Array): Promise<Uint8Array | null> {
+  try {
+    // Decode the image
+    const image = await Image.decode(imageBuffer)
+
+    // Iterate through each pixel and invert colors (preserve alpha)
+    for (let x = 0; x < image.width; x++) {
+      for (let y = 0; y < image.height; y++) {
+        const pixel = image.getPixelAt(x + 1, y + 1) // imagescript uses 1-based indexing
+
+        // Extract RGBA components
+        const r = (pixel >> 24) & 0xff
+        const g = (pixel >> 16) & 0xff
+        const b = (pixel >> 8) & 0xff
+        const a = pixel & 0xff
+
+        // Invert RGB, keep alpha unchanged
+        const invertedR = 255 - r
+        const invertedG = 255 - g
+        const invertedB = 255 - b
+
+        // Reconstruct pixel with inverted colors
+        const invertedPixel = (invertedR << 24) | (invertedG << 16) | (invertedB << 8) | a
+        image.setPixelAt(x + 1, y + 1, invertedPixel)
+      }
+    }
+
+    // Encode back to PNG
+    return await image.encode()
+  } catch (error) {
+    console.error('[extract-brand] Error inverting logo colors:', error)
+    return null
+  }
 }

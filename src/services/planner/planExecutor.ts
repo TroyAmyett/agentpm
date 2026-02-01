@@ -4,6 +4,7 @@
 
 import type { Task } from '@/types/agentpm'
 import { supabase } from '@/services/supabase/client'
+import { useTaskStore } from '@/stores/taskStore'
 import type { ExecutionPlan, PlanStep } from './dynamicPlanner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -148,23 +149,31 @@ export async function storePlanOnTask(
 
   const currentInput = (task?.input || {}) as Record<string, unknown>
 
+  const newInput = {
+    ...currentInput,
+    plan: {
+      steps: plan.steps,
+      confidence: plan.confidence,
+      executionMode: plan.executionMode,
+      patternKey: plan.patternKey,
+      reasoning: plan.reasoning,
+    },
+    planPatternKey: plan.patternKey,
+    planCurrentStep: 0,
+  }
+
   await supabase
     .from('tasks')
-    .update({
-      input: {
-        ...currentInput,
-        plan: {
-          steps: plan.steps,
-          confidence: plan.confidence,
-          executionMode: plan.executionMode,
-          patternKey: plan.patternKey,
-          reasoning: plan.reasoning,
-        },
-        planPatternKey: plan.patternKey,
-        planCurrentStep: 0,
-      },
-    })
+    .update({ input: newInput })
     .eq('id', taskId)
+
+  // Also update the local task store so subsequent optimistic updates
+  // (like updateTaskStatus) don't overwrite the plan with stale data
+  const taskStore = useTaskStore.getState()
+  const localTask = taskStore.tasks.find(t => t.id === taskId)
+  if (localTask) {
+    taskStore.handleRemoteTaskChange({ ...localTask, input: newInput })
+  }
 }
 
 /**
