@@ -12,6 +12,7 @@ const corsHeaders = {
 
 interface CheckoutRequest {
   priceId: string
+  mode?: 'subscription' | 'payment'
   pageSlug?: string
   funnelId?: string
   tierId?: string
@@ -53,23 +54,16 @@ serve(async (req) => {
       )
     }
 
-    // Look up the price to determine checkout mode (subscription vs one-time)
-    const price = await stripe.prices.retrieve(body.priceId)
-    const mode = price.type === 'recurring' ? 'subscription' : 'payment'
-
-    // Look up landing page for account_id
-    let accountId: string | null = null
-    if (body.pageSlug) {
-      const { data: landingPage } = await supabase
-        .from('landing_pages')
-        .select('account_id')
-        .eq('slug', body.pageSlug)
-        .single()
-      accountId = landingPage?.account_id
+    // Use mode from client if provided, otherwise look it up (slower)
+    let mode = body.mode
+    if (!mode) {
+      const price = await stripe.prices.retrieve(body.priceId)
+      mode = price.type === 'recurring' ? 'subscription' : 'payment'
     }
-    accountId = accountId || Deno.env.get('DEFAULT_ACCOUNT_ID') || null
 
-    // Create Stripe Checkout Session
+    // Create checkout session immediately - don't block on account lookup
+    const accountId = Deno.env.get('DEFAULT_ACCOUNT_ID') || null
+
     const session = await stripe.checkout.sessions.create({
       mode,
       payment_method_types: ['card'],
@@ -90,8 +84,8 @@ serve(async (req) => {
       },
     })
 
-    // Store checkout session in database for tracking
-    const { error: insertError } = await supabase
+    // Store checkout session in database for tracking (non-blocking)
+    supabase
       .from('checkout_sessions')
       .insert({
         account_id: accountId,
@@ -109,11 +103,9 @@ serve(async (req) => {
           cancelUrl: body.cancelUrl,
         },
       })
-
-    if (insertError) {
-      console.error('Error storing checkout session:', insertError)
-      // Non-fatal - continue with checkout
-    }
+      .then(({ error: insertError }) => {
+        if (insertError) console.error('Error storing checkout session:', insertError)
+      })
 
     // Return session ID for client-side redirect
     return new Response(
