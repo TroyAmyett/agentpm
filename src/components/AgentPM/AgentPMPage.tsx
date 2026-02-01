@@ -199,6 +199,7 @@ export function AgentPMPage() {
   // Track which tasks each watcher has already processed to avoid duplicates
   const queueStartedRef = useRef(new Set<string>())
   const autoQueuedRef = useRef(new Set<string>())
+  const autoRoutedRef = useRef(new Set<string>())
   const staleResetRef = useRef(new Set<string>())
   const chainingProcessedRef = useRef(new Set<string>())
 
@@ -632,6 +633,44 @@ export function AgentPMPage() {
     },
     [userId, updateTaskStatus, isTaskExecuting, getTask, agents, skills, runTask, accountId, assignTask, createTask, tasks]
   )
+
+  // Ref for handleUpdateStatus so the auto-router interval can call it without dependency churn
+  const handleUpdateStatusRef = useRef(handleUpdateStatus)
+  handleUpdateStatusRef.current = handleUpdateStatus
+
+  // Auto-route unassigned pending tasks (e.g., tasks created from Projects page with 'pending' status)
+  // These bypass handleUpdateStatus on creation, so the smart routing never triggers.
+  // This interval detects them and triggers routing.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentTasks = tasksRef.current
+      const unassignedPending = currentTasks.filter((t) => {
+        if (t.status !== 'pending') return false
+        // Skip tasks already assigned to a non-orchestrator agent (auto-queue handles those)
+        if (t.assignedTo && t.assignedToType === 'agent') {
+          const agent = agentsRef.current.find((a) => a.id === t.assignedTo)
+          if (agent && agent.agentType !== 'orchestrator') return false
+        }
+        if (t.parentTaskId) return false // Sub-tasks handled by chaining
+        if (autoRoutedRef.current.has(t.id)) return false
+        return true
+      })
+
+      if (unassignedPending.length === 0) return
+
+      console.log(`[Auto-Route] Found ${unassignedPending.length} unassigned pending tasks, triggering smart routing`)
+
+      unassignedPending.forEach((task) => {
+        autoRoutedRef.current.add(task.id)
+        handleUpdateStatusRef.current(task.id, 'pending', 'Auto-routed from pending').catch((err) => {
+          autoRoutedRef.current.delete(task.id)
+          console.error(`[Auto-Route] Failed to route "${task.title}":`, err)
+        })
+      })
+    }, 6000) // Slightly offset from auto-queue (5s) to avoid collision
+
+    return () => clearInterval(interval)
+  }, [])
 
   // Handle agent assignment - auto-execute immediately
   const handleAssignAgent = useCallback(
@@ -1408,6 +1447,7 @@ export function AgentPMPage() {
         onSubmit={handleCreateTask}
         agents={agents}
         skills={skills}
+        projects={projects}
         defaultAgentId={preselectedAgentId}
         defaultTitle={voiceTaskTitle}
         currentUserId={userId}

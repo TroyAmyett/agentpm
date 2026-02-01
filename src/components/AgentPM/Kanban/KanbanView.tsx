@@ -289,6 +289,10 @@ export function KanbanView({
     (e: React.DragEvent, columnId: string) => {
       e.preventDefault()
       setDragOverColumn(null)
+      // Reset drag state immediately on drop - handleDragEnd may not fire
+      // if the task card gets unmounted due to the status change re-render
+      setDraggedTask(null)
+      setTimeout(() => setIsDragging(false), 50)
 
       if (!draggedTask) return
 

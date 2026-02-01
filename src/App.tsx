@@ -85,10 +85,16 @@ const VIEW_TO_HASH: Record<AppView, string> = {
   settings: '#settings',
 }
 
-// Get initial view from URL hash
+// Get initial view from URL hash (supports sub-paths like #agentpm/tasks)
 function getViewFromHash(): AppView {
   const hash = window.location.hash.toLowerCase()
-  return HASH_TO_VIEW[hash] || 'agentpm'
+  // Direct match first
+  if (HASH_TO_VIEW[hash]) return HASH_TO_VIEW[hash]
+  // Prefix match for sub-paths (e.g., #agentpm/tasks → agentpm)
+  for (const [key, view] of Object.entries(HASH_TO_VIEW)) {
+    if (hash.startsWith(key + '/')) return view
+  }
+  return 'agentpm'
 }
 
 interface NavItemConfig {
@@ -280,11 +286,13 @@ function App() {
     document.documentElement.classList.remove('light')
   }, [])
 
-  // Sync URL hash with current view
+  // Sync URL hash with current view (preserve sub-paths like #agentpm/tasks)
   useEffect(() => {
-    const newHash = VIEW_TO_HASH[currentView]
-    if (window.location.hash !== newHash) {
-      window.history.pushState(null, '', newHash)
+    const currentHash = window.location.hash
+    const prefix = VIEW_TO_HASH[currentView]
+    // Don't overwrite sub-paths (e.g., don't replace #agentpm/tasks with #agentpm)
+    if (currentHash !== prefix && !currentHash.startsWith(prefix + '/')) {
+      window.history.pushState(null, '', prefix)
     }
   }, [currentView])
 

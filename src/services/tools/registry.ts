@@ -192,7 +192,7 @@ export const BUILT_IN_TOOLS: Tool[] = [
           },
           content: {
             type: 'string',
-            description: 'Blog post body in Markdown format. Use ## for headings, bullet points for lists, **bold** for emphasis.',
+            description: 'Blog post body in Markdown format. Use ## for headings, bullet points for lists, **bold** for emphasis. Do NOT include the title as an H1 heading - the title is rendered separately from frontmatter.',
           },
           excerpt: {
             type: 'string',
@@ -204,11 +204,11 @@ export const BUILT_IN_TOOLS: Tool[] = [
           },
           seoTitle: {
             type: 'string',
-            description: 'SEO-optimized page title, 50-60 characters',
+            description: 'SEO-optimized page title, 50-60 characters. REQUIRED for good search rankings.',
           },
           metaDescription: {
             type: 'string',
-            description: 'SEO meta description, 150-160 characters',
+            description: 'SEO meta description, 150-160 characters. REQUIRED for good search rankings.',
           },
           heroImageUrl: {
             type: 'string',
@@ -225,8 +225,8 @@ export const BUILT_IN_TOOLS: Tool[] = [
           },
           publish: {
             type: 'boolean',
-            description: 'If true, publish immediately. If false, save as draft.',
-            default: true,
+            description: 'If true, publish immediately. If false, save as draft for review. Defaults to false (draft).',
+            default: false,
           },
         },
         required: ['title', 'slug', 'content', 'excerpt', 'category'],

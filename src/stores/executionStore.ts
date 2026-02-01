@@ -338,22 +338,35 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       // Determine appropriate status for successful tasks:
       // - Subtasks auto-complete UNLESS they are QA/Review tasks
-      // - Parent tasks (no parentTaskId) always go to review
-      // - QA/Review subtasks go to review for human approval
+      // - Parent tasks (with subtasks) go to review for output verification
+      // - Single-step standalone tasks auto-complete
+      // - QA/Review tasks go to review for human approval
       let newStatus: string = 'queued'
       if (result.success) {
         const isSubtask = !!task.parentTaskId
         const isQaTask = agent.agentType === 'qa-tester' ||
           /\b(qa|quality\s*assurance|review|final\s*review)\b/i.test(task.title)
 
-        if (isSubtask && !isQaTask) {
-          // Intermediate subtasks auto-complete
-          newStatus = 'completed'
-          console.log(`[Execution] Subtask "${task.title}" auto-completed (intermediate step)`)
-        } else {
-          // Parent tasks and QA tasks go to review for human approval
+        // Check if this task has subtasks (is a parent/orchestrator task)
+        const { count: subtaskCount } = await supabase
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('parent_task_id', task.id)
+
+        const isParentWithSubtasks = (subtaskCount ?? 0) > 0
+
+        if (isQaTask) {
+          // QA tasks always go to review
           newStatus = 'review'
-          console.log(`[Execution] Moving task ${task.id} to review (${isQaTask ? 'QA task' : 'parent task'})`)
+          console.log(`[Execution] QA task "${task.title}" → review for human approval`)
+        } else if (isParentWithSubtasks) {
+          // Parent tasks with subtasks go to review for aggregated output check
+          newStatus = 'review'
+          console.log(`[Execution] Parent task "${task.title}" → review (has ${subtaskCount} subtasks)`)
+        } else {
+          // Single-step standalone tasks and intermediate subtasks auto-complete
+          newStatus = 'completed'
+          console.log(`[Execution] Task "${task.title}" auto-completed (${isSubtask ? 'intermediate subtask' : 'single-step task'})`)
         }
       } else {
         console.log(`[Execution] Task failed, moving back to queued. Error: ${result.error}`)

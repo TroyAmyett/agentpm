@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, User, Calendar, AlertTriangle, Sparkles, Target } from 'lucide-react'
-import type { TaskPriority, TaskStatus, AgentPersona, Skill, Milestone } from '@/types/agentpm'
+import { X, Bot, User, Calendar, AlertTriangle, Sparkles, Target, FolderKanban } from 'lucide-react'
+import type { TaskPriority, TaskStatus, AgentPersona, Skill, Milestone, Project } from '@/types/agentpm'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -23,6 +23,7 @@ interface CreateTaskModalProps {
   agents: AgentPersona[]
   skills?: Skill[]
   milestones?: Milestone[]
+  projects?: Project[]
   projectId?: string
   defaultAgentId?: string
   defaultTitle?: string
@@ -41,7 +42,8 @@ export function CreateTaskModal({
   agents,
   skills = [],
   milestones = [],
-  projectId,
+  projects = [],
+  projectId: presetProjectId,
   defaultAgentId,
   defaultTitle = '',
   currentUserId,
@@ -55,6 +57,7 @@ export function CreateTaskModal({
   const [dueAt, setDueAt] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [assignedToType, setAssignedToType] = useState<'user' | 'agent'>('agent')
+  const [projectId, setProjectId] = useState(presetProjectId || '')
   const [skillId, setSkillId] = useState('')
   const [milestoneId, setMilestoneId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -91,7 +94,7 @@ export function CreateTaskModal({
         dueAt: dueAt || undefined,
         assignedTo: assignedTo || undefined,
         assignedToType: assignedTo ? assignedToType : undefined,
-        projectId,
+        projectId: projectId || undefined,
         skillId: skillId || undefined,
         milestoneId: milestoneId || undefined,
         status: initialStatus,
@@ -112,6 +115,7 @@ export function CreateTaskModal({
     setPriority('medium')
     setDueAt('')
     setAssignedTo('')
+    setProjectId(presetProjectId || '')
     setSkillId('')
     setMilestoneId('')
     setError(null)
@@ -201,6 +205,30 @@ export function CreateTaskModal({
                   className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 />
               </div>
+
+              {/* Project */}
+              {!presetProjectId && projects.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <FolderKanban size={14} className="text-purple-500" />
+                      Project (optional)
+                    </span>
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No project</option>
+                    {projects.filter(p => p.status === 'active').map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Priority & Due Date */}
               <div className="grid grid-cols-2 gap-4">

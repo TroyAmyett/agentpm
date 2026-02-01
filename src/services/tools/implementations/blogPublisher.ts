@@ -20,7 +20,7 @@ interface BlogPostParams {
   heroImagePrompt?: string // Prompt used to generate the image
   author?: string
   tags?: string[]
-  publish?: boolean // true = published, false = draft
+  publish?: boolean // true = published, false = draft (defaults to false)
 }
 
 /**
@@ -35,7 +35,7 @@ function buildFrontmatter(params: BlogPostParams, heroImagePath?: string): strin
   lines.push(`date: ${date}`)
   lines.push(`author: ${params.author || 'Troy Amyett'}`)
   lines.push(`category: ${params.category}`)
-  lines.push(`status: ${params.publish ? 'published' : 'draft'}`)
+  lines.push(`status: ${params.publish === true ? 'published' : 'draft'}`)
   lines.push(`featured: false`)
   lines.push(`excerpt: "${escapeYaml(params.excerpt)}"`)
 
@@ -229,8 +229,21 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     }
 
     // Step 2: Build the markdown content with frontmatter
+    // Strip duplicate H1 title from content if present (title is in frontmatter)
+    let cleanContent = params.content.trim()
+    const h1Match = cleanContent.match(/^#\s+(.+?)[\r\n]/)
+    if (h1Match) {
+      // Remove the H1 if it matches or closely matches the title
+      const h1Text = h1Match[1].trim()
+      const titleNorm = params.title.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const h1Norm = h1Text.toLowerCase().replace(/[^a-z0-9]/g, '')
+      if (titleNorm === h1Norm || titleNorm.includes(h1Norm) || h1Norm.includes(titleNorm)) {
+        cleanContent = cleanContent.slice(h1Match[0].length).trim()
+      }
+    }
+
     const frontmatter = buildFrontmatter(params, heroImagePath)
-    const fullContent = `${frontmatter}\n\n${params.content}`
+    const fullContent = `${frontmatter}\n\n${cleanContent}`
     const postPath = `content/blog/${params.slug}.md`
 
     // Base64 encode the markdown content
@@ -240,7 +253,7 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     const postCommit = await commitToGitHub(
       postPath,
       contentBase64,
-      `Add ${params.publish ? '' : 'draft '}blog post: ${params.title}`
+      `Add ${params.publish === true ? '' : 'draft '}blog post: ${params.title}`
     )
 
     if (!postCommit.success) {
@@ -251,8 +264,8 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
       }
     }
 
-    const siteUrl = `https://funnelists.com/blog/${params.slug}`
-    const status = params.publish ? 'published' : 'draft'
+    const siteUrl = `https://funnelists.com/insights/${params.slug}`
+    const status = params.publish === true ? 'published' : 'draft'
 
     console.log(`[BlogPublisher] Blog post ${status}: ${siteUrl}`)
 

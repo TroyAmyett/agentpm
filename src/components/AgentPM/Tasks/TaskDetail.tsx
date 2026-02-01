@@ -546,7 +546,9 @@ export function TaskDetail({
 
               const currentStep = (taskInput?.planCurrentStep as number) || 0
               const isStepByStep = plan.executionMode === 'step-by-step'
-              const isPlanReview = task.status === 'review'
+              // Only show approval buttons if task is in review AND hasn't been executed yet
+              const hasExecutionOutput = task.output && Object.keys(task.output).length > 0
+              const isPlanReview = task.status === 'review' && !hasExecutionOutput
 
               const confidenceColors = {
                 high: 'text-green-600 dark:text-green-400',
@@ -684,20 +686,22 @@ export function TaskDetail({
               </div>
             )}
 
-            {/* Output */}
-            {task.output && Object.keys(task.output).length > 0 ? (
-              <div>
-                <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
-                  Task Output
-                </h4>
-                {renderAgentOutput()}
-              </div>
-            ) : !task.error && (
-              <div className="text-center py-8 text-surface-500 dark:text-surface-400">
-                <FileOutput size={32} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No output yet</p>
-                <p className="text-xs mt-1">Output will appear here after the task runs</p>
-              </div>
+            {/* Output - only show when ExecutionPanel is NOT rendered (avoids duplicate) */}
+            {!(accountId && userId && task.assignedToType === 'agent') && (
+              task.output && Object.keys(task.output).length > 0 ? (
+                <div>
+                  <h4 className="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
+                    Task Output
+                  </h4>
+                  {renderAgentOutput()}
+                </div>
+              ) : !task.error && (
+                <div className="text-center py-8 text-surface-500 dark:text-surface-400">
+                  <FileOutput size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No output yet</p>
+                  <p className="text-xs mt-1">Output will appear here after the task runs</p>
+                </div>
+              )
             )}
           </div>
         )}
@@ -817,28 +821,37 @@ export function TaskDetail({
 
         {/* History Tab */}
         {activeTab === 'history' && (
-          <div className="space-y-2">
+          <div>
             {task.statusHistory && task.statusHistory.length > 0 ? (
-              [...task.statusHistory].reverse().map((entry, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-surface-50 dark:bg-surface-900/50"
-                >
-                  <div className="mt-0.5">
-                    <TaskStatusBadge status={entry.status} size="sm" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-surface-500 dark:text-surface-400">
-                      {formatDateTime(entry.changedAt)}
-                    </p>
-                    {entry.note && (
-                      <p className="text-sm text-surface-700 dark:text-surface-300 mt-1">
-                        {entry.note}
-                      </p>
-                    )}
-                  </div>
+              <div className="relative">
+                {/* Timeline line */}
+                <div className="absolute left-[52px] top-3 bottom-3 w-px bg-surface-200 dark:bg-surface-700" />
+
+                <div className="space-y-0">
+                  {[...task.statusHistory].reverse().map((entry, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[90px_1fr] gap-3 py-3 px-3 hover:bg-surface-50 dark:hover:bg-surface-900/30 rounded-lg transition-colors"
+                    >
+                      {/* Status badge - fixed width column */}
+                      <div className="flex items-center justify-end relative z-10">
+                        <TaskStatusBadge status={entry.status} size="sm" />
+                      </div>
+                      {/* Date and note */}
+                      <div className="min-w-0">
+                        <p className="text-xs text-surface-500 dark:text-surface-400">
+                          {formatDateTime(entry.changedAt)}
+                        </p>
+                        {entry.note && (
+                          <p className="text-sm text-surface-700 dark:text-surface-300 mt-0.5">
+                            {entry.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))
+              </div>
             ) : (
               <div className="text-center py-8 text-surface-500 dark:text-surface-400">
                 <History size={32} className="mx-auto mb-2 opacity-50" />
