@@ -23,9 +23,6 @@ import {
   FileText,
   History,
   ListOrdered,
-  Shield,
-  ArrowRight,
-  Wrench,
   ChevronDown,
 } from 'lucide-react'
 import type { Task, TaskStatus, AgentPersona, Skill } from '@/types/agentpm'
@@ -538,7 +535,7 @@ export function TaskDetail({
               </div>
             )}
 
-            {/* Plan Approval (for tasks with stored plans in review status) */}
+            {/* Plan Review (for tasks with stored plans in review status) */}
             {(() => {
               const taskInput = task.input as Record<string, unknown> | undefined
               const plan = taskInput?.plan as ExecutionPlan | undefined
@@ -546,45 +543,21 @@ export function TaskDetail({
 
               const currentStep = (taskInput?.planCurrentStep as number) || 0
               const isStepByStep = plan.executionMode === 'step-by-step'
-              // Only show approval buttons if task is in review AND hasn't been executed yet
+              // Only show action buttons if task is in review AND hasn't been executed yet
               const hasExecutionOutput = task.output && Object.keys(task.output).length > 0
               const isPlanReview = task.status === 'review' && !hasExecutionOutput
 
-              const confidenceColors = {
-                high: 'text-green-600 dark:text-green-400',
-                medium: 'text-yellow-600 dark:text-yellow-400',
-                low: 'text-red-600 dark:text-red-400',
-              }
-
-              const modeLabels = {
-                auto: 'Auto-Execute',
-                'plan-then-execute': 'Approve & Execute',
-                'step-by-step': 'Step-by-Step',
-              }
-
               return (
                 <div className="p-4 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="flex items-center gap-2 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                      <ListOrdered size={14} />
-                      Execution Plan
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="flex items-center gap-2 text-sm font-medium text-surface-800 dark:text-surface-200">
+                      <ListOrdered size={14} className="text-indigo-500" />
+                      {isPlanReview
+                        ? `${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''} planned — review and run`
+                        : `Plan (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''})`
+                      }
                     </h4>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium ${confidenceColors[plan.confidence?.level || 'medium']}`}>
-                        {plan.confidence ? `${(plan.confidence.score * 100).toFixed(0)}% confidence` : ''}
-                      </span>
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
-                        {modeLabels[plan.executionMode] || plan.executionMode}
-                      </span>
-                    </div>
                   </div>
-
-                  {/* Reasoning */}
-                  {plan.reasoning && (
-                    <p className="text-xs text-surface-600 dark:text-surface-400 mb-3 italic">
-                      {plan.reasoning}
-                    </p>
-                  )}
 
                   {/* Steps */}
                   <div className="space-y-2 mb-4">
@@ -592,7 +565,6 @@ export function TaskDetail({
                       const stepAgent = agents.find(a => a.id === step.agentId)
                       const isCurrentStep = isStepByStep && index === currentStep
                       const isPastStep = isStepByStep && index < currentStep
-                      const isFutureStep = isStepByStep && index > currentStep
 
                       return (
                         <div
@@ -600,8 +572,7 @@ export function TaskDetail({
                           className={`flex items-start gap-3 p-3 rounded-lg transition-colors
                             ${isCurrentStep ? 'bg-indigo-100 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700' : ''}
                             ${isPastStep ? 'bg-green-50 dark:bg-green-900/10 opacity-70' : ''}
-                            ${isFutureStep ? 'bg-white/50 dark:bg-surface-800/30 opacity-60' : ''}
-                            ${!isStepByStep ? 'bg-white/60 dark:bg-surface-800/30' : ''}
+                            ${!isCurrentStep && !isPastStep ? 'bg-white/60 dark:bg-surface-800/30' : ''}
                           `}
                         >
                           <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
@@ -615,58 +586,37 @@ export function TaskDetail({
                             <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
                               {step.title}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="flex items-center gap-1 text-xs text-surface-500 dark:text-surface-400">
-                                <Bot size={10} />
-                                {stepAgent?.alias || step.agentAlias || 'Agent'}
-                              </span>
-                              {step.toolsRequired && step.toolsRequired.length > 0 && (
-                                <span className="flex items-center gap-1 text-xs text-surface-500 dark:text-surface-400">
-                                  <Wrench size={10} />
-                                  {step.toolsRequired.length} tool{step.toolsRequired.length > 1 ? 's' : ''}
-                                </span>
-                              )}
-                              {step.dependsOnIndex != null && (
-                                <span className="flex items-center gap-1 text-xs text-surface-400">
-                                  <ArrowRight size={10} />
-                                  after step {step.dependsOnIndex + 1}
-                                </span>
-                              )}
-                            </div>
+                            <span className="flex items-center gap-1 text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+                              <Bot size={10} />
+                              {stepAgent?.alias || step.agentAlias || 'Agent'}
+                            </span>
                           </div>
                         </div>
                       )
                     })}
                   </div>
 
-                  {/* Approval Actions */}
+                  {/* Action Buttons */}
                   {isPlanReview && onApprovePlan && (
-                    <div className="flex items-center gap-2 pt-2 border-t border-indigo-200 dark:border-indigo-700">
+                    <div className="flex items-center gap-2 pt-3 border-t border-indigo-200 dark:border-indigo-700">
                       <button
-                        onClick={() => onApprovePlan(task.id, plan)}
+                        onClick={() => {
+                          // Override to run all steps at once
+                          const allAtOncePlan = { ...plan, executionMode: 'plan-then-execute' as const }
+                          onApprovePlan(task.id, allAtOncePlan)
+                        }}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
                       >
                         <Play size={14} />
-                        {isStepByStep
-                          ? (currentStep === 0 ? 'Approve First Step' : 'Approve Next Step')
-                          : 'Approve & Execute All'
-                        }
+                        Run All Steps
                       </button>
                       <button
-                        onClick={() => onUpdateStatus?.(task.id, 'cancelled', 'Plan rejected')}
+                        onClick={() => onUpdateStatus?.(task.id, 'cancelled', 'Plan cancelled')}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 text-sm font-medium transition-colors"
                       >
                         <XCircle size={14} />
-                        Reject
+                        Cancel
                       </button>
-                      {plan.confidence && (
-                        <div className="ml-auto flex items-center gap-1.5">
-                          <Shield size={12} className={confidenceColors[plan.confidence.level]} />
-                          <span className="text-xs text-surface-500 dark:text-surface-400">
-                            {plan.confidence.reasoning}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
