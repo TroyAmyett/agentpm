@@ -227,10 +227,13 @@ export function AgentPMPage() {
       console.log(`[Queue Watcher] Starting ${tasksToStart.length} tasks in parallel (${activeCount} already running)`)
 
       tasksToStart.forEach((queuedTask) => {
-        queueStartedRef.current.add(queuedTask.id)
         const agent = agentsRef.current.find((a) => a.id === queuedTask.assignedTo)
-        if (!agent) return
+        if (!agent) {
+          console.warn(`[Queue Watcher] Agent not found for "${queuedTask.title}" (assignedTo: ${queuedTask.assignedTo}) — will retry next tick`)
+          return // Don't add to queueStartedRef so it retries on next interval
+        }
 
+        queueStartedRef.current.add(queuedTask.id)
         console.log(`[Queue Watcher] Starting: "${queuedTask.title}" → ${agent.alias}`)
         const skill = queuedTask.skillId ? skillsRef.current.find((s) => s.id === queuedTask.skillId) : undefined
 
@@ -329,6 +332,7 @@ export function AgentPMPage() {
   }, [updateTaskStatus, userId, isTaskExecuting])
 
   // Sub-task chaining - when a sub-task completes, queue unblocked dependents
+  // Also handles failed subtasks: marks parent as failed so the chain doesn't get stuck
   useEffect(() => {
     const interval = setInterval(() => {
       const currentTasks = tasksRef.current
@@ -410,6 +414,49 @@ export function AgentPMPage() {
               })
               .catch((err) => console.error('Failed to aggregate and complete parent task:', err))
           }
+        }
+      }
+
+      // Handle failed subtasks — propagate failure to parent so the chain doesn't get stuck
+      const failedSubTasks = currentTasks.filter(
+        (t) => t.status === 'failed' &&
+               t.parentTaskId &&
+               !chainingProcessedRef.current.has(`failed-${t.id}`)
+      )
+
+      for (const failedTask of failedSubTasks) {
+        chainingProcessedRef.current.add(`failed-${failedTask.id}`)
+
+        const parentTask = currentTasks.find((t) => t.id === failedTask.parentTaskId)
+        if (!parentTask || parentTask.status !== 'in_progress') continue
+
+        const allSiblings = currentTasks.filter((t) => t.parentTaskId === failedTask.parentTaskId)
+        const hasRunning = allSiblings.some((t) => t.status === 'in_progress' || t.status === 'queued')
+
+        // If other siblings are still running, wait for them to finish
+        if (hasRunning) continue
+
+        // No siblings still running — check final state
+        const anyFailed = allSiblings.some((t) => t.status === 'failed')
+        const allSettled = allSiblings.every(
+          (t) => t.status === 'completed' || t.status === 'review' || t.status === 'failed' || t.status === 'cancelled'
+        )
+
+        if (anyFailed && allSettled) {
+          const failedNames = allSiblings.filter((t) => t.status === 'failed').map((t) => t.title)
+          console.warn(`Sub-task chain failed for "${parentTask.title}": ${failedNames.join(', ')}`)
+
+          const failedError = failedTask.error?.message || 'Unknown error'
+          updateTask(parentTask.id, {
+            error: { message: `Sub-task failed: ${failedNames.join(', ')}`, code: 'SUBTASK_FAILED' },
+            updatedBy: userId,
+            updatedByType: 'user',
+          })
+            .then(() => updateTaskStatus(
+              parentTask.id, 'failed', userId,
+              `Sub-task "${failedTask.title}" failed: ${failedError}`
+            ))
+            .catch((err) => console.error('Failed to mark parent as failed:', err))
         }
       }
     }, 5000)
@@ -704,25 +751,36 @@ export function AgentPMPage() {
       const task = getTask(taskId)
       if (!task) return
 
-      const createTaskFn = async (data: Record<string, unknown>) => {
-        return await createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
-      }
-
-      if (plan.executionMode === 'step-by-step') {
-        // Step-by-step: create next step only
-        const currentStep = getPlanCurrentStep(task)
-        const stepId = await createNextStep(plan, currentStep, task, accountId, userId, createTaskFn)
-        if (stepId) {
-          await advancePlanStep(taskId)
-          await updateTaskStatus(taskId, 'in_progress', userId, `Approved step ${currentStep + 1} of ${plan.steps.length}`)
+      try {
+        const createTaskFn = async (data: Record<string, unknown>) => {
+          return await createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
         }
-      } else {
-        // Plan-then-execute: create all subtasks at once
-        await createSubtasksFromPlan(plan.steps, task, accountId, userId, createTaskFn, createTaskDependency)
-        await updateTaskStatus(taskId, 'in_progress', userId, 'Plan approved - executing all steps')
+
+        if (plan.executionMode === 'step-by-step') {
+          // Step-by-step: create next step only
+          const currentStep = getPlanCurrentStep(task)
+          const stepId = await createNextStep(plan, currentStep, task, accountId, userId, createTaskFn)
+          if (stepId) {
+            await advancePlanStep(taskId)
+            await updateTaskStatus(taskId, 'in_progress', userId, `Approved step ${currentStep + 1} of ${plan.steps.length}`)
+          }
+        } else {
+          // Plan-then-execute: create all subtasks at once
+          await createSubtasksFromPlan(plan.steps, task, accountId, userId, createTaskFn, createTaskDependency)
+          await updateTaskStatus(taskId, 'in_progress', userId, 'Plan approved - executing all steps')
+        }
+      } catch (err) {
+        console.error(`[Plan Approval] Failed to execute plan for "${task.title}":`, err)
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        await updateTask(taskId, {
+          error: { message: `Plan execution failed: ${errorMsg}`, code: 'PLAN_EXECUTION_ERROR' },
+          updatedBy: userId,
+          updatedByType: 'user',
+        }).catch(() => {})
+        await updateTaskStatus(taskId, 'failed', userId, `Plan execution failed: ${errorMsg}`).catch(() => {})
       }
     },
-    [getTask, createTask, accountId, userId, updateTaskStatus, createTaskDependency]
+    [getTask, createTask, accountId, userId, updateTaskStatus, updateTask, createTaskDependency]
   )
 
   // Handle task deletion
