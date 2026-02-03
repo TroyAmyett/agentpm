@@ -1,7 +1,8 @@
 // Results Card — Prominent display of agent output (blog posts, research, etc.)
 
 import { useState } from 'react'
-import { Copy, Check, ExternalLink, ChevronDown, Code } from 'lucide-react'
+import { Copy, Check, ExternalLink, ChevronDown, Code, Send, Loader2, Github, AlertCircle } from 'lucide-react'
+import { publishDraftPost } from '@/services/tools/implementations/blogPublisher'
 
 interface ResultsCardProps {
   output: Record<string, unknown>
@@ -10,6 +11,8 @@ interface ResultsCardProps {
 export function ResultsCard({ output }: ResultsCardProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [showRaw, setShowRaw] = useState(false)
+  const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'published' | 'error'>('idle')
+  const [publishError, setPublishError] = useState<string | null>(null)
 
   const copyToClipboard = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text)
@@ -39,6 +42,31 @@ export function ResultsCard({ output }: ResultsCardProps) {
   const tags = Array.isArray(output.tags) ? output.tags.map(t => String(t)) : []
   const siteUrl = output.siteUrl ? String(output.siteUrl) : null
   const formatted = output.formatted ? String(output.formatted) : null
+  const slug = output.slug ? String(output.slug) : null
+  const postStatus = output.status ? String(output.status) : null
+  const githubUrl = output.githubUrl ? String(output.githubUrl) : null
+
+  // Blog draft detection
+  const isBlogDraft = slug && postStatus === 'draft'
+  const isPublished = publishState === 'published' || postStatus === 'published'
+
+  const handlePublish = async () => {
+    if (!slug || publishState === 'publishing' || isPublished) return
+    setPublishState('publishing')
+    setPublishError(null)
+    try {
+      const result = await publishDraftPost(slug)
+      if (result.success) {
+        setPublishState('published')
+      } else {
+        setPublishState('error')
+        setPublishError(result.error || 'Publishing failed')
+      }
+    } catch (err) {
+      setPublishState('error')
+      setPublishError(err instanceof Error ? err.message : 'Publishing failed')
+    }
+  }
 
   // Structured output (blog, content)
   if (title || content || result) {
@@ -127,9 +155,81 @@ export function ResultsCard({ output }: ResultsCardProps) {
             </details>
           )}
 
+          {/* Draft status banner */}
+          {isBlogDraft && !isPublished && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+              <AlertCircle size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-300">Draft — review content then publish when ready</span>
+            </div>
+          )}
+
+          {/* Published confirmation */}
+          {isPublished && siteUrl && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-800">
+              <Check size={14} className="text-green-600 dark:text-green-400 flex-shrink-0" />
+              <span className="text-xs text-green-700 dark:text-green-300">Published — live at{' '}
+                <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                  {siteUrl.replace('https://', '')}
+                </a>
+              </span>
+            </div>
+          )}
+
+          {/* Publish error */}
+          {publishState === 'error' && publishError && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800">
+              <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+              <span className="text-xs text-red-600 dark:text-red-400">{publishError}</span>
+              <button
+                onClick={handlePublish}
+                className="ml-auto text-xs text-red-700 dark:text-red-300 underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           {/* Action bar */}
           <div className="flex items-center gap-2 pt-2 border-t border-green-200/60 dark:border-green-800/40">
-            {siteUrl && (
+            {/* Publish button for blog drafts */}
+            {isBlogDraft && !isPublished && (
+              <button
+                onClick={handlePublish}
+                disabled={publishState === 'publishing'}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-lg transition-colors shadow-sm"
+              >
+                {publishState === 'publishing'
+                  ? <><Loader2 size={12} className="animate-spin" /> Publishing...</>
+                  : <><Send size={12} /> Publish</>
+                }
+              </button>
+            )}
+            {/* Site link (show after published) */}
+            {isPublished && siteUrl && (
+              <a
+                href={siteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 rounded-lg transition-colors"
+              >
+                <ExternalLink size={12} />
+                Open on site
+              </a>
+            )}
+            {/* GitHub review link for blog drafts */}
+            {githubUrl && (
+              <a
+                href={githubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-600 dark:text-surface-400 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-lg transition-colors"
+              >
+                <Github size={12} />
+                Review on GitHub
+              </a>
+            )}
+            {/* Non-blog site link */}
+            {!isBlogDraft && !isPublished && siteUrl && (
               <a
                 href={siteUrl}
                 target="_blank"

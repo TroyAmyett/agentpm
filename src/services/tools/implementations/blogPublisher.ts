@@ -1,5 +1,5 @@
-// Blog Publisher Tool - Publishes blog posts to funnelists-cms via GitHub API
-// Commits markdown + hero image to GitHub, triggers Vercel rebuild
+// Blog Publisher Tool - Commits blog posts as DRAFTS to funnelists-cms via GitHub API
+// All posts are created as drafts for human review. Use publishDraftPost() to go live.
 
 import type { ToolResult } from '../types'
 
@@ -20,7 +20,7 @@ interface BlogPostParams {
   heroImagePrompt?: string // Prompt used to generate the image
   author?: string
   tags?: string[]
-  publish?: boolean // true = published, false = draft (defaults to false)
+  publish?: boolean // IGNORED — all posts are created as drafts for review
 }
 
 /**
@@ -35,7 +35,7 @@ function buildFrontmatter(params: BlogPostParams, heroImagePath?: string): strin
   lines.push(`date: ${date}`)
   lines.push(`author: ${params.author || 'Troy Amyett'}`)
   lines.push(`category: ${params.category}`)
-  lines.push(`status: ${params.publish === true ? 'published' : 'draft'}`)
+  lines.push(`status: draft`)
   lines.push(`featured: false`)
   lines.push(`excerpt: "${escapeYaml(params.excerpt)}"`)
 
@@ -171,10 +171,14 @@ async function downloadImageAsBase64(url: string): Promise<{ base64: string; mim
 }
 
 /**
- * Publish a blog post to funnelists-cms
+ * Create a blog post as a DRAFT in funnelists-cms.
+ * All posts are drafts until explicitly published via publishDraftPost().
  */
 export async function publishBlogPost(params: BlogPostParams): Promise<ToolResult> {
   const startTime = Date.now()
+
+  // Force draft — never auto-publish
+  params.publish = false
 
   // Validate required fields
   if (!params.title || !params.slug || !params.content || !params.excerpt || !params.category) {
@@ -249,11 +253,11 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     // Base64 encode the markdown content
     const contentBase64 = btoa(unescape(encodeURIComponent(fullContent)))
 
-    console.log(`[BlogPublisher] Committing post: ${postPath}`)
+    console.log(`[BlogPublisher] Committing draft post: ${postPath}`)
     const postCommit = await commitToGitHub(
       postPath,
       contentBase64,
-      `Add ${params.publish === true ? '' : 'draft '}blog post: ${params.title}`
+      `Add draft blog post: ${params.title}`
     )
 
     if (!postCommit.success) {
@@ -265,28 +269,34 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     }
 
     const siteUrl = `https://funnelists.com/insights/${params.slug}`
-    const status = params.publish === true ? 'published' : 'draft'
+    const githubUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/blob/${GITHUB_BRANCH}/${postPath}`
 
-    console.log(`[BlogPublisher] Blog post ${status}: ${siteUrl}`)
+    console.log(`[BlogPublisher] Draft committed: ${githubUrl}`)
 
     return {
       success: true,
       data: {
         slug: params.slug,
-        status,
+        status: 'draft',
         siteUrl,
+        githubUrl,
         postPath,
         heroImagePath,
         commitSha: postCommit.sha,
-        formatted: `Blog post ${status} successfully!\n\n` +
+        title: params.title,
+        excerpt: params.excerpt,
+        category: params.category,
+        seoTitle: params.seoTitle,
+        seoDescription: params.metaDescription,
+        tags: params.tags,
+        content: params.content,
+        formatted: `Draft blog post created — awaiting review.\n\n` +
           `Title: ${params.title}\n` +
           `Slug: ${params.slug}\n` +
           `Category: ${params.category}\n` +
-          `Status: ${status}\n` +
-          `URL: ${siteUrl}\n` +
           (heroImagePath ? `Hero Image: ${heroImagePath}\n` : '') +
-          `\nThe post has been committed to GitHub. Vercel will automatically rebuild the site.\n` +
-          `The post should be live at ${siteUrl} within 1-2 minutes.`,
+          `\nReview the content above and click "Publish" when ready.\n` +
+          `The post will go live at ${siteUrl} after publishing.`,
       },
       metadata: {
         executionTimeMs: Date.now() - startTime,
@@ -300,5 +310,77 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
       error: `Blog publishing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       metadata: { executionTimeMs: Date.now() - startTime },
     }
+  }
+}
+
+/**
+ * Publish a draft blog post by changing its frontmatter status from 'draft' to 'published'.
+ * Fetches the existing file from GitHub, updates the status line, and commits.
+ */
+export async function publishDraftPost(slug: string): Promise<{ success: boolean; error?: string; siteUrl?: string }> {
+  if (!GITHUB_TOKEN) {
+    return { success: false, error: 'VITE_GITHUB_TOKEN not configured.' }
+  }
+
+  const filePath = `content/blog/${slug}.md`
+  const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`
+
+  try {
+    // Fetch the current file
+    const getResponse = await fetch(`${apiUrl}?ref=${GITHUB_BRANCH}`, {
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    })
+
+    if (!getResponse.ok) {
+      return { success: false, error: `Draft not found: ${slug}` }
+    }
+
+    const fileData = await getResponse.json()
+    const existingContent = atob(fileData.content.replace(/\n/g, ''))
+
+    // Change status: draft → status: published in frontmatter
+    const updatedContent = existingContent.replace(
+      /^status:\s*draft\s*$/m,
+      'status: published'
+    )
+
+    if (updatedContent === existingContent) {
+      // Already published or no status line found
+      const isPublished = /^status:\s*published\s*$/m.test(existingContent)
+      if (isPublished) {
+        return { success: true, siteUrl: `https://funnelists.com/insights/${slug}` }
+      }
+      return { success: false, error: 'Could not find draft status in frontmatter' }
+    }
+
+    // Commit the updated file
+    const contentBase64 = btoa(unescape(encodeURIComponent(updatedContent)))
+    const response = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `Publish blog post: ${slug}`,
+        content: contentBase64,
+        sha: fileData.sha,
+        branch: GITHUB_BRANCH,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      return { success: false, error: errorData.message || `HTTP ${response.status}` }
+    }
+
+    console.log(`[BlogPublisher] Published: ${slug}`)
+    return { success: true, siteUrl: `https://funnelists.com/insights/${slug}` }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
