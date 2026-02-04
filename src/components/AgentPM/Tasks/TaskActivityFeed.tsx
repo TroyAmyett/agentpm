@@ -9,11 +9,12 @@ import {
   AlertCircle,
   Play,
 } from 'lucide-react'
-import type { Task, TaskStatus, AgentPersona, Skill, StatusHistoryEntry } from '@/types/agentpm'
+import type { Task, TaskStatus, AgentPersona, Skill, StatusHistoryEntry, WorkflowGateConfig } from '@/types/agentpm'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { ResultsCard } from './ResultsCard'
 import { ExecutionPanel } from './ExecutionPanel'
+import { HumanGatePanel } from '../Workflows/HumanGatePanel'
 import { useTimezoneFunctions } from '@/lib/timezone'
 
 interface TaskActivityFeedProps {
@@ -35,6 +36,7 @@ type ActivityEvent =
   | { type: 'execution'; timestamp: string }
   | { type: 'result'; timestamp: string; output: Record<string, unknown> }
   | { type: 'error'; timestamp: string; error: { message: string; code?: string } }
+  | { type: 'workflow_gate'; timestamp: string; gate: WorkflowGateConfig; runId: string; stepId: string }
 
 export function TaskActivityFeed({
   task,
@@ -89,7 +91,20 @@ export function TaskActivityFeed({
       })
     }
 
-    // 4. Execution event (if agent task with execution context)
+    // 4. Workflow gate (if task has workflowGate in input)
+    const workflowGate = taskInput?.workflowGate as WorkflowGateConfig | undefined
+    if (workflowGate && task.workflowRunId && task.workflowStepId && task.status === 'review') {
+      const reviewEntry = task.statusHistory?.find(e => e.status === 'review')
+      items.push({
+        type: 'workflow_gate',
+        timestamp: reviewEntry?.changedAt || task.updatedAt,
+        gate: workflowGate,
+        runId: task.workflowRunId,
+        stepId: task.workflowStepId,
+      })
+    }
+
+    // 5. Execution event (if agent task with execution context)
     if (task.assignedToType === 'agent' && accountId && userId) {
       // If there's output or task is in_progress, there's been an execution
       const startedEntry = task.statusHistory?.find(e => e.status === 'in_progress')
@@ -132,6 +147,7 @@ export function TaskActivityFeed({
         const status = item.entry.status
         // Skip status changes that are represented by other events
         if (status === 'review' && hasPlan && !hasOutput) continue // plan card handles this
+        if (status === 'review' && workflowGate) continue // gate card handles this
         if (status === 'in_progress' && task.assignedToType === 'agent') continue // execution card handles this
         if (status === 'queued' && task.assignedToType === 'agent') continue // execution card handles this
       }
@@ -273,6 +289,28 @@ export function TaskActivityFeed({
                   {agent?.alias || 'Agent'} completed
                 </p>
                 <ResultsCard output={event.output} />
+              </ActivityCard>
+            )
+
+          case 'workflow_gate':
+            return (
+              <ActivityCard
+                key={`gate-${index}`}
+                avatar={<AgentAvatar color="indigo" />}
+                timestamp={formatDateTime(event.timestamp)}
+                highlighted
+              >
+                <HumanGatePanel
+                  runId={event.runId}
+                  stepId={event.stepId}
+                  taskId={task.id}
+                  gate={event.gate}
+                  userId={userId || ''}
+                  onResponded={() => {
+                    // After gate response, the workflow engine marks the task completed
+                    // and advances to the next step automatically
+                  }}
+                />
               </ActivityCard>
             )
 

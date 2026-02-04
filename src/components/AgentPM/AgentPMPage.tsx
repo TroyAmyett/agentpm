@@ -14,6 +14,7 @@ import {
   Cpu,
   Settings,
   ExternalLink,
+  Workflow,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -35,14 +36,16 @@ import { AgentsPage } from './Agents'
 import { ProjectsPage } from './Projects'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
+import { WorkflowsPage } from './Workflows'
 import { routeTask, analyzeTaskForDecomposition } from '@/services/agents/dispatcher'
 import { generatePlan } from '@/services/planner'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
 import { createSubtasksFromPlan, createNextStep, advancePlanStep, storePlanOnTask, getPlanCurrentStep } from '@/services/planner/planExecutor'
+import { advanceWorkflow, handleStepFailure } from '@/services/workflows'
 import { BUILT_IN_TOOLS } from '@/services/tools'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge' | 'tools'
+type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge' | 'tools' | 'workflows'
 
 interface Tab {
   id: TabId
@@ -59,10 +62,11 @@ const tabs: Tab[] = [
   { id: 'reviews', label: 'Reviews', icon: <Bell size={18} /> },
   { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
   { id: 'tools', label: 'Tools', icon: <Cpu size={18} /> },
+  { id: 'workflows', label: 'Workflows', icon: <Workflow size={18} /> },
 ]
 
 // Valid tab IDs for URL hash parsing
-const VALID_TABS: TabId[] = ['dashboard', 'projects', 'tasks', 'agents', 'reviews', 'skills', 'forge', 'tools']
+const VALID_TABS: TabId[] = ['dashboard', 'projects', 'tasks', 'agents', 'reviews', 'skills', 'forge', 'tools', 'workflows']
 
 // Get initial tab from URL hash (e.g., #agentpm/tasks)
 function getTabFromHash(): TabId {
@@ -415,6 +419,45 @@ export function AgentPMPage() {
               .catch((err) => console.error('Failed to aggregate and complete parent task:', err))
           }
         }
+      }
+
+      // ── Workflow advancement ──────────────────────────────────────────
+      // When a subtask with workflowRunId completes, advance the workflow
+      const completedWorkflowTasks = currentTasks.filter(
+        (t) =>
+          t.workflowRunId &&
+          t.workflowStepId &&
+          t.status === 'completed' &&
+          !chainingProcessedRef.current.has(`wf-${t.id}`)
+      )
+
+      for (const wfTask of completedWorkflowTasks) {
+        chainingProcessedRef.current.add(`wf-${wfTask.id}`)
+        console.log(`[Workflow] Step "${wfTask.title}" completed, advancing workflow run ${wfTask.workflowRunId}`)
+        advanceWorkflow(
+          wfTask.workflowRunId!,
+          wfTask.workflowStepId!,
+          wfTask.output as Record<string, unknown> | undefined
+        ).catch((err) => console.error('[Workflow] Failed to advance workflow:', err))
+      }
+
+      // When a workflow subtask fails, mark the workflow run as failed
+      const failedWorkflowTasks = currentTasks.filter(
+        (t) =>
+          t.workflowRunId &&
+          t.workflowStepId &&
+          t.status === 'failed' &&
+          !chainingProcessedRef.current.has(`wf-fail-${t.id}`)
+      )
+
+      for (const wfTask of failedWorkflowTasks) {
+        chainingProcessedRef.current.add(`wf-fail-${wfTask.id}`)
+        console.warn(`[Workflow] Step "${wfTask.title}" failed, marking workflow run ${wfTask.workflowRunId} as failed`)
+        handleStepFailure(
+          wfTask.workflowRunId!,
+          wfTask.workflowStepId!,
+          wfTask.error?.message || 'Step task failed'
+        ).catch((err) => console.error('[Workflow] Failed to handle step failure:', err))
       }
 
       // Handle failed subtasks — propagate failure to parent so the chain doesn't get stuck
@@ -1490,6 +1533,14 @@ export function AgentPMPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'workflows' && (
+          <WorkflowsPage
+            accountId={accountId}
+            userId={user?.id || ''}
+            agents={agents}
+          />
         )}
       </div>
 

@@ -302,6 +302,10 @@ export interface Task extends BaseEntity {
   output?: Record<string, unknown>
   error?: TaskError
 
+  // Workflow context
+  workflowRunId?: string
+  workflowStepId?: string
+
   // Computed dependency info (from view)
   blockedBy?: string[]
   blocks?: string[]
@@ -1364,6 +1368,110 @@ export interface ForgeSession {
   // Audit
   createdBy: string
   createdByType: 'user' | 'agent'
+}
+
+// =============================================================================
+// WORKFLOW
+// =============================================================================
+
+export type WorkflowStepType = 'agent_task' | 'human_gate' | 'document_output'
+export type WorkflowRunStatus = 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+export type GateType = 'approve' | 'select' | 'input'
+
+export interface WorkflowStepDef {
+  id: string
+  title: string
+  description: string
+  type: WorkflowStepType
+
+  // For agent_task steps
+  agentId?: string
+  skillId?: string
+  prompt?: string
+
+  // For human_gate steps
+  gateType?: GateType
+  gatePrompt?: string
+  gateOptions?: string[]
+
+  // For document_output steps
+  documentTitle?: string
+  documentFolderId?: string
+
+  // Input mapping: { paramName: 'step:{stepId}:{field}' }
+  inputMapping?: Record<string, string>
+
+  // Step dependency (defaults to previous step)
+  dependsOnStepId?: string
+}
+
+export interface WorkflowTemplate {
+  id: string
+  accountId: string
+  name: string
+  description?: string
+  icon?: string
+  steps: WorkflowStepDef[]
+
+  // Scheduling
+  schedule?: MilestoneSchedule
+  nextRunAt?: string
+  lastRunAt?: string
+  isScheduleActive?: boolean
+
+  // Scope
+  projectId?: string
+
+  // Audit
+  createdBy?: string
+  createdByType?: 'user' | 'agent'
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+export interface WorkflowStepResult {
+  output?: Record<string, unknown>
+  gateResponse?: WorkflowGateResponse
+  documentId?: string
+  taskId?: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'waiting_gate'
+  startedAt?: string
+  completedAt?: string
+}
+
+export interface WorkflowGateResponse {
+  action: 'approve' | 'reject' | 'select' | 'input'
+  selectedOptions?: string[]
+  inputText?: string
+  respondedBy: string
+  respondedAt: string
+}
+
+export interface WorkflowRun {
+  id: string
+  accountId: string
+  templateId: string
+  status: WorkflowRunStatus
+  currentStepIndex: number
+  parentTaskId?: string
+  stepResults: Record<string, WorkflowStepResult>
+  triggeredBy: 'user' | 'schedule' | 'agent'
+  triggeredById?: string
+  stepsSnapshot: WorkflowStepDef[]
+  startedAt: string
+  completedAt?: string
+  createdAt: string
+  updatedAt: string
+
+  // Joined data
+  template?: WorkflowTemplate
+}
+
+export interface WorkflowGateConfig {
+  type: GateType
+  prompt: string
+  options?: string[]
 }
 
 // =============================================================================

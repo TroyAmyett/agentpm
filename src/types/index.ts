@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/react'
 
-export type EntityType = 'account' | 'contact' | 'project' | 'milestone' | 'task'
+export type EntityType = 'account' | 'contact' | 'project' | 'milestone' | 'task' | 'workflow'
 
 export interface Note {
   id: string
