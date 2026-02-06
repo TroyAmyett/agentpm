@@ -163,21 +163,6 @@ export function TaskActionBar({
       })
     }
 
-    if (onDelete) {
-      actions.push({
-        label: 'Delete',
-        icon: <Trash2 size={14} />,
-        onClick: () => {
-          requestAnimationFrame(() => {
-            if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
-              onDelete(task.id)
-            }
-          })
-        },
-        danger: true,
-      })
-    }
-
     return actions
   }
 
@@ -202,6 +187,21 @@ export function TaskActionBar({
       )}
 
       <div className="flex-1" />
+
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          onClick={() => {
+            if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
+              onDelete(task.id)
+            }
+          }}
+          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-surface-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          title="Delete task"
+        >
+          <Trash2 size={18} />
+        </button>
+      )}
 
       {/* Overflow menu */}
       {secondaries.length > 0 && (
