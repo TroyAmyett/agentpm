@@ -76,21 +76,24 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_unread
   ON agent_messages(account_id, to_id, to_type)
   WHERE read_at IS NULL AND deleted_at IS NULL;
 
--- RLS
+-- RLS (drop-then-create for idempotency — PostgreSQL has no CREATE POLICY IF NOT EXISTS)
 ALTER TABLE agent_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can read messages in their account" ON agent_messages;
 CREATE POLICY "Users can read messages in their account"
   ON agent_messages FOR SELECT
   USING (account_id IN (
     SELECT account_id FROM user_accounts WHERE user_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "Users can insert messages in their account" ON agent_messages;
 CREATE POLICY "Users can insert messages in their account"
   ON agent_messages FOR INSERT
   WITH CHECK (account_id IN (
     SELECT account_id FROM user_accounts WHERE user_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "Users can update messages in their account" ON agent_messages;
 CREATE POLICY "Users can update messages in their account"
   ON agent_messages FOR UPDATE
   USING (account_id IN (
@@ -98,6 +101,7 @@ CREATE POLICY "Users can update messages in their account"
   ));
 
 -- Service role bypass for edge functions
+DROP POLICY IF EXISTS "Service role full access to agent_messages" ON agent_messages;
 CREATE POLICY "Service role full access to agent_messages"
   ON agent_messages FOR ALL
   USING (auth.role() = 'service_role');
