@@ -1,5 +1,6 @@
 // Process Task Queue Edge Function
 // Triggered by pg_cron to process queued tasks
+// Per-agent queue isolation: groups by agent, respects concurrency limits
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -8,6 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+const DEFAULT_MAX_CONCURRENT = 2
 
 interface Task {
   id: string
@@ -18,8 +21,19 @@ interface Task {
   priority: string
 }
 
+interface Agent {
+  id: string
+  is_active: boolean
+  paused_at: string | null
+  consecutive_failures: number
+  max_consecutive_failures: number
+  health_status: string
+  max_concurrent_tasks: number | null
+}
+
 interface ProcessResult {
   taskId: string
+  agentId: string
   success: boolean
   error?: string
 }
@@ -78,11 +92,11 @@ serve(async (req) => {
 
     console.log(`Processing ${tasks.length} queued tasks`)
 
-    // Check agent availability before processing
+    // Check agent availability and concurrency limits
     const agentIds = [...new Set(tasks.map((t) => t.assigned_to))]
     const { data: agents, error: agentsError } = await supabase
       .from('agent_personas')
-      .select('id, is_active, paused_at, consecutive_failures, max_consecutive_failures, health_status')
+      .select('id, is_active, paused_at, consecutive_failures, max_consecutive_failures, health_status, max_concurrent_tasks')
       .in('id', agentIds)
 
     if (agentsError) {
@@ -93,83 +107,146 @@ serve(async (req) => {
       )
     }
 
-    // Create a map of available agents
-    const availableAgents = new Set(
-      (agents || [])
-        .filter(
-          (a) =>
-            a.is_active &&
-            !a.paused_at &&
-            a.consecutive_failures < a.max_consecutive_failures &&
-            a.health_status !== 'failing'
+    // Build agent availability + concurrency map
+    const agentMap = new Map<string, Agent>()
+    for (const a of (agents || []) as Agent[]) {
+      if (
+        a.is_active &&
+        !a.paused_at &&
+        a.consecutive_failures < a.max_consecutive_failures &&
+        a.health_status !== 'failing'
+      ) {
+        agentMap.set(a.id, a)
+      }
+    }
+
+    // Count currently in_progress tasks per agent (to respect concurrency)
+    const { data: runningTasks } = await supabase
+      .from('tasks')
+      .select('assigned_to')
+      .eq('status', 'in_progress')
+      .eq('assigned_to_type', 'agent')
+      .in('assigned_to', [...agentMap.keys()])
+
+    const runningPerAgent = new Map<string, number>()
+    for (const t of runningTasks || []) {
+      const count = runningPerAgent.get(t.assigned_to) || 0
+      runningPerAgent.set(t.assigned_to, count + 1)
+    }
+
+    // Group queued tasks by agent
+    const tasksByAgent = new Map<string, Task[]>()
+    for (const task of tasks) {
+      if (!agentMap.has(task.assigned_to)) continue
+      const list = tasksByAgent.get(task.assigned_to) || []
+      list.push(task)
+      tasksByAgent.set(task.assigned_to, list)
+    }
+
+    // Process each agent's queue with concurrency isolation
+    const allResults: ProcessResult[] = []
+
+    // Process agents in parallel (each agent processes its own tasks)
+    const agentPromises = [...tasksByAgent.entries()].map(
+      async ([agentId, agentTasks]) => {
+        const agent = agentMap.get(agentId)!
+        const maxConcurrent = agent.max_concurrent_tasks ?? DEFAULT_MAX_CONCURRENT
+        const currentRunning = runningPerAgent.get(agentId) || 0
+        const slotsAvailable = Math.max(0, maxConcurrent - currentRunning)
+
+        if (slotsAvailable === 0) {
+          console.log(
+            `Agent ${agentId}: at capacity (${currentRunning}/${maxConcurrent}), skipping ${agentTasks.length} tasks`
+          )
+          for (const task of agentTasks) {
+            allResults.push({
+              taskId: task.id,
+              agentId,
+              success: false,
+              error: `Agent at capacity (${currentRunning}/${maxConcurrent} concurrent)`,
+            })
+          }
+          return
+        }
+
+        // Only dispatch up to available slots
+        const toDispatch = agentTasks.slice(0, slotsAvailable)
+        console.log(
+          `Agent ${agentId}: dispatching ${toDispatch.length}/${agentTasks.length} tasks (${slotsAvailable} slots)`
         )
-        .map((a) => a.id)
+
+        // Dispatch tasks for this agent concurrently
+        const taskPromises = toDispatch.map(async (task) => {
+          try {
+            const response = await fetch(
+              `${supabaseUrl}/functions/v1/agent-executor`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({
+                  taskId: task.id,
+                  agentId: task.assigned_to,
+                }),
+              }
+            )
+
+            const result = await response.json()
+
+            if (response.ok && result.success) {
+              console.log(`Task ${task.id} completed successfully`)
+              allResults.push({ taskId: task.id, agentId, success: true })
+            } else {
+              console.error(`Task ${task.id} failed:`, result.error)
+              allResults.push({
+                taskId: task.id,
+                agentId,
+                success: false,
+                error: result.error || 'Unknown error',
+              })
+            }
+          } catch (err) {
+            const error =
+              err instanceof Error ? err.message : 'Unknown error'
+            console.error(`Task ${task.id} execution error:`, error)
+            allResults.push({ taskId: task.id, agentId, success: false, error })
+          }
+        })
+
+        await Promise.all(taskPromises)
+      }
     )
 
-    // Process tasks with available agents
-    const results: ProcessResult[] = []
-
+    // Also record skipped tasks (agent not available)
     for (const task of tasks) {
-      if (!availableAgents.has(task.assigned_to)) {
+      if (!agentMap.has(task.assigned_to)) {
         console.log(`Skipping task ${task.id}: Agent ${task.assigned_to} not available`)
-        results.push({
+        allResults.push({
           taskId: task.id,
+          agentId: task.assigned_to,
           success: false,
           error: 'Agent not available',
         })
-        continue
       }
-
-      try {
-        // Call the agent-executor function
-        const response = await fetch(`${supabaseUrl}/functions/v1/agent-executor`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${supabaseServiceKey}`,
-          },
-          body: JSON.stringify({
-            taskId: task.id,
-            agentId: task.assigned_to,
-          }),
-        })
-
-        const result = await response.json()
-
-        if (response.ok && result.success) {
-          console.log(`Task ${task.id} completed successfully`)
-          results.push({ taskId: task.id, success: true })
-        } else {
-          console.error(`Task ${task.id} failed:`, result.error)
-          results.push({
-            taskId: task.id,
-            success: false,
-            error: result.error || 'Unknown error',
-          })
-        }
-      } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error'
-        console.error(`Task ${task.id} execution error:`, error)
-        results.push({ taskId: task.id, success: false, error })
-      }
-
-      // Small delay between tasks to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
-    const successCount = results.filter((r) => r.success).length
-    const failCount = results.filter((r) => !r.success).length
+    await Promise.all(agentPromises)
+
+    const successCount = allResults.filter((r) => r.success).length
+    const failCount = allResults.filter((r) => !r.success).length
 
     return new Response(
       JSON.stringify({
-        processed: results.length,
+        processed: allResults.length,
         success: successCount,
         failed: failCount,
-        results,
+        agentsProcessed: tasksByAgent.size,
+        results: allResults,
       }),
       { headers }
     )
-
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error'
     console.error('Process queue error:', error)

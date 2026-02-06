@@ -7,6 +7,7 @@ import { executeTask, type ExecutionResult, type ExecutionStatusCallback } from 
 import { parseAgentOutput } from '@/services/agents/outputParser'
 import { uploadAgentOutputFiles, type Attachment } from '@/services/attachments/attachmentService'
 import { processExecutionOutcome } from '@/services/trust/annealingLoop'
+import { reserveSlot, releaseSlot, configFromPersona } from '@/services/agents/agentQueue'
 import { useTaskStore } from './taskStore'
 
 export type ExecutionStatus =
@@ -205,6 +206,13 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     // Check if this specific task is already executing
     if (get().activeExecutions.has(task.id)) {
       console.log(`[Execution] Task ${task.id} already executing, skipping`)
+      return null
+    }
+
+    // Per-agent queue isolation: check concurrency limit
+    const queueConfig = configFromPersona(agent)
+    if (!reserveSlot(agent.id, task.id, queueConfig)) {
+      console.log(`[Execution] Agent ${agent.alias} at capacity, task ${task.id} stays queued`)
       return null
     }
 
@@ -462,6 +470,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         attachments,
       }
 
+      // Release per-agent queue slot
+      releaseSlot(agent.id, task.id)
+
       // Remove from active executions
       const updatedActive = new Map(get().activeExecutions)
       updatedActive.delete(task.id)
@@ -480,6 +491,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
 
       return finalExecution
     } catch (error) {
+      // Release per-agent queue slot on error too
+      releaseSlot(agent.id, task.id)
+
       // Remove from active on error too
       const updatedActive = new Map(get().activeExecutions)
       updatedActive.delete(task.id)

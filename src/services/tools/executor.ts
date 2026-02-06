@@ -18,6 +18,7 @@ import {
 } from './implementations/videoProduction'
 import { generateImage } from './implementations/imageGenerator'
 import { publishBlogPost } from './implementations/blogPublisher'
+import { createSkillTool, sendMessageTool, readMessagesTool } from './implementations/agentCollaboration'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -169,6 +170,48 @@ export async function executeTool(
           accountId: _accountId,
           status: parameters.status as VideoJobStatus | undefined,
           limit: parameters.limit as number | undefined,
+        })
+      }
+
+      // ============================================
+      // AGENT COLLABORATION TOOLS
+      // ============================================
+
+      case 'create_skill': {
+        return await createSkillTool({
+          name: parameters.name as string,
+          description: parameters.description as string | undefined,
+          content: parameters.content as string,
+          category: parameters.category as string,
+          tags: parameters.tags as string[] | undefined,
+          accountId: _accountId,
+        })
+      }
+
+      case 'send_message': {
+        return await sendMessageTool({
+          toId: parameters.toId as string,
+          toType: parameters.toType as 'agent' | 'user',
+          messageType: parameters.messageType as string,
+          subject: parameters.subject as string | undefined,
+          content: parameters.content as string,
+          sessionId: parameters.sessionId as string | undefined,
+          inReplyTo: parameters.inReplyTo as string | undefined,
+          accountId: _accountId,
+          fromId: parameters._agentId as string || 'unknown',
+          fromType: 'agent',
+        })
+      }
+
+      case 'read_messages': {
+        return await readMessagesTool({
+          unreadOnly: parameters.unreadOnly as boolean | undefined,
+          limit: parameters.limit as number | undefined,
+          sessionId: parameters.sessionId as string | undefined,
+          messageType: parameters.messageType as string | undefined,
+          accountId: _accountId,
+          recipientId: parameters._agentId as string || 'unknown',
+          recipientType: 'agent',
         })
       }
 

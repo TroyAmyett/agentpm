@@ -481,6 +481,136 @@ export const BUILT_IN_TOOLS: Tool[] = [
       }
     }
   },
+  // ============================================
+  // AGENT COLLABORATION TOOLS
+  // ============================================
+  {
+    id: 'create-skill',
+    name: 'create_skill',
+    displayName: 'Create Skill',
+    description: 'Create a new reusable skill that agents can use for future tasks',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'create_skill',
+      description: 'Create a new reusable skill (prompt template) that any agent can use for future tasks. Use this when you discover a repeatable pattern or workflow worth saving. The skill content should be a well-structured prompt template in Markdown.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Short name for the skill (e.g., "SEO Blog Post Writer")',
+          },
+          description: {
+            type: 'string',
+            description: 'Brief description of what this skill does',
+          },
+          content: {
+            type: 'string',
+            description: 'The skill content — a detailed prompt template in Markdown format. Use {{placeholders}} for dynamic inputs.',
+          },
+          category: {
+            type: 'string',
+            description: 'Skill category',
+            enum: ['development', 'writing', 'analysis', 'productivity', 'design', 'devops', 'security', 'data', 'communication', 'integration', 'testing', 'other'],
+          },
+          tags: {
+            type: 'array',
+            description: 'Tags for searchability',
+            items: { type: 'string' },
+          },
+        },
+        required: ['name', 'content', 'category'],
+      },
+    },
+  },
+  {
+    id: 'send-message',
+    name: 'send_message',
+    displayName: 'Send Message',
+    description: 'Send a message to another agent or user (A2A messaging)',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'send_message',
+      description: 'Send a message to another agent or user. Use this for coordination, status updates, requesting help, or sharing results. Supports threading via sessionId.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          toId: {
+            type: 'string',
+            description: 'ID of the recipient agent or user',
+          },
+          toType: {
+            type: 'string',
+            description: 'Whether the recipient is an agent or user',
+            enum: ['agent', 'user'],
+          },
+          messageType: {
+            type: 'string',
+            description: 'Type of message',
+            enum: ['request', 'response', 'alert', 'status'],
+          },
+          subject: {
+            type: 'string',
+            description: 'Optional short subject line',
+          },
+          content: {
+            type: 'string',
+            description: 'The message content',
+          },
+          sessionId: {
+            type: 'string',
+            description: 'Optional session/thread ID for threaded conversations',
+          },
+          inReplyTo: {
+            type: 'string',
+            description: 'Optional message ID this is replying to',
+          },
+        },
+        required: ['toId', 'toType', 'messageType', 'content'],
+      },
+    },
+  },
+  {
+    id: 'read-messages',
+    name: 'read_messages',
+    displayName: 'Read Messages',
+    description: 'Read messages sent to this agent (A2A inbox)',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'read_messages',
+      description: 'Read messages from your inbox. Returns recent messages sent to you by other agents or users. Messages are automatically marked as read.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          unreadOnly: {
+            type: 'boolean',
+            description: 'Only return unread messages (default: true)',
+            default: true,
+          },
+          limit: {
+            type: 'number',
+            description: 'Max messages to return (default: 10)',
+            default: 10,
+          },
+          sessionId: {
+            type: 'string',
+            description: 'Filter by conversation thread',
+          },
+          messageType: {
+            type: 'string',
+            description: 'Filter by message type',
+            enum: ['request', 'response', 'broadcast', 'alert', 'status'],
+          },
+        },
+      },
+    },
+  },
   {
     id: 'record-screen-flow',
     name: 'record_screen_flow',

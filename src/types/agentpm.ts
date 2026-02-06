@@ -183,6 +183,7 @@ export interface AgentPersona extends BaseEntity {
   requiresApproval: string[]
   maxActionsPerHour?: number
   maxCostPerAction?: number
+  maxConcurrentTasks?: number  // Queue isolation: max parallel tasks (default: 2)
   canSpawnAgents: boolean
   canModifySelf: boolean
 
