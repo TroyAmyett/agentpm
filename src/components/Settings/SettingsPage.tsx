@@ -3,16 +3,17 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench, Globe, DollarSign, Clock, Check, Cpu, Palette } from 'lucide-react'
+import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench, Globe, DollarSign, Clock, Check, Cpu, Palette, Inbox } from 'lucide-react'
 import { ApiKeysManager } from './ApiKeysManager'
 import { AccountSettings } from './AccountSettings'
 import { AgentToolsSettings } from './AgentToolsSettings'
 import { BrandTemplatesSettings } from './BrandTemplatesSettings'
+import { ChannelsSettings } from './Channels/ChannelsSettings'
 import { ToolsManager } from '@/components/Admin/ToolsManager'
 import { useAuthStore } from '@/stores/authStore'
 import { useProfileStore } from '@/stores/profileStore'
 
-type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'agent-tools' | 'brand-templates' | 'notifications' | 'security' | 'admin-tools'
+type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'agent-tools' | 'brand-templates' | 'channels' | 'notifications' | 'security' | 'admin-tools'
 
 interface SettingsPageProps {
   onBack?: () => void
@@ -46,6 +47,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     { id: 'profile' as const, label: 'Profile', icon: User },
     { id: 'agent-tools' as const, label: 'Agent Tools', icon: Cpu },
     { id: 'brand-templates' as const, label: 'Brand & Templates', icon: Palette },
+    { id: 'channels' as const, label: 'Channels', icon: Inbox },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'security' as const, label: 'Security', icon: Shield },
     { id: 'admin-tools' as const, label: 'Tools (Admin)', icon: Wrench, admin: true },
@@ -136,6 +138,10 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
             {activeTab === 'brand-templates' && (
               <BrandTemplatesSettings />
+            )}
+
+            {activeTab === 'channels' && (
+              <ChannelsSettings />
             )}
 
             {activeTab === 'notifications' && (
@@ -404,7 +410,7 @@ function NotificationSettings() {
           Notifications
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
-          Configure how you receive notifications
+          Personal notification preferences
         </p>
       </div>
 
@@ -415,8 +421,55 @@ function NotificationSettings() {
           border: '1px solid var(--fl-color-border)',
         }}
       >
+        <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--fl-color-text-primary)' }}>
+          In-App Notifications
+        </h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>Task assignments</div>
+              <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>When a task is assigned to you or your agents</div>
+            </div>
+            <input type="checkbox" defaultChecked className="rounded" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>Task completions</div>
+              <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>When agents complete tasks</div>
+            </div>
+            <input type="checkbox" defaultChecked className="rounded" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>Reviews needed</div>
+              <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>When tasks are ready for your review</div>
+            </div>
+            <input type="checkbox" defaultChecked className="rounded" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm" style={{ color: 'var(--fl-color-text-primary)' }}>Task failures</div>
+              <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>When agents fail to complete tasks</div>
+            </div>
+            <input type="checkbox" defaultChecked className="rounded" />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="p-4 rounded-xl"
+        style={{
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid var(--fl-color-border)',
+        }}
+      >
+        <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--fl-color-text-primary)' }}>
+          External Channels
+        </h3>
         <p className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>
-          Notification settings coming soon.
+          Configure email, Slack, and Telegram notification channels in the{' '}
+          <span className="text-sky-400 cursor-pointer hover:underline">Channels</span>{' '}
+          settings tab.
         </p>
       </div>
     </div>

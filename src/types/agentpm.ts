@@ -306,6 +306,11 @@ export interface Task extends BaseEntity {
   workflowRunId?: string
   workflowStepId?: string
 
+  // Intake source tracking (how was this task created?)
+  intakeChannelId?: string
+  intakeLogId?: string
+  intakeSender?: string
+
   // Computed dependency info (from view)
   blockedBy?: string[]
   blocks?: string[]
@@ -693,6 +698,9 @@ export type ApiKeyScope =
   | 'task:update'
   | 'agent:read'
   | 'agent:update'
+  | 'intake:create'
+  | 'intake:read'
+  | 'notify:send'
 
 export interface AgentApiKey {
   id: string
@@ -1488,6 +1496,275 @@ export type CreateEntity<T extends BaseEntity> = Omit<
 export type UpdateEntity<T extends BaseEntity> = Partial<
   Omit<T, 'id' | 'accountId' | 'createdAt' | 'createdBy' | 'createdByType'>
 >
+
+// =============================================================================
+// INTAKE CHANNELS (Inbound Task Creation)
+// =============================================================================
+
+export type IntakeChannelType = 'email' | 'slack' | 'telegram' | 'webhook' | 'api'
+
+export interface IntakeEmailConfig {
+  address: string           // e.g., 'tasks+a1b2c3@inbound.agentpm.app'
+  domain: string            // e.g., 'inbound.agentpm.app'
+  forwardTo?: string        // Original forwarding address
+}
+
+export interface IntakeSlackConfig {
+  teamId: string
+  teamName: string
+  channelId: string
+  channelName: string
+  botTokenEnc?: string      // Encrypted bot token
+  signingSecretEnc?: string // Encrypted signing secret
+}
+
+export interface IntakeTelegramConfig {
+  botTokenEnc?: string      // Encrypted bot token
+  botUsername: string
+  chatId: string
+}
+
+export interface IntakeWebhookConfig {
+  secretHash: string        // HMAC secret hash for verification
+  allowedIps?: string[]     // IP whitelist (optional)
+}
+
+export interface IntakeApiConfig {
+  apiKeyId: string          // Reference to agent_api_keys
+}
+
+export type IntakeChannelConfig =
+  | IntakeEmailConfig
+  | IntakeSlackConfig
+  | IntakeTelegramConfig
+  | IntakeWebhookConfig
+  | IntakeApiConfig
+
+export interface IntakeChannel {
+  id: string
+  accountId: string
+
+  // Identity
+  channelType: IntakeChannelType
+  name: string
+  description?: string
+
+  // Configuration
+  config: Record<string, unknown>
+
+  // Routing address
+  channelAddress?: string   // e.g., email address, webhook URL
+  webhookSlug?: string      // e.g., 'a1b2c3'
+
+  // Routing defaults
+  defaultProjectId?: string
+  defaultAgentId?: string
+  defaultPriority: TaskPriority
+  defaultStatus: 'draft' | 'pending' | 'queued'
+
+  // AI parsing behavior
+  autoParse: boolean
+  autoAssign: boolean
+  autoExecute: boolean
+
+  // Status
+  isActive: boolean
+  verifiedAt?: string
+
+  // Stats
+  totalTasksCreated: number
+  lastReceivedAt?: string
+
+  // Audit
+  createdBy?: string
+  createdByType: 'user' | 'agent'
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+// =============================================================================
+// INTAKE LOG (Inbound Message Record)
+// =============================================================================
+
+export type IntakeLogStatus =
+  | 'received'
+  | 'parsing'
+  | 'parsed'
+  | 'task_created'
+  | 'failed'
+  | 'rejected'
+  | 'duplicate'
+
+export interface IntakeLogAttachment {
+  name: string
+  size: number
+  contentType: string
+  storagePath?: string
+}
+
+export interface IntakeLogEntry {
+  id: string
+  accountId: string
+  channelId: string
+
+  // Source
+  sourceType: IntakeChannelType | 'voice'
+  sourceId?: string
+  senderAddress?: string
+  senderName?: string
+
+  // Raw content
+  rawSubject?: string
+  rawBody?: string
+  rawPayload?: Record<string, unknown>
+
+  // AI-parsed content
+  parsedTitle?: string
+  parsedDescription?: string
+  parsedPriority?: string
+  parsedProjectId?: string
+  parsedAgentId?: string
+  parsedTags?: string[]
+  parseConfidence?: number
+
+  // Result
+  status: IntakeLogStatus
+  taskId?: string
+  error?: string
+
+  // Attachments
+  attachmentCount: number
+  attachments: IntakeLogAttachment[]
+
+  // Timestamps
+  receivedAt: string
+  parsedAt?: string
+  createdAt: string
+}
+
+// =============================================================================
+// NOTIFICATION CHANNELS (Outbound Notifications)
+// =============================================================================
+
+export type NotificationChannelType = 'email' | 'slack' | 'telegram' | 'webhook' | 'in_app'
+
+export type NotificationEvent =
+  | 'queued'
+  | 'in_progress'
+  | 'review'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface NotificationChannel {
+  id: string
+  accountId: string
+
+  // Identity
+  channelType: NotificationChannelType
+  name: string
+
+  // Configuration
+  config: Record<string, unknown>
+
+  // What events trigger notifications
+  notifyOn: NotificationEvent[]
+
+  // Filters (null = all)
+  projectIds?: string[]
+  agentIds?: string[]
+
+  // Link back to intake for reply-to-sender
+  intakeChannelId?: string
+
+  // Status
+  isActive: boolean
+
+  // Stats
+  totalSent: number
+  lastSentAt?: string
+
+  // Audit
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
+// =============================================================================
+// NOTIFICATION LOG (Outbound Notification Record)
+// =============================================================================
+
+export type NotificationLogStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'failed'
+
+export interface NotificationLogEntry {
+  id: string
+  accountId: string
+  channelId: string
+
+  // Trigger
+  taskId?: string
+  workflowRunId?: string
+  eventType: string
+  previousStatus?: string
+  newStatus?: string
+
+  // Content
+  subject?: string
+  body?: string
+  payload?: Record<string, unknown>
+
+  // Delivery
+  status: NotificationLogStatus
+  sentAt?: string
+  deliveredAt?: string
+  error?: string
+  externalId?: string
+
+  // Retry
+  attempts: number
+  maxAttempts: number
+  nextRetryAt?: string
+
+  createdAt: string
+}
+
+// =============================================================================
+// INTAKE REQUEST (for edge function API)
+// =============================================================================
+
+export interface IntakeTaskRequest {
+  // Direct fields (for API/webhook intake)
+  title?: string
+  description?: string
+  priority?: TaskPriority
+  projectId?: string
+  agentId?: string
+  tags?: string[]
+
+  // Raw content (for AI parsing)
+  rawContent?: string
+  subject?: string
+
+  // Source tracking
+  sourceType: IntakeChannelType | 'voice'
+  sourceId?: string
+  senderAddress?: string
+  senderName?: string
+
+  // Attachments
+  attachments?: IntakeLogAttachment[]
+}
+
+export interface IntakeTaskResponse {
+  success: boolean
+  taskId?: string
+  intakeLogId?: string
+  parsedTitle?: string
+  parsedPriority?: string
+  error?: string
+}
 
 // Database field name conversion (camelCase to snake_case)
 export type SnakeCase<S extends string> = S extends `${infer T}${infer U}`
