@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "record": "npx tsx scripts/record-radar.ts",
     "record:list": "npx tsx scripts/record-radar.ts --list",
     "record:all": "npx tsx scripts/record-radar.ts --all",
@@ -65,6 +67,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.18.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^3.2.4"
   }
 }
