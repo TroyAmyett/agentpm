@@ -13,13 +13,15 @@ import {
 } from '@/services/tools'
 import { recordSkillUsage } from '@/services/skills'
 import {
-  createLLMAdapter,
-  resolveLLMConfig,
+  resolveFailoverChain,
+  chatWithFailover,
   isLLMConfigured,
+  type LLMConfig,
   type LLMMessage,
   type LLMContentBlock,
   type LLMToolDefinition,
   type LLMResponse,
+  type FailoverResult,
 } from '@/services/llm'
 import { getToolsForAgent } from '@/services/tools/agentToolBindings'
 import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
@@ -171,10 +173,10 @@ export async function executeTask(
   const enableTools = input.enableTools !== false
   const accountId = input.accountId || ''
 
-  // Resolve LLM config (provider + API key) based on subscription tier
-  const resolved = await resolveLLMConfig('task-execution', input.userId)
+  // Resolve failover chain (ordered list of provider configs) based on tier
+  const resolved = await resolveFailoverChain('task-execution', input.userId)
 
-  if (!resolved.config) {
+  if (resolved.chain.length === 0) {
     return {
       success: false,
       content: '',
@@ -188,8 +190,9 @@ export async function executeTask(
     }
   }
 
-  const { config, source: keySource } = resolved
-  console.log(`[Executor] Using ${keySource} ${config.provider} key (model: ${config.model})`)
+  const config = resolved.chain[0] // Primary config (for logging/audit)
+  const keySource = resolved.source
+  console.log(`[Executor] Using ${keySource} ${config.provider} key (model: ${config.model}), ${resolved.chain.length} provider(s) in failover chain`)
 
   // Skill provider compatibility check
   if (input.skill?.compatibleProviders && input.skill.compatibleProviders.length > 0) {
@@ -233,14 +236,12 @@ export async function executeTask(
     const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)
 
-    // Create LLM adapter
-    const adapter = createLLMAdapter(config)
-
     // Track tool usage across iterations
     const toolsUsed: ToolUsage[] = []
     let totalInputTokens = 0
     let totalOutputTokens = 0
     let iterations = 0
+    let activeConfig: LLMConfig = config // Track which config actually served
 
     // Build initial messages in universal format
     const messages: LLMMessage[] = [
@@ -253,12 +254,23 @@ export async function executeTask(
       onStatusChange?.('calling_api', iterations > 1 ? `iteration ${iterations}` : undefined)
 
       const iterationStart = Date.now()
-      const response: LLMResponse = await adapter.chat(messages, {
-        system: systemPrompt,
-        tools: llmToolDefs.length > 0 ? llmToolDefs : undefined,
-        maxTokens: 8192,
-      })
+      const failoverResult: FailoverResult = await chatWithFailover(
+        { chain: resolved.chain },
+        messages,
+        {
+          system: systemPrompt,
+          tools: llmToolDefs.length > 0 ? llmToolDefs : undefined,
+          maxTokens: 8192,
+        }
+      )
+      const response: LLMResponse = failoverResult.response
       const iterationDurationMs = Date.now() - iterationStart
+
+      // Track which provider actually served this iteration
+      activeConfig = resolved.chain[failoverResult.servedBy.attempt - 1] || config
+      if (failoverResult.servedBy.wasFallback) {
+        console.log(`[Executor] Failover: served by ${failoverResult.servedBy.provider}/${failoverResult.servedBy.model} (attempt ${failoverResult.servedBy.attempt})`)
+      }
 
       totalInputTokens += response.usage.inputTokens
       totalOutputTokens += response.usage.outputTokens
@@ -270,8 +282,8 @@ export async function executeTask(
           accountId,
           agentId: input.agent.id,
           taskId: input.task.id,
-          provider: config.provider,
-          model: response.model || config.model,
+          provider: failoverResult.servedBy.provider,
+          model: response.model || failoverResult.servedBy.model,
           inputTokens: response.usage.inputTokens,
           outputTokens: response.usage.outputTokens,
           durationMs: iterationDurationMs,
@@ -364,7 +376,7 @@ export async function executeTask(
         success: true,
         content,
         metadata: {
-          model: response.model || config.model,
+          model: response.model || activeConfig.model,
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           durationMs: Date.now() - startTime,
@@ -386,7 +398,7 @@ export async function executeTask(
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
             durationMs: Date.now() - startTime,
-            modelUsed: response.model || config.model,
+            modelUsed: response.model || activeConfig.model,
             toolsUsed: toolsUsed.map(t => ({ name: t.name, success: t.success })),
           })
         } catch (trackingError) {
@@ -493,8 +505,8 @@ export function isExecutionConfigured(): boolean {
 
 // Async check that verifies actual key availability based on tier
 export async function isExecutionConfiguredAsync(userId?: string): Promise<boolean> {
-  const resolved = await resolveLLMConfig('task-execution', userId)
-  return !!resolved.config
+  const resolved = await resolveFailoverChain('task-execution', userId)
+  return resolved.chain.length > 0
 }
 
 // Get the prompts that would be used (for preview/debugging)

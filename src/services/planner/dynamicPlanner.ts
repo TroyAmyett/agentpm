@@ -4,7 +4,7 @@
 // Falls back to existing decomposition if LLM is unavailable.
 
 import type { Task, AgentPersona, AutonomyLevel } from '@/types/agentpm'
-import { createLLMAdapter, resolveLLMConfig, type LLMMessage } from '@/services/llm'
+import { resolveFailoverChain, chatWithFailover, type LLMMessage } from '@/services/llm'
 import { computeTrustScore, computeConfidence } from '@/services/trust'
 import type { TrustScore, ConfidenceResult, PlanForConfidence } from '@/services/trust'
 import { getToolsForAgent } from '@/services/tools/agentToolBindings'
@@ -142,14 +142,13 @@ export async function generatePlan(
   }
 
   // Try LLM-based planning for complex tasks
-  const resolved = await resolveLLMConfig('planning')
-  if (!resolved.config) {
+  const resolved = await resolveFailoverChain('planning')
+  if (resolved.chain.length === 0) {
     // Fall back to heuristic planning
     return createHeuristicPlan(task, inventory, accountId)
   }
 
   try {
-    const adapter = createLLMAdapter(resolved.config)
     const historicalPatterns = await fetchTopPatterns(accountId)
 
     const systemPrompt = `You are Atlas, an AI orchestrator that creates execution plans for tasks.
@@ -193,10 +192,11 @@ Priority: ${task.priority || 'medium'}`
 
     const messages: LLMMessage[] = [{ role: 'user', content: userPrompt }]
 
-    const response = await adapter.chat(messages, {
-      system: systemPrompt,
-      maxTokens: 1000,
-    })
+    const { response } = await chatWithFailover(
+      { chain: resolved.chain },
+      messages,
+      { system: systemPrompt, maxTokens: 1000 }
+    )
 
     const content = response.content
       .filter(b => b.type === 'text')

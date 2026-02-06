@@ -9,9 +9,11 @@ import { useApiKeysStore } from '@/stores/apiKeysStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useProfileStore } from '@/stores/profileStore'
 
-// Re-export types
+// Re-export types and modules
 export * from './types'
 export { resolveModelId, calculateCostCents, TOKEN_COSTS } from './models'
+export { chatWithFailover, buildFailoverChain, type FailoverResult } from './failover'
+export { recordKeyFailure, recordKeySuccess, isKeyCooling, getKeyHealth, getAllKeyHealth } from './keyHealth'
 
 // Platform-funded plans that use the platform's API key
 const PLATFORM_FUNDED_PLANS = ['free', 'beta', 'trial', 'demo'] as const
@@ -175,6 +177,58 @@ export async function resolveLLMConfig(
     source: 'none',
     error: `Your ${planName} plan requires you to bring your own API key. Please add an API key in Settings > API Keys.`,
   }
+}
+
+/**
+ * Resolve a failover chain for a use case — returns all available configs
+ * in fallback order, with cooling keys filtered out.
+ * Use this with chatWithFailover() for automatic provider cascading.
+ */
+export async function resolveFailoverChain(
+  useCase: string,
+  userId?: string
+): Promise<{ chain: LLMConfig[]; source: 'platform' | 'user' | 'none'; error?: string }> {
+  const availableKeys: Array<{ provider: LLMProvider; apiKey: string }> = []
+
+  if (isPlatformFundedPlan()) {
+    // Platform-funded: collect all platform keys
+    const providers: LLMProvider[] = ['anthropic', 'openai']
+    for (const p of providers) {
+      const key = getPlatformApiKey(p)
+      if (key) availableKeys.push({ provider: p, apiKey: key })
+    }
+
+    if (availableKeys.length === 0) {
+      return { chain: [], source: 'none', error: 'Platform API key not configured.' }
+    }
+
+    const { buildFailoverChain: buildChain } = await import('./failover')
+    return { chain: buildChain(useCase, availableKeys), source: 'platform' }
+  }
+
+  // BYOK: collect user's keys across all providers
+  if (!userId) {
+    return { chain: [], source: 'none', error: 'User ID required for BYOK tier' }
+  }
+
+  const providers: LLMProvider[] = ['anthropic', 'openai', 'google', 'groq', 'mistral']
+  for (const p of providers) {
+    const key = await getUserApiKey(userId, p)
+    if (key) availableKeys.push({ provider: p, apiKey: key })
+  }
+
+  if (availableKeys.length === 0) {
+    const account = useAccountStore.getState().currentAccount()
+    const planName = account?.plan || 'your'
+    return {
+      chain: [],
+      source: 'none',
+      error: `Your ${planName} plan requires an API key. Please add one in Settings > API Keys.`,
+    }
+  }
+
+  const { buildFailoverChain: buildChain } = await import('./failover')
+  return { chain: buildChain(useCase, availableKeys), source: 'user' }
 }
 
 /**

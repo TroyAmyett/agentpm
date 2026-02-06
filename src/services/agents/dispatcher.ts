@@ -4,7 +4,7 @@
 // LLM-agnostic: uses provider abstraction layer
 
 import type { Task, AgentPersona } from '@/types/agentpm'
-import { createLLMAdapter, resolveLLMConfig, type LLMMessage } from '@/services/llm'
+import { resolveFailoverChain, chatWithFailover, type LLMMessage } from '@/services/llm'
 
 export interface RoutingDecision {
   agentId: string
@@ -80,15 +80,14 @@ export async function routeTask(input: RoutingInput): Promise<RoutingDecision | 
     }
   }
 
-  // Try to resolve LLM config for routing
-  const resolved = await resolveLLMConfig('task-routing')
-  if (!resolved.config) {
+  // Try to resolve failover chain for routing
+  const resolved = await resolveFailoverChain('task-routing')
+  if (resolved.chain.length === 0) {
     // Fallback: simple keyword matching
     return fallbackRouting(task, availableAgents)
   }
 
   try {
-    const adapter = createLLMAdapter(resolved.config)
 
     const systemPrompt = `You are Dispatch, an AI orchestrator responsible for routing tasks to the right agent.
 
@@ -121,10 +120,11 @@ ${task.input ? `Additional Context: ${JSON.stringify(task.input)}` : ''}`
       { role: 'user', content: userPrompt },
     ]
 
-    const response = await adapter.chat(messages, {
-      system: systemPrompt,
-      maxTokens: 500,
-    })
+    const { response } = await chatWithFailover(
+      { chain: resolved.chain },
+      messages,
+      { system: systemPrompt, maxTokens: 500 }
+    )
 
     const content = response.content
       .filter(b => b.type === 'text')
@@ -246,14 +246,13 @@ export async function analyzeTaskForDecomposition(
     }
   }
 
-  // Try to resolve LLM config for decomposition
-  const resolved = await resolveLLMConfig('decomposition')
-  if (!resolved.config) {
+  // Try to resolve failover chain for decomposition
+  const resolved = await resolveFailoverChain('decomposition')
+  if (resolved.chain.length === 0) {
     return fallbackDecomposition(task, agents)
   }
 
   try {
-    const adapter = createLLMAdapter(resolved.config)
 
     const availableAgentTypes = [...new Set(
       agents
@@ -306,10 +305,11 @@ Description: ${task.description || 'No description'}`
       { role: 'user', content: userPrompt },
     ]
 
-    const response = await adapter.chat(messages, {
-      system: systemPrompt,
-      maxTokens: 1000,
-    })
+    const { response } = await chatWithFailover(
+      { chain: resolved.chain },
+      messages,
+      { system: systemPrompt, maxTokens: 1000 }
+    )
 
     const content = response.content
       .filter(b => b.type === 'text')

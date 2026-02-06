@@ -44,7 +44,10 @@ async function waitForRateLimit(): Promise<void> {
   lastRequestTime = Date.now()
 }
 
-// Fetch with retry on 429 (rate limit) errors
+// Status codes that are retryable (transient server issues)
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 529])
+
+// Fetch with retry on rate limit and transient server errors
 export async function fetchWithRetry(
   url: string,
   options: RequestInit,
@@ -59,9 +62,9 @@ export async function fetchWithRetry(
 
       const response = await fetch(url, options)
 
-      // If rate limited, retry with backoff
-      if (response.status === 429) {
-        // Parse retry-after header if present
+      // Retry on transient errors (429, 500, 502, 503, 529)
+      if (RETRYABLE_STATUS_CODES.has(response.status)) {
+        // Parse retry-after header if present (mainly for 429)
         const retryAfter = response.headers.get('retry-after')
         let delay = calculateDelay(attempt, config)
 
@@ -72,16 +75,21 @@ export async function fetchWithRetry(
           }
         }
 
+        // Server errors get shorter delays (usually recover faster)
+        if (response.status >= 500) {
+          delay = Math.min(delay, 30_000) // Cap server error retries at 30s
+        }
+
         if (attempt < config.maxRetries) {
-          console.log(`[API Retry] Rate limited (429). Retrying in ${Math.round(delay / 1000)}s... (attempt ${attempt + 1}/${config.maxRetries})`)
+          console.log(`[API Retry] ${response.status} error. Retrying in ${Math.round(delay / 1000)}s... (attempt ${attempt + 1}/${config.maxRetries})`)
           await sleep(delay)
           continue
         }
         // Max retries exceeded
-        console.error(`[API Retry] Max retries exceeded for rate limiting`)
+        console.error(`[API Retry] Max retries exceeded (last status: ${response.status})`)
       }
 
-      // For other errors or success, return the response
+      // For non-retryable errors or success, return the response
       return response
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))

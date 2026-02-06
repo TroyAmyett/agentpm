@@ -1,6 +1,6 @@
 import { buildKnowledgeContext } from '@/services/agentpm/knowledgeService'
 import type { FunnelistsTool } from '@/types/agentpm'
-import { createLLMAdapter, resolveLLMConfig, type LLMMessage, type LLMContentBlock } from '@/services/llm'
+import { resolveFailoverChain, chatWithFailover, type LLMMessage, type LLMContentBlock } from '@/services/llm'
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -182,12 +182,10 @@ export async function callClaude(
   messages: AnthropicMessage[],
   systemPrompt?: string
 ): Promise<string> {
-  const resolved = await resolveLLMConfig('chat-assistant')
-  if (!resolved.config) {
+  const resolved = await resolveFailoverChain('chat-assistant')
+  if (resolved.chain.length === 0) {
     throw new Error(resolved.error || 'No LLM API key configured')
   }
-
-  const adapter = createLLMAdapter(resolved.config)
 
   // Convert AnthropicMessage format to LLMMessage format
   const llmMessages: LLMMessage[] = messages.map(m => ({
@@ -201,10 +199,14 @@ export async function callClaude(
     })),
   }))
 
-  const response = await adapter.chat(llmMessages, {
-    system: systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app. Be concise and helpful.',
-    maxTokens: 4096,
-  })
+  const { response } = await chatWithFailover(
+    { chain: resolved.chain },
+    llmMessages,
+    {
+      system: systemPrompt || 'You are a helpful AI assistant integrated into a note-taking app. Be concise and helpful.',
+      maxTokens: 4096,
+    }
+  )
 
   const textContent = response.content
     .filter(b => b.type === 'text')
@@ -390,13 +392,11 @@ WHEN TO CREATE TASKS:
 To help with a specific note, ask the user to open it first.`
   }
 
-  // Resolve LLM config
-  const resolved = await resolveLLMConfig('chat-assistant')
-  if (!resolved.config) {
+  // Resolve failover chain
+  const resolved = await resolveFailoverChain('chat-assistant')
+  if (resolved.chain.length === 0) {
     throw new Error(resolved.error || 'No LLM API key configured')
   }
-
-  const adapter = createLLMAdapter(resolved.config)
 
   // Build tools array - always include web search and task creation
   const localTools = activeNote
@@ -434,11 +434,11 @@ To help with a specific note, ask the user to open it first.`
     iterationCount++
     onStatusChange?.('thinking')
 
-    const response = await adapter.chat(apiMessages, {
-      system: systemPrompt,
-      tools: llmTools,
-      maxTokens: 4096,
-    })
+    const { response } = await chatWithFailover(
+      { chain: resolved.chain },
+      apiMessages,
+      { system: systemPrompt, tools: llmTools, maxTokens: 4096 }
+    )
 
     // Collect tool uses and text from this response
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
