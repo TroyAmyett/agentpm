@@ -116,7 +116,8 @@ function buildAgentSystemPrompt(
       }
     }
     if (hasCreateSkill) {
-      parts.push(`\n**Skill Discovery**: If this task requires a repeatable process and no existing skill covers it, use the \`create_skill\` tool to create a new reusable skill. A good skill is a reusable prompt template that can be applied to similar tasks in the future. Include clear instructions, expected inputs, and output format. Name it descriptively (e.g. "seo-blog-post", "competitor-analysis", "product-launch-checklist").`)
+      parts.push(`\n**Skill Discovery**: If this task requires a repeatable process and no existing skill covers it, use the \`create_skill\` tool to create a new reusable skill. A good skill is a reusable prompt template that can be applied to similar tasks in the future. Include clear instructions, expected inputs, and output format.`)
+      parts.push(`**Naming convention**: Agent-created skills MUST use the \`my-\` prefix (e.g. "my-seo-blog-post", "my-competitor-analysis", "my-product-launch-checklist"). Official \`fun-\` and \`@fun/\` prefixes are reserved for Funnelists-authored skills.`)
       parts.push(`Only create a skill when the task represents a pattern worth reusing — don't create skills for one-off requests.`)
     }
     parts.push(`== END SKILLS CATALOG ==`)
