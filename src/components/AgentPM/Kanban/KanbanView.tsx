@@ -385,7 +385,7 @@ export function KanbanView({
         style={{
           background: isSelected
             ? 'rgba(14, 165, 233, 0.08)'
-            : 'rgba(15, 23, 42, 0.6)',
+            : 'rgba(24, 24, 27, 0.6)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
         }}
@@ -465,7 +465,7 @@ export function KanbanView({
               : 'border-white/[0.06]'
         }`}
         style={{
-          background: 'rgba(15, 23, 42, 0.4)',
+          background: 'rgba(24, 24, 27, 0.4)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
         }}
@@ -566,7 +566,7 @@ export function KanbanView({
 
             {showSwimlaneMenu && (
               <div className="absolute top-full left-0 mt-1 w-40 rounded-lg shadow-elevated border border-white/[0.08] overflow-hidden"
-                style={{ background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(16px)' }}
+                style={{ background: 'rgba(24, 24, 27, 0.95)', backdropFilter: 'blur(16px)' }}
               >
                 <button
                   onClick={() => {
@@ -663,7 +663,7 @@ export function KanbanView({
                 key={lane.id}
                 className="border border-white/[0.06] rounded-xl overflow-hidden"
                 style={{
-                  background: 'rgba(15, 23, 42, 0.3)',
+                  background: 'rgba(24, 24, 27, 0.3)',
                   backdropFilter: 'blur(8px)',
                   WebkitBackdropFilter: 'blur(8px)',
                 }}

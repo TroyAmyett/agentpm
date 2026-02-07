@@ -5,10 +5,10 @@
 @layer components {
   /* Glass surface - for cards, panels, elevated containers */
   .glass-surface {
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(24, 24, 27, 0.8);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    border: 1px solid rgba(161, 161, 170, 0.1);
   }
 
   /* Glass hover - adds cyan glow + lift */
@@ -27,17 +27,17 @@
 
   /* Glass header bar */
   .glass-header {
-    background: rgba(15, 23, 42, 0.75);
+    background: rgba(9, 9, 11, 0.85);
     backdrop-filter: blur(20px) saturate(1.2);
     -webkit-backdrop-filter: blur(20px) saturate(1.2);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    border-bottom: 1px solid rgba(161, 161, 170, 0.08);
   }
 
   /* Subtle grid pattern background */
   .grid-pattern {
     background-image:
-      linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(161, 161, 170, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(161, 161, 170, 0.03) 1px, transparent 1px);
     background-size: 32px 32px;
   }
 }
@@ -61,21 +61,21 @@
   --fl-z-tooltip: 300;
 }
 
-/* Dark mode theme - Deep navy, not pure black */
+/* Dark mode theme - True black base */
 .dark {
-  --fl-color-bg-base: #020617;
-  --fl-color-bg-elevated: #0f172a;
-  --fl-color-bg-surface: #1e293b;
-  --fl-color-bg-overlay: #1e293b;
-  --fl-color-border: rgba(148, 163, 184, 0.1);
-  --fl-color-border-hover: rgba(148, 163, 184, 0.2);
-  --fl-color-text-primary: #f1f5f9;
-  --fl-color-text-secondary: #94a3b8;
-  --fl-color-text-muted: #64748b;
-  --fl-color-text-inverse: #020617;
-  --fl-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(148, 163, 184, 0.05);
-  --fl-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(148, 163, 184, 0.05);
-  --fl-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(148, 163, 184, 0.05);
+  --fl-color-bg-base: #09090b;
+  --fl-color-bg-elevated: #18181b;
+  --fl-color-bg-surface: #27272a;
+  --fl-color-bg-overlay: #27272a;
+  --fl-color-border: rgba(161, 161, 170, 0.1);
+  --fl-color-border-hover: rgba(161, 161, 170, 0.2);
+  --fl-color-text-primary: #fafafa;
+  --fl-color-text-secondary: #a1a1aa;
+  --fl-color-text-muted: #71717a;
+  --fl-color-text-inverse: #09090b;
+  --fl-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(161, 161, 170, 0.05);
+  --fl-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(161, 161, 170, 0.05);
+  --fl-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(161, 161, 170, 0.05);
 }
 
 /* Light mode theme */
