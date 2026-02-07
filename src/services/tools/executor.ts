@@ -185,6 +185,7 @@ export async function executeTool(
           category: parameters.category as string,
           tags: parameters.tags as string[] | undefined,
           accountId: _accountId,
+          agentId: parameters._agentId as string | undefined,
         })
       }
 

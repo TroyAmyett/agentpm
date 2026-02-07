@@ -15,6 +15,7 @@ import {
   Settings,
   ExternalLink,
   Workflow,
+  MessageSquare,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -37,6 +38,7 @@ import { ProjectsPage } from './Projects'
 import { VoiceCommandBar, type ParsedVoiceCommand } from '@/components/Voice'
 import { ForgeTaskModal } from './Forge'
 import { WorkflowsPage } from './Workflows'
+import { MessagesPage } from './Messages'
 import { routeTask, analyzeTaskForDecomposition } from '@/services/agents/dispatcher'
 import { generatePlan } from '@/services/planner'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
@@ -45,7 +47,7 @@ import { advanceWorkflow, handleStepFailure } from '@/services/workflows'
 import { BUILT_IN_TOOLS } from '@/services/tools'
 import type { Task, TaskStatus, AgentPersona, ForgeTaskInput } from '@/types/agentpm'
 
-type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge' | 'tools' | 'workflows'
+type TabId = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'reviews' | 'skills' | 'forge' | 'tools' | 'workflows' | 'messages'
 
 interface Tab {
   id: TabId
@@ -63,10 +65,11 @@ const tabs: Tab[] = [
   { id: 'skills', label: 'Skills', icon: <FileText size={18} /> },
   { id: 'tools', label: 'Tools', icon: <Cpu size={18} /> },
   { id: 'workflows', label: 'Workflows', icon: <Workflow size={18} /> },
+  { id: 'messages', label: 'Messages', icon: <MessageSquare size={18} /> },
 ]
 
 // Valid tab IDs for URL hash parsing
-const VALID_TABS: TabId[] = ['dashboard', 'projects', 'tasks', 'agents', 'reviews', 'skills', 'forge', 'tools', 'workflows']
+const VALID_TABS: TabId[] = ['dashboard', 'projects', 'tasks', 'agents', 'reviews', 'skills', 'forge', 'tools', 'workflows', 'messages']
 
 // Get initial tab from URL hash (e.g., #agentpm/tasks)
 function getTabFromHash(): TabId {
@@ -1539,6 +1542,13 @@ export function AgentPMPage() {
           <WorkflowsPage
             accountId={accountId}
             userId={user?.id || ''}
+            agents={agents}
+          />
+        )}
+
+        {activeTab === 'messages' && (
+          <MessagesPage
+            accountId={accountId}
             agents={agents}
           />
         )}

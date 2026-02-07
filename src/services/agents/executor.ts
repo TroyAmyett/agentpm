@@ -11,7 +11,7 @@ import {
   type ToolUseRequest,
   type ToolResultMessage,
 } from '@/services/tools'
-import { recordSkillUsage } from '@/services/skills'
+import { recordSkillUsage, fetchSkills } from '@/services/skills'
 import {
   resolveFailoverChain,
   chatWithFailover,
@@ -67,7 +67,12 @@ export type ExecutionStatusCallback = (
 ) => void
 
 // Build system prompt from agent persona
-function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: LLMToolDefinition[] = []): string {
+function buildAgentSystemPrompt(
+  agent: AgentPersona,
+  skill?: Skill,
+  tools: LLMToolDefinition[] = [],
+  availableSkills: Skill[] = [],
+): string {
   const parts: string[] = []
 
   // Agent identity
@@ -97,6 +102,24 @@ function buildAgentSystemPrompt(agent: AgentPersona, skill?: Skill, tools: LLMTo
     }
     parts.push(`\n${skill.content}`)
     parts.push(`== END SKILL ==`)
+  }
+
+  // Available skills catalog — lets the agent know what reusable skills exist
+  const hasCreateSkill = tools.some(t => t.name === 'create_skill')
+  if (availableSkills.length > 0 || hasCreateSkill) {
+    parts.push(`\n\n== SKILLS CATALOG ==`)
+    if (availableSkills.length > 0) {
+      parts.push(`The following reusable skills are available in this workspace:`)
+      for (const s of availableSkills.slice(0, 30)) {
+        const desc = s.description ? ` — ${s.description}` : ''
+        parts.push(`- ${s.name} [${s.category}]${desc}`)
+      }
+    }
+    if (hasCreateSkill) {
+      parts.push(`\n**Skill Discovery**: If this task requires a repeatable process and no existing skill covers it, use the \`create_skill\` tool to create a new reusable skill. A good skill is a reusable prompt template that can be applied to similar tasks in the future. Include clear instructions, expected inputs, and output format. Name it descriptively (e.g. "seo-blog-post", "competitor-analysis", "product-launch-checklist").`)
+      parts.push(`Only create a skill when the task represents a pattern worth reusing — don't create skills for one-off requests.`)
+    }
+    parts.push(`== END SKILLS CATALOG ==`)
   }
 
   // Tool instructions - dynamically list all available tools
@@ -232,8 +255,19 @@ export async function executeTask(
       console.log(`[Executor] ${tools.length} tools available for ${input.agent.alias} (${input.agent.agentType})`)
     }
 
+    // Fetch available skills for the skills catalog (non-blocking, best-effort)
+    let availableSkills: Skill[] = []
+    if (accountId) {
+      try {
+        availableSkills = await fetchSkills(accountId)
+        console.log(`[Executor] ${availableSkills.length} skills in catalog for skill discovery`)
+      } catch (err) {
+        console.warn('[Executor] Failed to fetch skills catalog (non-fatal):', err)
+      }
+    }
+
     const llmToolDefs = toLLMToolDefs(tools)
-    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs)
+    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs, availableSkills)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)
 
     // Track tool usage across iterations

@@ -79,6 +79,7 @@ export function EditAgentModal({
   const [reportsToId, setReportsToId] = useState<string>(
     agent.reportsTo?.type === 'agent' ? agent.reportsTo.id : 'user'
   )
+  const [maxConcurrentTasks, setMaxConcurrentTasks] = useState(agent.maxConcurrentTasks ?? 2)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -100,6 +101,7 @@ export function EditAgentModal({
     setIsActive(agent.isActive)
     setShowOnDashboard(agent.showOnDashboard)
     setReportsToId(agent.reportsTo?.type === 'agent' ? agent.reportsTo.id : 'user')
+    setMaxConcurrentTasks(agent.maxConcurrentTasks ?? 2)
   }, [agent])
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -146,6 +148,7 @@ export function EditAgentModal({
         isActive,
         showOnDashboard,
         reportsTo,
+        maxConcurrentTasks,
         updatedBy: userId,
         updatedByType: 'user' as const,
       }
@@ -410,6 +413,26 @@ export function EditAgentModal({
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  {/* Max Concurrent Tasks */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                      Max Concurrent Tasks
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={maxConcurrentTasks}
+                        onChange={(e) => setMaxConcurrentTasks(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                        className="w-24 px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-surface-500">
+                        tasks at once (1-10)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
