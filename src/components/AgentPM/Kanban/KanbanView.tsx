@@ -2,7 +2,7 @@
 // Supports: multi-select drag, swimlanes, WIP limits
 
 import { useState, useMemo, useCallback } from 'react'
-import { Link2, AlertTriangle, Bot, User, ChevronDown, Layers, ArrowUpDown } from 'lucide-react'
+import { Link2, AlertTriangle, ArrowUp, Minus, ArrowDown, Bot, User, ChevronDown, Layers, ArrowUpDown, Calendar, CheckCircle2 } from 'lucide-react'
 import type { Task, TaskStatus, TaskPriority } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
 
@@ -42,12 +42,12 @@ const DEFAULT_COLUMNS: Column[] = [
   { id: 'done', title: 'Done' },
 ]
 
-// Priority config for badges
-const PRIORITY_CONFIG = {
-  critical: { emoji: '🔴', color: 'bg-red-500/20 text-red-400', label: 'Critical', order: 0 },
-  high: { emoji: '🟠', color: 'bg-orange-500/20 text-orange-400', label: 'High', order: 1 },
-  medium: { emoji: '🟡', color: 'bg-yellow-500/20 text-yellow-400', label: 'Medium', order: 2 },
-  low: { emoji: '🟢', color: 'bg-green-500/20 text-green-400', label: 'Low', order: 3 },
+// Priority config for badges - Lucide icons, no emoji
+const PRIORITY_CONFIG: Record<TaskPriority, { icon: React.ReactNode; color: string; borderColor: string; label: string; order: number }> = {
+  critical: { icon: <AlertTriangle size={11} />, color: 'bg-red-500/10 text-red-400', borderColor: 'border-red-500/20', label: 'Critical', order: 0 },
+  high: { icon: <ArrowUp size={11} />, color: 'bg-orange-500/10 text-orange-400', borderColor: 'border-orange-500/20', label: 'High', order: 1 },
+  medium: { icon: <Minus size={11} />, color: 'bg-yellow-500/10 text-yellow-400', borderColor: 'border-yellow-500/20', label: 'Medium', order: 2 },
+  low: { icon: <ArrowDown size={11} />, color: 'bg-surface-500/10 text-surface-400', borderColor: 'border-surface-500/20', label: 'Low', order: 3 },
 }
 
 type SwimlaneMode = 'none' | 'agent' | 'priority' | 'milestone'
@@ -300,8 +300,6 @@ export function KanbanView({
     (e: React.DragEvent, columnId: string) => {
       e.preventDefault()
       setDragOverColumn(null)
-      // Reset drag state immediately on drop - handleDragEnd may not fire
-      // if the task card gets unmounted due to the status change re-render
       setDraggedTask(null)
       setTimeout(() => setIsDragging(false), 50)
 
@@ -379,35 +377,38 @@ export function KanbanView({
           e.stopPropagation()
           handleTaskSelect(e, task)
         }}
-        className={`p-3 rounded-md cursor-grab active:cursor-grabbing transition-all border relative ${
+        className={`group p-3 rounded-xl cursor-grab active:cursor-grabbing transition-all duration-200 border relative ${
           isSelected
-            ? 'border-primary-500 ring-2 ring-primary-500/30 bg-primary-500/10'
-            : 'hover:border-primary-500 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.3)]'
+            ? 'border-primary-500 ring-2 ring-primary-500/30'
+            : 'border-white/[0.06] hover:border-primary-500/30 hover:shadow-card-hover hover:-translate-y-0.5'
         } ${isBeingDragged ? 'opacity-50' : ''}`}
         style={{
-          background: isSelected ? '#1a2a3a' : '#1a1a24',
-          borderColor: isSelected ? '#0ea5e9' : '#2a2a3a',
+          background: isSelected
+            ? 'rgba(14, 165, 233, 0.08)'
+            : 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       >
         {isSelected && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-            ✓
+          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center shadow-glow-sm">
+            <CheckCircle2 size={12} className="text-white" />
           </div>
         )}
 
         {task.parentTaskId && (
           <div
-            className="flex items-center gap-1 text-xs text-purple-400 mb-1"
+            className="flex items-center gap-1 text-xs text-purple-400/80 mb-1.5"
             title={`Subtask of: ${taskTitleMap.get(task.parentTaskId) || 'Parent task'}`}
           >
-            <Link2 size={12} />
-            <span className="truncate max-w-[180px] opacity-75">
+            <Link2 size={10} />
+            <span className="truncate max-w-[180px]">
               {taskTitleMap.get(task.parentTaskId) || 'Parent task'}
             </span>
           </div>
         )}
 
-        <h4 className="text-sm font-medium text-white line-clamp-2 mb-2">
+        <h4 className="text-sm font-medium text-surface-100 line-clamp-2 mb-2">
           {task.title}
         </h4>
 
@@ -419,14 +420,14 @@ export function KanbanView({
           </div>
         )}
 
-        <div className="flex items-center flex-wrap gap-2 mb-2">
-          <span className={`px-2 py-0.5 text-xs rounded-full ${priority.color}`}>
-            {priority.emoji} {priority.label}
+        <div className="flex items-center flex-wrap gap-1.5 mb-2">
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-md border ${priority.color} ${priority.borderColor}`}>
+            {priority.icon} {priority.label}
           </span>
 
           {assigneeName && (
             <div className="flex items-center gap-1 text-xs text-surface-400">
-              <span>{isAgent ? '🤖' : '👤'}</span>
+              {isAgent ? <Bot size={12} className="text-primary-400" /> : <User size={12} />}
               <span className="max-w-[80px] truncate">{assigneeName}</span>
             </div>
           )}
@@ -434,8 +435,9 @@ export function KanbanView({
 
         <div className="flex items-center justify-between text-xs text-surface-500">
           {task.dueAt ? (
-            <span className={isOverdue ? 'text-red-400' : ''}>
-              📅 {formatDate(task.dueAt)}
+            <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-400' : ''}`}>
+              <Calendar size={11} />
+              {formatDate(task.dueAt)}
             </span>
           ) : (
             <span>{formatRelativeTime(task.createdAt)}</span>
@@ -455,36 +457,40 @@ export function KanbanView({
     return (
       <div
         key={column.id}
-        className={`flex flex-col flex-1 min-w-[200px] max-w-[320px] rounded-lg border transition-all ${
+        className={`flex flex-col flex-1 min-w-[200px] max-w-[320px] rounded-xl border transition-all ${
           isDropTarget
-            ? 'border-primary-500 shadow-[0_0_0_2px_rgba(14,165,233,0.2)]'
+            ? 'border-primary-500/50 shadow-glow-md'
             : isOverWipLimit
-              ? 'border-red-500/50'
-              : 'border-surface-700'
+              ? 'border-red-500/30'
+              : 'border-white/[0.06]'
         }`}
-        style={{ background: '#111118' }}
+        style={{
+          background: 'rgba(15, 23, 42, 0.4)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}
         onDragOver={(e) => handleDragOver(e, column.id)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, column.id)}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Column Header */}
-        <div className={`p-3 border-b ${isOverWipLimit ? 'border-red-500/50 bg-red-500/10' : 'border-surface-700'}`}>
+        <div className={`p-3 border-b ${isOverWipLimit ? 'border-red-500/30 bg-red-500/5' : 'border-white/[0.06]'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white">{column.title}</h3>
+              <h3 className="text-sm font-semibold text-surface-200">{column.title}</h3>
               {isOverWipLimit && (
                 <AlertTriangle size={14} className="text-red-400" />
               )}
             </div>
             <div className="flex items-center gap-1">
               <span
-                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                className={`px-2 py-0.5 text-xs font-medium rounded-md border ${
                   isOverWipLimit
-                    ? 'bg-red-500/30 text-red-400'
+                    ? 'bg-red-500/10 text-red-400 border-red-500/20'
                     : isAtWipLimit
-                      ? 'bg-yellow-500/30 text-yellow-400'
-                      : 'bg-surface-700 text-surface-400'
+                      ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                      : 'bg-surface-500/10 text-surface-400 border-white/[0.06]'
                 }`}
               >
                 {columnTasks.length}
@@ -514,7 +520,7 @@ export function KanbanView({
         {swimlaneMode === 'none' && (
           <button
             onClick={() => onAddTask(column.id)}
-            className="flex items-center justify-center gap-1 w-full p-2 border-t border-surface-700 text-surface-400 text-sm font-medium hover:bg-surface-800 hover:text-primary-400 transition-colors"
+            className="flex items-center justify-center gap-1 w-full p-2 border-t border-white/[0.06] text-surface-400 text-sm font-medium hover:bg-primary-500/5 hover:text-primary-400 transition-colors rounded-b-xl"
           >
             <span className="text-lg leading-none">+</span>
             <span>Add Task</span>
@@ -525,9 +531,15 @@ export function KanbanView({
   }
 
   return (
-    <div className="h-full w-full overflow-auto relative" style={{ background: '#0a0a0f' }} onClick={handleBackgroundClick}>
+    <div
+      className="h-full w-full overflow-auto relative grid-pattern"
+      style={{ background: 'var(--fl-color-bg-base)' }}
+      onClick={handleBackgroundClick}
+    >
       {/* Toolbar */}
-      <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-2 border-b border-surface-700" style={{ background: '#0a0a0f' }}>
+      <div
+        className="sticky top-0 z-20 flex items-center justify-between px-4 py-2 border-b border-white/[0.06] glass-header"
+      >
         <div className="flex items-center gap-2">
           {/* Swimlane Mode Selector */}
           <div className="relative">
@@ -538,8 +550,8 @@ export function KanbanView({
               }}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 swimlaneMode !== 'none'
-                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                  : 'bg-surface-800 text-surface-300 border border-surface-700 hover:border-surface-600'
+                  ? 'bg-primary-500/15 text-primary-400 border border-primary-500/25'
+                  : 'bg-surface-800/50 text-surface-300 border border-white/[0.08] hover:border-white/[0.15]'
               }`}
             >
               <Layers size={14} />
@@ -553,13 +565,15 @@ export function KanbanView({
             </button>
 
             {showSwimlaneMenu && (
-              <div className="absolute top-full left-0 mt-1 w-40 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-30">
+              <div className="absolute top-full left-0 mt-1 w-40 rounded-lg shadow-elevated border border-white/[0.08] overflow-hidden"
+                style={{ background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(16px)' }}
+              >
                 <button
                   onClick={() => {
                     setSwimlaneMode('none')
                     setShowSwimlaneMenu(false)
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-surface-700 ${swimlaneMode === 'none' ? 'text-primary-400' : 'text-surface-300'}`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/[0.05] ${swimlaneMode === 'none' ? 'text-primary-400' : 'text-surface-300'}`}
                 >
                   <ArrowUpDown size={14} />
                   None
@@ -569,7 +583,7 @@ export function KanbanView({
                     setSwimlaneMode('agent')
                     setShowSwimlaneMenu(false)
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-surface-700 ${swimlaneMode === 'agent' ? 'text-primary-400' : 'text-surface-300'}`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/[0.05] ${swimlaneMode === 'agent' ? 'text-primary-400' : 'text-surface-300'}`}
                 >
                   <Bot size={14} />
                   By Agent
@@ -579,7 +593,7 @@ export function KanbanView({
                     setSwimlaneMode('priority')
                     setShowSwimlaneMenu(false)
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-surface-700 ${swimlaneMode === 'priority' ? 'text-primary-400' : 'text-surface-300'}`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/[0.05] ${swimlaneMode === 'priority' ? 'text-primary-400' : 'text-surface-300'}`}
                 >
                   <AlertTriangle size={14} />
                   By Priority
@@ -590,7 +604,7 @@ export function KanbanView({
                       setSwimlaneMode('milestone')
                       setShowSwimlaneMenu(false)
                     }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-surface-700 ${swimlaneMode === 'milestone' ? 'text-primary-400' : 'text-surface-300'}`}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white/[0.05] ${swimlaneMode === 'milestone' ? 'text-primary-400' : 'text-surface-300'}`}
                   >
                     <Layers size={14} />
                     By Milestone
@@ -604,11 +618,11 @@ export function KanbanView({
         {/* WIP Legend */}
         <div className="flex items-center gap-4 text-xs text-surface-500">
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-yellow-500/30"></span>
+            <span className="w-3 h-3 rounded bg-yellow-500/20 border border-yellow-500/30"></span>
             At limit
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-red-500/30"></span>
+            <span className="w-3 h-3 rounded bg-red-500/20 border border-red-500/30"></span>
             Over limit
           </span>
         </div>
@@ -616,9 +630,9 @@ export function KanbanView({
 
       {/* Multi-select indicator */}
       {selectedTaskIds.size > 0 && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-full shadow-lg flex items-center gap-2">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-full shadow-glow-md flex items-center gap-2">
           <span>{selectedTaskIds.size} tasks selected</span>
-          <span className="text-primary-200">• Drag to move all</span>
+          <span className="text-primary-200">Drag to move all</span>
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -645,11 +659,19 @@ export function KanbanView({
             const laneTaskCount = lane.tasks.length
 
             return (
-              <div key={lane.id} className="border border-surface-700 rounded-lg overflow-hidden" style={{ background: '#111118' }}>
+              <div
+                key={lane.id}
+                className="border border-white/[0.06] rounded-xl overflow-hidden"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.3)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                }}
+              >
                 {/* Swimlane Header */}
                 <button
                   onClick={() => toggleSwimlane(lane.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-surface-800/50 hover:bg-surface-800 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <ChevronDown
@@ -658,15 +680,15 @@ export function KanbanView({
                     />
                     <div className="flex items-center gap-2">
                       {'icon' in lane && lane.icon}
-                      <span className="font-medium text-white">{lane.name}</span>
+                      <span className="font-medium text-surface-200">{lane.name}</span>
                     </div>
                     {'color' in lane && (
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${lane.color}`}>
+                      <span className={`px-2 py-0.5 text-xs rounded-md border ${lane.color} border-white/[0.1]`}>
                         {lane.name}
                       </span>
                     )}
                   </div>
-                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-surface-700 text-surface-400">
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-surface-500/10 text-surface-400 border border-white/[0.06]">
                     {laneTaskCount} tasks
                   </span>
                 </button>

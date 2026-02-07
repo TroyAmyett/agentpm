@@ -231,8 +231,9 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
         className="fixed inset-0 pointer-events-none"
         style={{
           background: `
-            radial-gradient(ellipse at 20% 30%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 70%, rgba(20, 184, 166, 0.03) 0%, transparent 50%)
+            radial-gradient(ellipse at 20% 30%, rgba(14, 165, 233, 0.06) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 70%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+            radial-gradient(ellipse at 50% 100%, rgba(14, 165, 233, 0.03) 0%, transparent 40%)
           `,
           zIndex: 0,
         }}
@@ -253,21 +254,15 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
             <button
               onClick={handleRefresh}
               disabled={isLoading}
-              className="px-4 py-2 rounded-lg text-sm font-normal transition-colors"
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: 'var(--fl-color-text-primary)',
-                backdropFilter: 'blur(12px)',
-              }}
+              className="px-4 py-2 rounded-lg text-sm font-normal transition-all glass-surface hover:border-white/[0.15]"
+              style={{ color: 'var(--fl-color-text-primary)' }}
             >
               <RefreshCw size={16} className={`inline mr-2 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
             <button
               onClick={onCreateTask}
-              className="px-5 py-2 rounded-lg text-sm font-normal text-white transition-colors"
-              style={{ background: '#0ea5e9' }}
+              className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-all bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 hover:shadow-glow-sm"
             >
               <Plus size={16} className="inline mr-2" />
               New Task
@@ -288,12 +283,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => onKpiClick?.(stat.target)}
-                className="rounded-xl p-5 cursor-pointer transition-shadow hover:shadow-lg"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                }}
+                className="rounded-xl p-5 cursor-pointer glass-surface glass-surface-hover"
               >
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm" style={{ color: 'var(--fl-color-text-muted)' }}>
@@ -340,12 +330,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           {/* Activity Chart */}
           <div
-            className="lg:col-span-2 rounded-xl p-4 md:p-5"
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-            }}
+            className="lg:col-span-2 rounded-xl p-4 md:p-5 glass-surface"
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
@@ -410,12 +395,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
 
           {/* Task Distribution */}
           <div
-            className="rounded-xl p-5"
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-            }}
+            className="rounded-xl p-5 glass-surface"
           >
             <h3 className="text-sm font-medium mb-4" style={{ color: 'var(--fl-color-text-primary)' }}>
               Task Distribution
@@ -466,12 +446,7 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
 
         {/* Agents Section */}
         <div
-          className="rounded-xl p-5 mb-6"
-          style={{
-            background: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-          }}
+          className="rounded-xl p-5 mb-6 glass-surface"
         >
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
@@ -604,21 +579,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           <button
             onClick={onCreateTask}
-            className="flex items-center gap-3 md:gap-4 p-4 md:p-5 rounded-xl text-left transition-all hover:scale-[1.02]"
-            style={{
-              background: 'rgba(14, 165, 233, 0.1)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(14, 165, 233, 0.2)',
-            }}
+            className="flex items-center gap-3 md:gap-4 p-4 md:p-5 rounded-xl text-left transition-all hover:-translate-y-0.5 glass-surface glass-surface-hover"
           >
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{
-                background: 'rgba(14, 165, 233, 0.15)',
-                border: '1px solid rgba(14, 165, 233, 0.25)'
-              }}
-            >
-              <Play size={24} color="#0ea5e9" strokeWidth={1.5} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary-500/15 border border-primary-500/25">
+              <Play size={24} className="text-primary-400" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
@@ -631,21 +595,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
           </button>
 
           <button
-            className="flex items-center gap-4 p-5 rounded-xl text-left transition-all hover:scale-[1.02]"
-            style={{
-              background: 'rgba(14, 165, 233, 0.1)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(14, 165, 233, 0.2)',
-            }}
+            className="flex items-center gap-4 p-5 rounded-xl text-left transition-all hover:-translate-y-0.5 glass-surface glass-surface-hover"
           >
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{
-                background: 'rgba(14, 165, 233, 0.15)',
-                border: '1px solid rgba(14, 165, 233, 0.25)'
-              }}
-            >
-              <BarChart3 size={24} color="#0ea5e9" strokeWidth={1.5} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-accent-500/15 border border-accent-500/25">
+              <BarChart3 size={24} className="text-accent-400" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>
@@ -658,21 +611,10 @@ export function AgentDashboard({ accountId, userId, onCreateTask, onKpiClick }: 
           </button>
 
           <button
-            className="flex items-center gap-4 p-5 rounded-xl text-left transition-all hover:scale-[1.02]"
-            style={{
-              background: 'rgba(14, 165, 233, 0.1)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(14, 165, 233, 0.2)',
-            }}
+            className="flex items-center gap-4 p-5 rounded-xl text-left transition-all hover:-translate-y-0.5 glass-surface glass-surface-hover"
           >
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{
-                background: 'rgba(14, 165, 233, 0.15)',
-                border: '1px solid rgba(14, 165, 233, 0.25)'
-              }}
-            >
-              <Settings size={24} color="#0ea5e9" strokeWidth={1.5} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-secondary-500/15 border border-secondary-500/25">
+              <Settings size={24} className="text-secondary-400" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-sm font-medium" style={{ color: 'var(--fl-color-text-primary)' }}>

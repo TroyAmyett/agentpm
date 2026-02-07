@@ -157,10 +157,10 @@ function HorizontalNav({
           <button
             key={item.id}
             onClick={() => onItemClick(item.id)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
               isActive
-                ? 'bg-[rgba(14,165,233,0.2)] text-[#0ea5e9]'
-                : 'hover:bg-white/10 text-[var(--fl-color-text-secondary)]'
+                ? 'bg-primary-500/15 text-primary-400 shadow-glow-sm'
+                : 'hover:bg-white/[0.06] text-[var(--fl-color-text-secondary)]'
             }`}
           >
             {item.icon}
@@ -478,18 +478,12 @@ function App() {
     <div className="h-screen flex flex-col" style={{ background: 'var(--fl-color-bg-base)', color: 'var(--fl-color-text-primary)' }}>
       {/* Header */}
       <header
-        className="grid grid-cols-[1fr_auto_1fr] items-center px-4 h-14 flex-shrink-0"
-        style={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
-        }}
+        className="fl-app-header grid grid-cols-[1fr_auto_1fr] items-center px-4 h-14 flex-shrink-0 glass-header"
       >
         {/* Left: Logo, Account Switcher, and Note Title (when in notes view) */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--fl-color-primary)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-primary-500 to-accent-600">
               <Bot size={18} className="text-white" />
             </div>
             <span className="font-semibold text-lg" style={{ color: 'var(--fl-color-text-primary)' }}>Agents</span>

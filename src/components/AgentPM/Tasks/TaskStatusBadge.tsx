@@ -1,5 +1,6 @@
 // Task Status Badge - Visual indicator for task status
 
+import { Inbox, Zap, Clock, Play, Eye, CheckCircle2, XCircle, Ban } from 'lucide-react'
 import type { TaskStatus } from '@/types/agentpm'
 
 interface TaskStatusBadgeProps {
@@ -7,53 +8,69 @@ interface TaskStatusBadgeProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-const statusConfig: Record<TaskStatus, { color: string; bgColor: string; label: string }> = {
+const statusConfig: Record<TaskStatus, { color: string; bgColor: string; borderColor: string; label: string; icon: React.ReactNode }> = {
   draft: {
-    color: 'text-purple-600 dark:text-purple-400',
-    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/20',
     label: 'Inbox',
+    icon: <Inbox size={12} />,
   },
   pending: {
-    color: 'text-indigo-600 dark:text-indigo-400',
-    bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-500/10',
+    borderColor: 'border-indigo-500/20',
     label: 'Ready',
+    icon: <Zap size={12} />,
   },
   queued: {
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/20',
     label: 'Queued',
+    icon: <Clock size={12} />,
   },
   in_progress: {
-    color: 'text-yellow-600 dark:text-yellow-400',
-    bgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
+    color: 'text-yellow-400',
+    bgColor: 'bg-yellow-500/10',
+    borderColor: 'border-yellow-500/20',
     label: 'In Progress',
+    icon: <Play size={12} />,
   },
   review: {
-    color: 'text-orange-600 dark:text-orange-400',
-    bgColor: 'bg-orange-50 dark:bg-orange-900/20',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/20',
     label: 'Review',
+    icon: <Eye size={12} />,
   },
   completed: {
-    color: 'text-green-600 dark:text-green-400',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
+    color: 'text-green-400',
+    bgColor: 'bg-green-500/10',
+    borderColor: 'border-green-500/20',
     label: 'Completed',
+    icon: <CheckCircle2 size={12} />,
   },
   failed: {
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/20',
     label: 'Failed',
+    icon: <XCircle size={12} />,
   },
   cancelled: {
-    color: 'text-surface-500 dark:text-surface-500',
-    bgColor: 'bg-surface-100 dark:bg-surface-800',
+    color: 'text-surface-400',
+    bgColor: 'bg-surface-500/10',
+    borderColor: 'border-surface-500/20',
     label: 'Cancelled',
+    icon: <Ban size={12} />,
   },
 }
 
 const sizeConfig = {
-  sm: 'px-1.5 py-0.5 text-xs',
-  md: 'px-2 py-0.5 text-xs',
-  lg: 'px-2.5 py-1 text-sm',
+  sm: 'px-1.5 py-0.5 text-xs gap-1',
+  md: 'px-2 py-0.5 text-xs gap-1',
+  lg: 'px-2.5 py-1 text-sm gap-1.5',
 }
 
 export function TaskStatusBadge({ status, size = 'md' }: TaskStatusBadgeProps) {
@@ -62,8 +79,9 @@ export function TaskStatusBadge({ status, size = 'md' }: TaskStatusBadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${config.bgColor} ${config.color} ${sizeClasses}`}
+      className={`inline-flex items-center rounded-md border font-medium ${config.bgColor} ${config.borderColor} ${config.color} ${sizeClasses}`}
     >
+      {config.icon}
       {config.label}
     </span>
   )

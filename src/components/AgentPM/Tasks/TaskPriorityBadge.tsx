@@ -11,29 +11,33 @@ interface TaskPriorityBadgeProps {
 
 const priorityConfig: Record<
   TaskPriority,
-  { color: string; bgColor: string; label: string; icon: React.ReactNode }
+  { color: string; bgColor: string; borderColor: string; label: string; icon: React.ReactNode }
 > = {
   critical: {
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/20',
     label: 'Critical',
     icon: <AlertTriangle size={12} />,
   },
   high: {
-    color: 'text-orange-600 dark:text-orange-400',
-    bgColor: 'bg-orange-50 dark:bg-orange-900/20',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/20',
     label: 'High',
     icon: <ArrowUp size={12} />,
   },
   medium: {
-    color: 'text-yellow-600 dark:text-yellow-400',
-    bgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
+    color: 'text-yellow-400',
+    bgColor: 'bg-yellow-500/10',
+    borderColor: 'border-yellow-500/20',
     label: 'Medium',
     icon: <Minus size={12} />,
   },
   low: {
-    color: 'text-surface-500 dark:text-surface-400',
-    bgColor: 'bg-surface-100 dark:bg-surface-700',
+    color: 'text-surface-400',
+    bgColor: 'bg-surface-500/10',
+    borderColor: 'border-surface-500/20',
     label: 'Low',
     icon: <ArrowDown size={12} />,
   },
@@ -51,7 +55,7 @@ export function TaskPriorityBadge({ priority, size = 'md', showLabel = true }: T
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${config.bgColor} ${config.color} ${sizeClasses}`}
+      className={`inline-flex items-center rounded-md border font-medium ${config.bgColor} ${config.borderColor} ${config.color} ${sizeClasses}`}
       title={config.label}
     >
       {config.icon}
