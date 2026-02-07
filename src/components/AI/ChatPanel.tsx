@@ -177,7 +177,7 @@ export function ChatPanel() {
         return currentNote?.content || ''
       },
       // Task creation callback
-      createTask: async (taskData: { title: string; description?: string; priority?: string }) => {
+      createTask: async (taskData: { title: string; description?: string; priority?: string; startImmediately?: boolean; parentTaskId?: string }) => {
         if (!currentAccountId) throw new Error('No account selected')
         const userId = user?.id || 'unknown'
 
@@ -186,7 +186,8 @@ export function ChatPanel() {
           description: taskData.description,
           priority: (taskData.priority as 'critical' | 'high' | 'medium' | 'low') || 'medium',
           accountId: currentAccountId,
-          status: 'draft',
+          status: taskData.startImmediately ? 'pending' : 'draft',
+          parentTaskId: taskData.parentTaskId || undefined,
           createdBy: userId,
           createdByType: 'user',
           updatedBy: userId,

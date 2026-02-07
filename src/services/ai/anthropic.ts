@@ -100,7 +100,7 @@ const NOTE_TOOLS: Tool[] = [
 // Task creation tool - allows AI to create tasks in AgentPM
 const TASK_TOOL: Tool = {
   name: 'create_task',
-  description: 'Create a new task in AgentPM. Use this when the user asks you to create a task, add something to their to-do list, or wants to track an action item. Tasks are actionable work items that can be assigned to AI agents or humans.',
+  description: 'Create a new task in AgentPM. Use this when the user asks you to create a task, add something to their to-do list, or wants to track an action item. Tasks are actionable work items that can be assigned to AI agents or humans. When creating multiple related tasks, first create a parent task for the overall goal, then create subtasks referencing its ID.',
   input_schema: {
     type: 'object',
     properties: {
@@ -117,6 +117,14 @@ const TASK_TOOL: Tool = {
         enum: ['critical', 'high', 'medium', 'low'],
         description: 'Task priority. Defaults to medium if not specified.',
       },
+      start_immediately: {
+        type: 'boolean',
+        description: 'If true, the task is queued for immediate AI agent execution instead of going to the Inbox/Backlog. Ask the user whether they want tasks to start right away or sit in the backlog first.',
+      },
+      parent_task_id: {
+        type: 'string',
+        description: 'ID of a parent task. When creating multiple related tasks, first create ONE parent/umbrella task for the overall goal, then create subtasks with this field set to the parent task ID (returned in the previous tool result).',
+      },
     },
     required: ['title'],
   },
@@ -129,7 +137,7 @@ export type NoteOperationCallbacks = {
   appendToNote: (content: string) => Promise<void>
   getCurrentNoteContent: () => string
   // Task operations
-  createTask?: (task: { title: string; description?: string; priority?: string }) => Promise<{ id: string; title: string }>
+  createTask?: (task: { title: string; description?: string; priority?: string; startImmediately?: boolean; parentTaskId?: string }) => Promise<{ id: string; title: string }>
 }
 
 let noteCallbacks: NoteOperationCallbacks | null = null
@@ -357,6 +365,12 @@ CAPABILITIES:
 - For append_to_note, just include the NEW content to add - it will be appended to the existing content
 - When the user asks to "create a task", "add to my to-do list", "track this", etc., use the create_task tool
 
+TASK CREATION RULES:
+- When creating 2 or more related tasks, ALWAYS create a parent/umbrella task first (for the overall goal), then create subtasks with parent_task_id set to the parent's ID
+- Ask the user: "Should I start these tasks immediately or add them to the backlog?" — set start_immediately accordingly
+- If the user says "start", "execute", "run", "do it now", etc., set start_immediately: true
+- If the user says "save", "backlog", "later", "inbox", etc., set start_immediately: false (default)
+
 WHEN TO SEARCH:
 - When asked about tools, services, products, or skills in a specific domain
 - When asked about current events or recent information
@@ -388,6 +402,12 @@ WHEN TO SEARCH:
 WHEN TO CREATE TASKS:
 - When the user explicitly asks to create a task or to-do item
 - When discussing action items that need to be tracked
+
+TASK CREATION RULES:
+- When creating 2 or more related tasks, ALWAYS create a parent/umbrella task first (for the overall goal), then create subtasks with parent_task_id set to the parent's ID
+- Ask the user: "Should I start these tasks immediately or add them to the backlog?" — set start_immediately accordingly
+- If the user says "start", "execute", "run", "do it now", etc., set start_immediately: true
+- If the user says "save", "backlog", "later", "inbox", etc., set start_immediately: false (default)
 
 To help with a specific note, ask the user to open it first.`
   }
@@ -503,10 +523,12 @@ To help with a specific note, ask the user to open it first.`
             title: toolUse.input.title as string,
             description: toolUse.input.description as string | undefined,
             priority: toolUse.input.priority as string | undefined,
+            startImmediately: toolUse.input.start_immediately as boolean | undefined,
+            parentTaskId: toolUse.input.parent_task_id as string | undefined,
           }
           const createdTask = await noteCallbacks.createTask(taskData)
           taskCreated = true
-          toolResult = `Task "${createdTask.title}" created successfully (ID: ${createdTask.id}).`
+          toolResult = `Task "${createdTask.title}" created successfully (ID: ${createdTask.id}). You can reference this ID as parent_task_id when creating subtasks.`
         } else if (toolUse.name === 'create_task' && !noteCallbacks?.createTask) {
           toolResult = 'Task creation is not available in this context. The task tool requires proper callbacks to be set up.'
         } else {

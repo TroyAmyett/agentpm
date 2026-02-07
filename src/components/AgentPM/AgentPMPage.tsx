@@ -597,37 +597,22 @@ export function AgentPMPage() {
           if (plan && plan.steps.length > 0) {
             console.log(`[Planner] Plan: ${plan.steps.length} steps, confidence: ${(plan.confidence.score * 100).toFixed(0)}% (${plan.executionMode})`)
 
-            if (plan.executionMode === 'auto' && plan.steps.length > 1) {
-              // HIGH CONFIDENCE: Create all subtasks and auto-execute
+            const createTaskFn = async (data: Record<string, unknown>) => {
+              return createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
+            }
+
+            if (plan.steps.length > 1) {
+              // Multi-step plan: auto-execute regardless of confidence level
+              // User moved the task to Ready — that IS the approval
+              const confPct = (plan.confidence.score * 100).toFixed(0)
               await updateTaskStatus(taskId, 'in_progress', userId,
-                `Auto-executing plan (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
+                `Auto-executing ${plan.steps.length}-step plan (confidence: ${confPct}%, mode: ${plan.executionMode})`)
               await storePlanOnTask(taskId, plan)
 
-              const createTaskFn = async (data: Record<string, unknown>) => {
-                return createTask(data as unknown as Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>)
-              }
               const createdIds = await createSubtasksFromPlan(
                 plan.steps, task, accountId, userId, createTaskFn, createTaskDependency
               )
-              console.log(`[Planner] Auto-executing: created ${createdIds.length} subtasks`)
-              return
-            }
-
-            if (plan.executionMode === 'plan-then-execute' && plan.steps.length > 1) {
-              // MEDIUM CONFIDENCE: Store plan, show for approval
-              await storePlanOnTask(taskId, plan)
-              await updateTaskStatus(taskId, 'review', userId,
-                `Plan generated - awaiting approval (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
-              console.log(`[Planner] Plan-then-execute: awaiting approval`)
-              return
-            }
-
-            if (plan.executionMode === 'step-by-step' && plan.steps.length > 1) {
-              // LOW CONFIDENCE: Store plan, create only first step
-              await storePlanOnTask(taskId, plan)
-              await updateTaskStatus(taskId, 'review', userId,
-                `Step-by-step mode - approve each step (confidence: ${(plan.confidence.score * 100).toFixed(0)}%)`)
-              console.log(`[Planner] Step-by-step: awaiting step 1 approval`)
+              console.log(`[Planner] Auto-executing (${plan.executionMode}): created ${createdIds.length} subtasks`)
               return
             }
 
