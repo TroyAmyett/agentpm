@@ -1,5 +1,5 @@
 // Per-Agent Queue Manager — Unit Tests
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   canAcceptTask,
   reserveSlot,
