@@ -173,6 +173,17 @@ export function KanbanView({
     return map
   }, [tasks])
 
+  // Map of parent task IDs to subtask count
+  const subtaskCountMap = useMemo(() => {
+    const map = new Map<string, number>()
+    tasks.forEach((task) => {
+      if (task.parentTaskId) {
+        map.set(task.parentTaskId, (map.get(task.parentTaskId) || 0) + 1)
+      }
+    })
+    return map
+  }, [tasks])
+
   const toggleSwimlane = (laneId: string) => {
     setCollapsedSwimlanes((prev) => {
       const newSet = new Set(prev)
@@ -332,6 +343,21 @@ export function KanbanView({
     return formatDateTz(dateStr, 'short')
   }
 
+  const formatRelativeTime = (iso: string) => {
+    const d = new Date(iso)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'just now'
+    if (diffMin < 60) return `${diffMin}m ago`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr}h ago`
+    const diffDays = Math.floor(diffHr / 24)
+    if (diffDays === 1) return 'yesterday'
+    if (diffDays < 7) return `${diffDays}d ago`
+    return d.toLocaleDateString()
+  }
+
   // Render a single task card
   const renderTaskCard = (task: Task) => {
     const priority = PRIORITY_CONFIG[task.priority]
@@ -385,6 +411,14 @@ export function KanbanView({
           {task.title}
         </h4>
 
+        {/* Subtask count for parent tasks */}
+        {subtaskCountMap.has(task.id) && (
+          <div className="flex items-center gap-1 text-xs text-cyan-400 mb-2">
+            <Layers size={12} />
+            <span>{subtaskCountMap.get(task.id)} subtask{subtaskCountMap.get(task.id)! > 1 ? 's' : ''}</span>
+          </div>
+        )}
+
         <div className="flex items-center flex-wrap gap-2 mb-2">
           <span className={`px-2 py-0.5 text-xs rounded-full ${priority.color}`}>
             {priority.emoji} {priority.label}
@@ -399,12 +433,13 @@ export function KanbanView({
         </div>
 
         <div className="flex items-center justify-between text-xs text-surface-500">
-          {task.dueAt && (
+          {task.dueAt ? (
             <span className={isOverdue ? 'text-red-400' : ''}>
               📅 {formatDate(task.dueAt)}
             </span>
+          ) : (
+            <span>{formatRelativeTime(task.createdAt)}</span>
           )}
-          {!task.dueAt && <span />}
         </div>
       </div>
     )

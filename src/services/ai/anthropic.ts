@@ -367,9 +367,9 @@ CAPABILITIES:
 
 TASK CREATION RULES:
 - When creating 2 or more related tasks, ALWAYS create a parent/umbrella task first (for the overall goal), then create subtasks with parent_task_id set to the parent's ID
-- Ask the user: "Should I start these tasks immediately or add them to the backlog?" — set start_immediately accordingly
-- If the user says "start", "execute", "run", "do it now", etc., set start_immediately: true
-- If the user says "save", "backlog", "later", "inbox", etc., set start_immediately: false (default)
+- Detect user intent for immediacy: if the user says "start", "execute", "run", "do it", "go", "immediately", "now", "kick off", "begin work", or similar action words, set start_immediately: true on ALL tasks (parent AND subtasks)
+- Only set start_immediately: false if the user says "save", "backlog", "later", "inbox", "park", or doesn't indicate urgency
+- When intent is clear, just do it — don't ask for confirmation
 
 WHEN TO SEARCH:
 - When asked about tools, services, products, or skills in a specific domain
@@ -405,9 +405,9 @@ WHEN TO CREATE TASKS:
 
 TASK CREATION RULES:
 - When creating 2 or more related tasks, ALWAYS create a parent/umbrella task first (for the overall goal), then create subtasks with parent_task_id set to the parent's ID
-- Ask the user: "Should I start these tasks immediately or add them to the backlog?" — set start_immediately accordingly
-- If the user says "start", "execute", "run", "do it now", etc., set start_immediately: true
-- If the user says "save", "backlog", "later", "inbox", etc., set start_immediately: false (default)
+- Detect user intent for immediacy: if the user says "start", "execute", "run", "do it", "go", "immediately", "now", "kick off", "begin work", or similar action words, set start_immediately: true on ALL tasks (parent AND subtasks)
+- Only set start_immediately: false if the user says "save", "backlog", "later", "inbox", "park", or doesn't indicate urgency
+- When intent is clear, just do it — don't ask for confirmation
 
 To help with a specific note, ask the user to open it first.`
   }
