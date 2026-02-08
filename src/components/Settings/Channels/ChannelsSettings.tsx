@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Bell,
   Activity,
+  ExternalLink,
 } from 'lucide-react'
 import { useIntakeStore } from '@/stores/intakeStore'
 import { useAccountStore } from '@/stores/accountStore'
@@ -462,6 +463,16 @@ function IntakeChannelCard({
   supabaseUrl: string
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [savedField, setSavedField] = useState<string | null>(null)
+  const [showToken, setShowToken] = useState(false)
+
+  const handleConfigSave = (field: string, value: string) => {
+    onUpdate(channel.id, {
+      config: { ...(channel.config || {}), [field]: value }
+    } as Partial<IntakeChannel>)
+    setSavedField(field)
+    setTimeout(() => setSavedField(null), 2000)
+  }
 
   // Build the endpoint URL for display
   let endpointUrl = ''
@@ -554,36 +565,84 @@ function IntakeChannelCard({
                       {channel.channelType === 'telegram' ? 'Telegram Bot Setup' : 'Slack Bot Setup'}
                     </div>
                     <div>
-                      <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
-                        Bot Token{channel.channelType === 'telegram' ? ' (from @BotFather)' : ''}:
-                      </label>
-                      <input
-                        type="password"
-                        placeholder={channel.channelType === 'telegram' ? '123456789:ABCdefGHIjklMNO...' : 'xoxb-...'}
-                        defaultValue={(channel.config as Record<string, unknown>)?.bot_token_enc as string || ''}
-                        onBlur={(e) => onUpdate(channel.id, {
-                          config: { ...(channel.config || {}), bot_token_enc: e.target.value }
-                        } as Partial<IntakeChannel>)}
-                        className="w-full px-3 py-2 rounded-lg text-sm"
-                        style={{
-                          background: '#1e293b',
-                          border: '1px solid var(--fl-color-border)',
-                          color: 'var(--fl-color-text-primary)',
-                        }}
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+                          Bot Token{channel.channelType === 'telegram' ? ' (from @BotFather)' : ''}:
+                        </label>
+                        {savedField === 'bot_token_enc' && (
+                          <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showToken ? 'text' : 'password'}
+                          placeholder={channel.channelType === 'telegram' ? '123456789:ABCdefGHIjklMNO...' : 'xoxb-...'}
+                          defaultValue={(channel.config as Record<string, unknown>)?.bot_token_enc as string || ''}
+                          onBlur={(e) => {
+                            if (e.target.value) handleConfigSave('bot_token_enc', e.target.value)
+                          }}
+                          className="w-full px-3 py-2 pr-16 rounded-lg text-sm"
+                          style={{
+                            background: '#1e293b',
+                            border: '1px solid var(--fl-color-border)',
+                            color: 'var(--fl-color-text-primary)',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowToken(!showToken)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded"
+                          style={{ color: 'var(--fl-color-text-muted)' }}
+                        >
+                          {showToken ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+                        Paste your token and click away to save
+                      </div>
                     </div>
+                    {channel.channelType === 'telegram' && !!(channel.config as Record<string, unknown>)?.bot_token_enc && (
+                      <>
+                        <button
+                          onClick={() => {
+                            const token = (channel.config as Record<string, unknown>).bot_token_enc as string
+                            const webhookUrl = `${supabaseUrl}/functions/v1/intake-telegram`
+                            window.open(
+                              `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`,
+                              '_blank'
+                            )
+                          }}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                          style={{
+                            background: '#0088cc',
+                            color: '#fff',
+                          }}
+                        >
+                          <ExternalLink size={14} />
+                          Register Webhook with Telegram
+                        </button>
+                        <div className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+                          Opens Telegram API in a new tab. You should see <span style={{ color: '#22c55e' }}>&quot;ok&quot;: true</span>. Then message your bot to connect.
+                        </div>
+                      </>
+                    )}
                     {channel.channelType === 'telegram' && (
                       <div>
-                        <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
-                          Chat ID (auto-filled when you message the bot):
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+                            Chat ID (auto-filled when you message the bot):
+                          </label>
+                          {savedField === 'chat_id' && (
+                            <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           placeholder="Auto-populated on first message"
                           defaultValue={(channel.config as Record<string, unknown>)?.chat_id as string || ''}
-                          onBlur={(e) => onUpdate(channel.id, {
-                            config: { ...(channel.config || {}), chat_id: e.target.value }
-                          } as Partial<IntakeChannel>)}
+                          onBlur={(e) => {
+                            if (e.target.value) handleConfigSave('chat_id', e.target.value)
+                          }}
                           className="w-full px-3 py-2 rounded-lg text-sm"
                           style={{
                             background: '#1e293b',
