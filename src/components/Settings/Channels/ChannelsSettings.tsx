@@ -628,28 +628,19 @@ function IntakeChannelCard({
                     )}
                     {channel.channelType === 'telegram' && (
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
-                            Chat ID (auto-filled when you message the bot):
-                          </label>
-                          {savedField === 'chat_id' && (
-                            <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Auto-populated on first message"
-                          defaultValue={(channel.config as Record<string, unknown>)?.chat_id as string || ''}
-                          onBlur={(e) => {
-                            if (e.target.value) handleConfigSave('chat_id', e.target.value)
-                          }}
-                          className="w-full px-3 py-2 rounded-lg text-sm"
-                          style={{
-                            background: '#1e293b',
-                            border: '1px solid var(--fl-color-border)',
-                            color: 'var(--fl-color-text-primary)',
-                          }}
-                        />
+                        <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
+                          Chat ID:
+                        </label>
+                        {(channel.config as Record<string, unknown>)?.chat_id ? (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: '#1e293b', border: '1px solid var(--fl-color-border)' }}>
+                            <span style={{ color: '#22c55e' }}>{(channel.config as Record<string, unknown>).chat_id as string}</span>
+                            <span className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>(linked)</span>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-2 rounded-lg text-sm" style={{ background: '#1e293b', border: '1px solid var(--fl-color-border)', color: 'var(--fl-color-text-muted)' }}>
+                            Pending — message your bot to link automatically
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
