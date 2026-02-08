@@ -547,6 +547,55 @@ function IntakeChannelCard({
               style={{ borderTop: '1px solid var(--fl-color-border)' }}
             >
               <div className="pt-4 space-y-3">
+                {/* Bot Token — shown for Telegram and Slack channels */}
+                {(channel.channelType === 'telegram' || channel.channelType === 'slack') && (
+                  <div className="space-y-3 p-3 rounded-lg" style={{ background: 'rgba(0,136,204,0.1)', border: '1px solid rgba(0,136,204,0.25)' }}>
+                    <div className="text-xs font-semibold" style={{ color: '#0ea5e9' }}>
+                      {channel.channelType === 'telegram' ? 'Telegram Bot Setup' : 'Slack Bot Setup'}
+                    </div>
+                    <div>
+                      <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
+                        Bot Token{channel.channelType === 'telegram' ? ' (from @BotFather)' : ''}:
+                      </label>
+                      <input
+                        type="password"
+                        placeholder={channel.channelType === 'telegram' ? '123456789:ABCdefGHIjklMNO...' : 'xoxb-...'}
+                        defaultValue={(channel.config as Record<string, unknown>)?.bot_token_enc as string || ''}
+                        onBlur={(e) => onUpdate(channel.id, {
+                          config: { ...(channel.config || {}), bot_token_enc: e.target.value }
+                        } as Partial<IntakeChannel>)}
+                        className="w-full px-3 py-2 rounded-lg text-sm"
+                        style={{
+                          background: '#1e293b',
+                          border: '1px solid var(--fl-color-border)',
+                          color: 'var(--fl-color-text-primary)',
+                        }}
+                      />
+                    </div>
+                    {channel.channelType === 'telegram' && (
+                      <div>
+                        <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
+                          Chat ID (auto-filled when you message the bot):
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Auto-populated on first message"
+                          defaultValue={(channel.config as Record<string, unknown>)?.chat_id as string || ''}
+                          onBlur={(e) => onUpdate(channel.id, {
+                            config: { ...(channel.config || {}), chat_id: e.target.value }
+                          } as Partial<IntakeChannel>)}
+                          className="w-full px-3 py-2 rounded-lg text-sm"
+                          style={{
+                            background: '#1e293b',
+                            border: '1px solid var(--fl-color-border)',
+                            color: 'var(--fl-color-text-primary)',
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* AI Parsing Options */}
                 <div className="flex items-center justify-between">
                   <div>
