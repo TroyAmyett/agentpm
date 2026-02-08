@@ -325,7 +325,7 @@ async function handleIntake(
 
   if (logError) {
     console.error('Failed to create intake log:', logError)
-    return { success: false, error: 'Failed to log intake' }
+    return { success: false, error: `Failed to log intake: ${logError.message}` }
   }
 
   // 2. Determine task fields — direct fields or AI parsing
@@ -382,6 +382,16 @@ async function handleIntake(
   const agentId = body.agentId || channel?.defaultAgentId || null
   const taskStatus = channel?.defaultStatus || 'pending'
 
+  // 4b. Resolve account owner for created_by (required NOT NULL UUID column)
+  const { data: ownerRow } = await supabase
+    .from('user_accounts')
+    .select('user_id')
+    .eq('account_id', accountId)
+    .eq('role', 'owner')
+    .limit(1)
+    .single()
+  const ownerId = ownerRow?.user_id || null
+
   // 5. Create the task
   const taskData: Record<string, unknown> = {
     account_id: accountId,
@@ -394,10 +404,10 @@ async function handleIntake(
     intake_channel_id: channel?.id || null,
     intake_log_id: logEntry.id,
     intake_sender: body.senderAddress || body.senderName || null,
-    created_by: 'system',
-    created_by_type: 'system',
-    updated_by: 'system',
-    updated_by_type: 'system',
+    created_by: ownerId,
+    created_by_type: 'user',
+    updated_by: ownerId,
+    updated_by_type: 'user',
     status_history: [
       {
         status: taskStatus,
@@ -441,7 +451,7 @@ async function handleIntake(
       .from('intake_log')
       .update({ status: 'failed', error: taskError.message })
       .eq('id', logEntry.id)
-    return { success: false, intakeLogId: logEntry.id, error: 'Failed to create task' }
+    return { success: false, intakeLogId: logEntry.id, error: `Failed to create task: ${taskError.message}` }
   }
 
   // 6. Update intake log with task reference
@@ -454,18 +464,15 @@ async function handleIntake(
   if (channel?.id) {
     await supabase
       .from('intake_channels')
-      .update({
-        total_tasks_created: supabase.rpc ? undefined : 0, // Increment handled separately
-        last_received_at: now,
-      })
+      .update({ last_received_at: now })
       .eq('id', channel.id)
 
-    // Increment counter
-    await supabase.rpc('increment_intake_channel_counter', {
-      p_channel_id: channel.id,
-    }).catch(() => {
-      // RPC may not exist yet, that's OK
-    })
+    // Increment counter (RPC may not exist yet, that's OK)
+    try {
+      await supabase.rpc('increment_intake_channel_counter', {
+        p_channel_id: channel.id,
+      })
+    } catch { /* ignore */ }
   }
 
   return {
@@ -510,9 +517,25 @@ Deno.serve(async (req: Request) => {
 
     let accountId: string | null = null
 
-    // Try API key auth first
     const authHeader = req.headers.get('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    // Strategy 0: Internal service-to-service call (service role key)
+    // Used by intake-telegram, intake-email, intake-slack calling intake-task
+    if (authHeader === `Bearer ${serviceRoleKey}` && serviceRoleKey) {
+      // Trusted internal call — resolve accountId from the channel
+      if (body.channelId) {
+        const { data: ch } = await supabase
+          .from('intake_channels')
+          .select('account_id')
+          .eq('id', body.channelId)
+          .single()
+        if (ch) accountId = ch.account_id
+      }
+    }
+
+    // Try API key auth
+    if (!accountId && authHeader?.startsWith('Bearer ')) {
       const apiKeyContext = await verifyApiKey(supabase, authHeader)
       if (apiKeyContext) {
         // Check scope

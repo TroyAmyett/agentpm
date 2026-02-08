@@ -114,7 +114,7 @@ async function handleStatusCommand(
     cancelled: '🚫',
   }
 
-  const appUrl = Deno.env.get('APP_URL') || 'https://app.funnelists.com'
+  const appUrl = Deno.env.get('APP_URL') || 'https://agentpm.funnelists.com'
   const lines = tasks.map((t: Record<string, unknown>) => {
     const emoji = statusEmoji[t.status as string] || '📋'
     return `${emoji} *${t.title}* — ${t.status}\n   [View](${appUrl}/#agentpm/tasks?task=${t.id})`
@@ -303,7 +303,7 @@ Deno.serve(async (req: Request) => {
     })
 
     const result = await intakeResponse.json()
-    const appUrl = Deno.env.get('APP_URL') || 'https://app.funnelists.com'
+    const appUrl = Deno.env.get('APP_URL') || 'https://agentpm.funnelists.com'
 
     if (result.success) {
       await sendTelegramMessage(
