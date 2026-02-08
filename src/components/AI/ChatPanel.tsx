@@ -176,6 +176,25 @@ export function ChatPanel() {
         const { currentNote } = getCurrentNoteContext()
         return currentNote?.content || ''
       },
+      // Insert an Excalidraw drawing block into the current note
+      insertDrawing: async (sceneData: string) => {
+        if (!currentNoteId) throw new Error('No note selected')
+        const currentNote = notes.find(n => n.id === currentNoteId)
+        if (!currentNote) throw new Error('Note not found')
+
+        const existingContent = currentNote.content as JSONContent
+        const drawingNode: JSONContent = {
+          type: 'excalidraw',
+          attrs: { data: sceneData },
+        }
+
+        const updatedContent: JSONContent = {
+          ...existingContent,
+          content: [...(existingContent.content || []), drawingNode],
+        }
+
+        await updateNote(currentNoteId, { content: updatedContent })
+      },
       // Task creation callback
       createTask: async (taskData: { title: string; description?: string; priority?: string; startImmediately?: boolean; parentTaskId?: string }) => {
         if (!currentAccountId) throw new Error('No account selected')

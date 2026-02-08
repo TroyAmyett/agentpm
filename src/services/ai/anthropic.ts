@@ -1,6 +1,7 @@
 import { buildKnowledgeContext } from '@/services/agentpm/knowledgeService'
 import type { FunnelistsTool } from '@/types/agentpm'
 import { resolveFailoverChain, chatWithFailover, type LLMMessage, type LLMContentBlock } from '@/services/llm'
+import { generateDiagram } from '@/services/ai/diagramGenerator'
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -130,6 +131,22 @@ const TASK_TOOL: Tool = {
   },
 }
 
+// Draw diagram tool - generates Excalidraw drawings in notes
+const DRAW_DIAGRAM_TOOL: Tool = {
+  name: 'draw_diagram',
+  description: 'Generate a visual diagram and insert it into the current note as an interactive drawing. Use this when the user asks you to draw, sketch, diagram, visualize, or illustrate something — architecture diagrams, flowcharts, process flows, system designs, org charts, data flows, etc.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      description: {
+        type: 'string',
+        description: 'Detailed description of what to draw. Include the components, their relationships, data flow direction, and any labels. Be specific about what nodes and connections to include.',
+      },
+    },
+    required: ['description'],
+  },
+}
+
 // Callbacks for note and task operations - will be set by ChatPanel
 export type NoteOperationCallbacks = {
   updateCurrentNote: (content: string, title?: string) => Promise<void>
@@ -138,6 +155,7 @@ export type NoteOperationCallbacks = {
   getCurrentNoteContent: () => string
   // Task operations
   createTask?: (task: { title: string; description?: string; priority?: string; startImmediately?: boolean; parentTaskId?: string }) => Promise<{ id: string; title: string }>
+  insertDrawing?: (sceneData: string) => Promise<void>
 }
 
 let noteCallbacks: NoteOperationCallbacks | null = null
@@ -361,9 +379,11 @@ CAPABILITIES:
 - You CAN append content to the current note using the append_to_note tool
 - You CAN create new notes using the create_new_note tool
 - You CAN create tasks using the create_task tool when the user wants to track action items
+- You CAN draw diagrams using the draw_diagram tool — architecture diagrams, flowcharts, process flows, system designs, data flows, etc.
 - When the user asks you to "add this", "update the note", "write this down", etc., USE THE TOOLS to actually modify the note
 - For append_to_note, just include the NEW content to add - it will be appended to the existing content
 - When the user asks to "create a task", "add to my to-do list", "track this", etc., use the create_task tool
+- When the user asks to "draw", "sketch", "diagram", "visualize", "illustrate", or "show me" something visual, use the draw_diagram tool
 
 TASK CREATION RULES:
 - When creating 2 or more related tasks, ALWAYS create a parent/umbrella task first (for the overall goal), then create subtasks with parent_task_id set to the parent's ID
@@ -420,7 +440,7 @@ To help with a specific note, ask the user to open it first.`
 
   // Build tools array - always include web search and task creation
   const localTools = activeNote
-    ? [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS]
+    ? [WEB_SEARCH_TOOL, TASK_TOOL, DRAW_DIAGRAM_TOOL, ...NOTE_TOOLS]
     : [WEB_SEARCH_TOOL, TASK_TOOL, ...NOTE_TOOLS.filter(t => t.name === 'create_new_note')]
 
   const llmTools = toLLMTools(localTools)
@@ -531,6 +551,15 @@ To help with a specific note, ask the user to open it first.`
           toolResult = `Task "${createdTask.title}" created successfully (ID: ${createdTask.id}). You can reference this ID as parent_task_id when creating subtasks.`
         } else if (toolUse.name === 'create_task' && !noteCallbacks?.createTask) {
           toolResult = 'Task creation is not available in this context. The task tool requires proper callbacks to be set up.'
+        } else if (toolUse.name === 'draw_diagram' && noteCallbacks?.insertDrawing) {
+          onStatusChange?.('updating-note')
+          const description = toolUse.input.description as string
+          const sceneData = await generateDiagram(description)
+          await noteCallbacks.insertDrawing(sceneData)
+          noteUpdated = true
+          toolResult = 'Diagram generated and inserted into the note as an interactive drawing. The user can click it to edit.'
+        } else if (toolUse.name === 'draw_diagram' && !noteCallbacks?.insertDrawing) {
+          toolResult = 'Drawing is not available — please open a note first.'
         } else {
           toolResult = `Tool ${toolUse.name} not available.`
         }
