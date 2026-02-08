@@ -13,6 +13,7 @@ import {
   Heading2,
   Undo,
   Redo,
+  Pencil,
 } from 'lucide-react'
 
 interface FormattingToolbarProps {
@@ -154,6 +155,16 @@ export function FormattingToolbar({ editor }: FormattingToolbarProps) {
         title="Quote"
       >
         <Quote size={18} />
+      </ToolbarButton>
+
+      <ToolbarDivider />
+
+      {/* Drawing */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().insertExcalidraw().run()}
+        title="Insert Drawing"
+      >
+        <Pencil size={18} />
       </ToolbarButton>
     </div>
   )

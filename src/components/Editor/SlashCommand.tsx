@@ -21,6 +21,7 @@ import {
   Minus,
   Sparkles,
   Table2,
+  Pencil,
 } from 'lucide-react'
 
 interface CommandItem {
@@ -109,6 +110,14 @@ const commands: CommandItem[] = [
     icon: <Table2 size={18} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+    },
+  },
+  {
+    title: 'Drawing',
+    description: 'Freehand drawing canvas',
+    icon: <Pencil size={18} className="text-primary-500" />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertExcalidraw().run()
     },
   },
   {

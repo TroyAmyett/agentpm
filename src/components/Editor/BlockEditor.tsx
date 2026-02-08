@@ -15,6 +15,7 @@ import { useTemplatesStore } from '@/stores/templatesStore'
 import { useAccountStore } from '@/stores/accountStore'
 import { useAuthStore } from '@/stores/authStore'
 import { SlashCommand } from './SlashCommand'
+import { ExcalidrawNode } from './ExcalidrawNode'
 import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
 import { AttachmentManagerModal } from '@/components/Attachments'
@@ -206,6 +207,7 @@ export function BlockEditor() {
         },
       }),
       SlashCommand,
+      ExcalidrawNode,
     ],
     content: currentNote?.content || '',
     editorProps: {
