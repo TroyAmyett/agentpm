@@ -5,8 +5,9 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { NodeViewWrapper } from '@tiptap/react'
 import { Pencil, Trash2, Maximize2, Minimize2 } from 'lucide-react'
 
-// Lazy-load Excalidraw to avoid SSR issues and reduce initial bundle
+// Excalidraw component + required stylesheet
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw'
+import '@excalidraw/excalidraw/index.css'
 import type { NodeViewProps } from '@tiptap/react'
 
 // Use simple type aliases — Excalidraw v0.18 exports types from subpaths
@@ -98,7 +99,7 @@ export function ExcalidrawBlock({ node, updateAttributes, deleteNode, selected }
           className={`relative rounded-xl border overflow-hidden my-4 ${
             selected ? 'border-primary-500 ring-2 ring-primary-500/30' : 'border-white/[0.1]'
           }`}
-          style={{ height: '480px' }}
+          style={{ height: '480px', width: '100%' }}
         >
           {/* Toolbar overlay */}
           <div className="absolute top-2 right-2 z-50 flex items-center gap-1">
