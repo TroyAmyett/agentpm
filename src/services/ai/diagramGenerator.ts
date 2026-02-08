@@ -104,21 +104,91 @@ function makeRect(node: DiagramNode) {
   return { box, text, boxId }
 }
 
+// ---------------------------------------------------------------------------
+// Edge direction analysis — determines which side of each node to connect
+// ---------------------------------------------------------------------------
+type EdgeSide = 'top' | 'bottom' | 'left' | 'right'
+
+function getEdgeSides(fromNode: DiagramNode, toNode: DiagramNode): { fromSide: EdgeSide; toSide: EdgeSide } {
+  const fw = fromNode.width || 180
+  const fh = fromNode.height || 70
+  const tw = toNode.width || 180
+  const th = toNode.height || 70
+
+  const fromCx = fromNode.x + fw / 2
+  const fromCy = fromNode.y + fh / 2
+  const toCx = toNode.x + tw / 2
+  const toCy = toNode.y + th / 2
+
+  const absDx = Math.abs(toCx - fromCx)
+  const absDy = Math.abs(toCy - fromCy)
+
+  if (absDx >= absDy) {
+    return toCx >= fromCx
+      ? { fromSide: 'right', toSide: 'left' }
+      : { fromSide: 'left', toSide: 'right' }
+  } else {
+    return toCy >= fromCy
+      ? { fromSide: 'bottom', toSide: 'top' }
+      : { fromSide: 'top', toSide: 'bottom' }
+  }
+}
+
+/** Spread focus values when multiple arrows share the same edge of a node */
+function spreadFocus(index: number, total: number): number {
+  if (total <= 1) return 0
+  return -0.6 + (index / (total - 1)) * 1.2
+}
+
 function makeArrow(
   edge: DiagramEdge,
   fromId: string,
   toId: string,
   fromNode: DiagramNode,
   toNode: DiagramNode,
+  fromFocus: number,
+  toFocus: number,
 ) {
   const fw = fromNode.width || 180
   const fh = fromNode.height || 70
+  const tw = toNode.width || 180
   const th = toNode.height || 70
 
-  const startX = fromNode.x + fw
-  const startY = fromNode.y + fh / 2
-  const endX = toNode.x
-  const endY = toNode.y + th / 2
+  const fromCx = fromNode.x + fw / 2
+  const fromCy = fromNode.y + fh / 2
+  const toCx = toNode.x + tw / 2
+  const toCy = toNode.y + th / 2
+
+  const absDx = Math.abs(toCx - fromCx)
+  const absDy = Math.abs(toCy - fromCy)
+
+  let startX: number, startY: number, endX: number, endY: number
+
+  if (absDx >= absDy) {
+    if (toCx >= fromCx) {
+      startX = fromNode.x + fw
+      startY = fromNode.y + fh / 2 + fromFocus * (fh / 2) * 0.6
+      endX = toNode.x
+      endY = toNode.y + th / 2 + toFocus * (th / 2) * 0.6
+    } else {
+      startX = fromNode.x
+      startY = fromNode.y + fh / 2 + fromFocus * (fh / 2) * 0.6
+      endX = toNode.x + tw
+      endY = toNode.y + th / 2 + toFocus * (th / 2) * 0.6
+    }
+  } else {
+    if (toCy >= fromCy) {
+      startX = fromNode.x + fw / 2 + fromFocus * (fw / 2) * 0.6
+      startY = fromNode.y + fh
+      endX = toNode.x + tw / 2 + toFocus * (tw / 2) * 0.6
+      endY = toNode.y
+    } else {
+      startX = fromNode.x + fw / 2 + fromFocus * (fw / 2) * 0.6
+      startY = fromNode.y
+      endX = toNode.x + tw / 2 + toFocus * (tw / 2) * 0.6
+      endY = toNode.y + th
+    }
+  }
 
   const dx = endX - startX
   const dy = endY - startY
@@ -133,8 +203,8 @@ function makeArrow(
     width: Math.abs(dx),
     height: Math.abs(dy),
     points: [[0, 0], [dx, dy]],
-    startBinding: { elementId: fromId, focus: 0, gap: 4 },
-    endBinding: { elementId: toId, focus: 0, gap: 4 },
+    startBinding: { elementId: fromId, focus: fromFocus, gap: 4 },
+    endBinding: { elementId: toId, focus: toFocus, gap: 4 },
     startArrowhead: null,
     endArrowhead: 'arrow',
     strokeColor: '#94a3b8',
@@ -142,7 +212,6 @@ function makeArrow(
 
   const elements = [arrow]
 
-  // Optional label on the arrow
   if (edge.label) {
     const labelId = nextId()
     elements.push(baseElement({
@@ -166,7 +235,7 @@ function makeArrow(
     }))
   }
 
-  return elements
+  return { elements, arrowId }
 }
 
 // ---------------------------------------------------------------------------
@@ -175,22 +244,81 @@ function makeArrow(
 export function dslToExcalidraw(dsl: DiagramDSL): string {
   const elements: Record<string, unknown>[] = []
   const nodeIdMap: Record<string, string> = {} // dsl id → excalidraw box id
+  // Track arrow bindings per box so we can update boundElements
+  const boxArrows: Record<string, string[]> = {}
 
   // Create nodes
   for (const node of dsl.nodes) {
     const { box, text, boxId } = makeRect(node)
     nodeIdMap[node.id] = boxId
+    boxArrows[boxId] = []
     elements.push(box, text)
   }
 
-  // Create edges
+  // Pre-analyze: count how many arrows share each edge of each node
+  const edgeSidesMap: { fromSide: EdgeSide; toSide: EdgeSide }[] = []
+  const fromSideCounts: Record<string, Record<string, number>> = {}
+  const toSideCounts: Record<string, Record<string, number>> = {}
+
   for (const edge of dsl.edges) {
+    const fromNode = dsl.nodes.find(n => n.id === edge.from)
+    const toNode = dsl.nodes.find(n => n.id === edge.to)
+    if (!fromNode || !toNode) {
+      edgeSidesMap.push({ fromSide: 'right', toSide: 'left' })
+      continue
+    }
+    const sides = getEdgeSides(fromNode, toNode)
+    edgeSidesMap.push(sides)
+
+    fromSideCounts[edge.from] ??= {}
+    fromSideCounts[edge.from][sides.fromSide] = (fromSideCounts[edge.from][sides.fromSide] || 0) + 1
+
+    toSideCounts[edge.to] ??= {}
+    toSideCounts[edge.to][sides.toSide] = (toSideCounts[edge.to][sides.toSide] || 0) + 1
+  }
+
+  // Create edges with spread focus values so arrows don't overlap
+  const fromSideIdx: Record<string, Record<string, number>> = {}
+  const toSideIdx: Record<string, Record<string, number>> = {}
+
+  for (let i = 0; i < dsl.edges.length; i++) {
+    const edge = dsl.edges[i]
     const fromBoxId = nodeIdMap[edge.from]
     const toBoxId = nodeIdMap[edge.to]
     const fromNode = dsl.nodes.find(n => n.id === edge.from)
     const toNode = dsl.nodes.find(n => n.id === edge.to)
     if (!fromBoxId || !toBoxId || !fromNode || !toNode) continue
-    elements.push(...makeArrow(edge, fromBoxId, toBoxId, fromNode, toNode))
+
+    const { fromSide, toSide } = edgeSidesMap[i]
+
+    fromSideIdx[edge.from] ??= {}
+    fromSideIdx[edge.from][fromSide] ??= 0
+    const fromCount = fromSideCounts[edge.from]?.[fromSide] || 1
+    const fromFocus = spreadFocus(fromSideIdx[edge.from][fromSide]++, fromCount)
+
+    toSideIdx[edge.to] ??= {}
+    toSideIdx[edge.to][toSide] ??= 0
+    const toCount = toSideCounts[edge.to]?.[toSide] || 1
+    const toFocus = spreadFocus(toSideIdx[edge.to][toSide]++, toCount)
+
+    const { elements: arrowEls, arrowId } = makeArrow(edge, fromBoxId, toBoxId, fromNode, toNode, fromFocus, toFocus)
+    elements.push(...arrowEls)
+
+    // Track which arrows bind to each box
+    boxArrows[fromBoxId]?.push(arrowId)
+    boxArrows[toBoxId]?.push(arrowId)
+  }
+
+  // Patch box elements: add arrow IDs to boundElements so moving a box drags its arrows
+  for (const el of elements) {
+    const arrowIds = boxArrows[el.id as string]
+    if (arrowIds && arrowIds.length > 0) {
+      const existing = (el.boundElements as any[]) || []
+      el.boundElements = [
+        ...existing,
+        ...arrowIds.map(id => ({ id, type: 'arrow' })),
+      ]
+    }
   }
 
   return JSON.stringify({ elements, appState: {}, files: {} })
@@ -204,21 +332,31 @@ const DIAGRAM_SYSTEM_PROMPT = `You are a diagram architect. Given a description,
 OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no explanation:
 {
   "nodes": [
-    { "id": "a", "label": "User", "x": 50, "y": 200, "color": "#364fc7", "shape": "rectangle" },
-    { "id": "b", "label": "API Gateway", "x": 300, "y": 200, "color": "#2b8a3e", "shape": "rectangle" }
+    { "id": "a", "label": "User", "x": 100, "y": 100, "color": "#e8590c", "shape": "ellipse" },
+    { "id": "b", "label": "API Gateway", "x": 400, "y": 100, "color": "#364fc7", "shape": "rectangle" },
+    { "id": "c", "label": "Database", "x": 400, "y": 300, "color": "#2b8a3e", "shape": "rectangle" }
   ],
   "edges": [
-    { "from": "a", "to": "b", "label": "request" }
+    { "from": "a", "to": "b", "label": "request" },
+    { "from": "b", "to": "c", "label": "query" }
   ]
 }
 
-RULES:
+LAYOUT RULES (critical — follow precisely):
+- Default node size is 180×70. Use "width" and "height" only if you need a different size.
+- HORIZONTAL spacing: nodes in the same row must have x values AT LEAST 280px apart (e.g., x:100, x:380, x:660)
+- VERTICAL spacing: nodes in adjacent rows must have y values AT LEAST 160px apart (e.g., y:100, y:260, y:420)
+- NEVER overlap nodes — verify that no two nodes share similar x,y coordinates
+- Start layout at x:100, y:100
+- For left-to-right flows, increase x by 280+ per column
+- For top-to-bottom flows, increase y by 160+ per row
+- For grid/matrix layouts, use consistent x values per column and y values per row
+- Center child nodes under their parent when possible
+
+GENERAL RULES:
 - Use descriptive short labels (2-4 words max)
-- Space nodes 250px apart horizontally, 120px apart vertically
-- Start layout at x:50, y:50
-- For left-to-right flows, increase x. For top-to-bottom, increase y.
-- Arrange logically: inputs on left, processing in middle, outputs on right
-- Use these colors for categories:
+- Arrange logically: inputs on left/top, processing in middle, outputs on right/bottom
+- Colors for categories:
   - "#364fc7" (blue) — services, APIs, endpoints
   - "#2b8a3e" (green) — databases, storage, caches
   - "#e8590c" (orange) — users, clients, external
@@ -228,10 +366,7 @@ RULES:
 - Shapes: "rectangle" (default), "ellipse" (start/end/actors), "diamond" (decisions)
 - Keep diagrams focused: 4-12 nodes is ideal
 - Edges flow from source to destination
-- Edge labels are optional — use them for actions/protocols (e.g., "HTTP", "gRPC", "publishes")
-- For architecture diagrams, show key services and data flow
-- For flowcharts, show steps with decision diamonds
-- For process flows, show sequential steps with optional branches`
+- Edge labels are optional — use them for actions/protocols (e.g., "HTTP", "gRPC", "publishes")`
 
 // ---------------------------------------------------------------------------
 // Generate diagram via LLM

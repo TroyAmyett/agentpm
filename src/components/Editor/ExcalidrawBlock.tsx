@@ -114,6 +114,18 @@ export function ExcalidrawBlock({ node, updateAttributes, deleteNode, selected }
     libraryItems: getStoredLibrary(),
   } : undefined
 
+  // Auto-center on content when opening a drawing that has elements
+  useEffect(() => {
+    if (!isEditing || !libraryReady) return
+    const timer = setTimeout(() => {
+      const api = excalidrawApiRef.current
+      if (!api) return
+      const els = api.getSceneElements()
+      if (els.length > 0) api.scrollToContent(els, { fitToContent: true })
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [isEditing, libraryReady])
+
   // Generate thumbnail when collapsing
   const generateThumbnail = useCallback(async () => {
     const api = excalidrawApiRef.current
