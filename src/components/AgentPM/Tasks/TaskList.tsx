@@ -1,14 +1,19 @@
 // Task List - Filterable list of tasks
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   Search,
   Filter,
   ListTodo,
+  CheckSquare,
+  Square,
+  Trash2,
+  X,
 } from 'lucide-react'
 import type { Task, TaskStatus, TaskPriority } from '@/types/agentpm'
 import { TaskCard } from './TaskCard'
+import { ConfirmDialog } from '../Modals'
 
 interface TaskListProps {
   tasks: Task[]
@@ -17,6 +22,7 @@ interface TaskListProps {
   selectedTaskId?: string | null
   onSelectTask?: (taskId: string) => void
   onCreateTask?: () => void
+  onBulkDelete?: (taskIds: string[]) => Promise<void>
   isLoading?: boolean
   initialStatusFilter?: TaskStatus | 'all'
 }
@@ -56,6 +62,7 @@ export function TaskList({
   selectedTaskId,
   onSelectTask,
   onCreateTask,
+  onBulkDelete,
   isLoading,
   initialStatusFilter = 'all',
 }: TaskListProps) {
@@ -65,6 +72,8 @@ export function TaskList({
   const [sortField, setSortField] = useState<SortField>('created')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
 
   // Sync filter when parent changes it (e.g., from dashboard KPI click)
   useEffect(() => {
@@ -123,6 +132,31 @@ export function TaskList({
 
     return sortDirection === 'asc' ? comparison : -comparison
   })
+
+  // Selection helpers
+  const visibleSelectedIds = useMemo(() => {
+    const visibleIds = new Set(sortedTasks.map((t) => t.id))
+    return new Set([...selectedIds].filter((id) => visibleIds.has(id)))
+  }, [selectedIds, sortedTasks])
+
+  const allVisibleSelected = sortedTasks.length > 0 && visibleSelectedIds.size === sortedTasks.length
+
+  const toggleSelection = (taskId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(sortedTasks.map((t) => t.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+  }
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -222,7 +256,7 @@ export function TaskList({
                   >
                     {field}
                     {sortField === field && (
-                      <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      <span className="ml-1">{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>
                     )}
                   </button>
                 ))}
@@ -231,6 +265,38 @@ export function TaskList({
           </div>
         )}
       </div>
+
+      {/* Bulk Action Bar */}
+      {visibleSelectedIds.size > 0 && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border-b border-primary-200 dark:border-primary-800">
+          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+            {visibleSelectedIds.size} selected
+          </span>
+          <button
+            onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+            className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+          >
+            {allVisibleSelected ? 'Clear' : `All ${sortedTasks.length}`}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={clearSelection}
+            className="p-1 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 transition-colors"
+            title="Clear selection"
+          >
+            <X size={14} />
+          </button>
+          {onBulkDelete && (
+            <button
+              onClick={() => setShowConfirmDelete(true)}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+            >
+              <Trash2 size={12} />
+              Delete
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Task List */}
       <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -257,21 +323,52 @@ export function TaskList({
           <AnimatePresence mode="popLayout">
             {sortedTasks.map((task) => {
               const blockedByCount = blockedTasks?.get(task.id)
+              const isSelected = selectedIds.has(task.id)
               return (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  agentName={task.assignedTo ? agents?.get(task.assignedTo) : undefined}
-                  selected={selectedTaskId === task.id}
-                  onClick={onSelectTask}
-                  isBlocked={blockedByCount !== undefined && blockedByCount > 0}
-                  blockedByCount={blockedByCount}
-                />
+                <div key={task.id} className="flex items-start gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSelection(task.id)
+                    }}
+                    className="mt-3 flex-shrink-0 text-surface-400 hover:text-primary-500 transition-colors"
+                  >
+                    {isSelected ? (
+                      <CheckSquare size={18} className="text-primary-500" />
+                    ) : (
+                      <Square size={18} />
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <TaskCard
+                      task={task}
+                      agentName={task.assignedTo ? agents?.get(task.assignedTo) : undefined}
+                      selected={selectedTaskId === task.id}
+                      onClick={onSelectTask}
+                      isBlocked={blockedByCount !== undefined && blockedByCount > 0}
+                      blockedByCount={blockedByCount}
+                    />
+                  </div>
+                </div>
               )
             })}
           </AnimatePresence>
         )}
       </div>
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        title="Delete Tasks"
+        message={`Are you sure you want to delete ${visibleSelectedIds.size} task${visibleSelectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel={`Delete ${visibleSelectedIds.size} Task${visibleSelectedIds.size !== 1 ? 's' : ''}`}
+        onConfirm={async () => {
+          await onBulkDelete?.(Array.from(visibleSelectedIds))
+          clearSelection()
+          setShowConfirmDelete(false)
+        }}
+        onCancel={() => setShowConfirmDelete(false)}
+      />
     </div>
   )
 }

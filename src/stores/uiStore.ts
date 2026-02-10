@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type TaskViewMode = 'kanban' | 'list' | 'agent-tasks' | 'graph' | 'gantt' | 'calendar' | 'queue'
+export type TaskOwnerFilter = 'all' | 'mine' | 'agent'
 
 interface UIState {
   sidebarOpen: boolean
@@ -16,6 +17,9 @@ interface UIState {
   taskViewMode: TaskViewMode
   taskViewModeByProject: Record<string, TaskViewMode>
 
+  // Task owner filter
+  taskOwnerFilter: TaskOwnerFilter
+
   // Actions
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -29,6 +33,7 @@ interface UIState {
   setChatPanelWidth: (width: number) => void
   setTaskViewMode: (mode: TaskViewMode, projectId?: string) => void
   getTaskViewMode: (projectId?: string) => TaskViewMode
+  setTaskOwnerFilter: (filter: TaskOwnerFilter) => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -43,6 +48,7 @@ export const useUIStore = create<UIState>()(
       chatPanelWidth: 400,
       taskViewMode: 'kanban' as TaskViewMode,
       taskViewModeByProject: {} as Record<string, TaskViewMode>,
+      taskOwnerFilter: 'all' as TaskOwnerFilter,
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -74,6 +80,8 @@ export const useUIStore = create<UIState>()(
         }
       },
 
+      setTaskOwnerFilter: (filter) => set({ taskOwnerFilter: filter }),
+
       getTaskViewMode: (projectId) => {
         const state = get()
         if (projectId && state.taskViewModeByProject[projectId]) {
@@ -91,6 +99,7 @@ export const useUIStore = create<UIState>()(
         chatPanelWidth: state.chatPanelWidth,
         taskViewMode: state.taskViewMode,
         taskViewModeByProject: state.taskViewModeByProject,
+        taskOwnerFilter: state.taskOwnerFilter,
       }),
     }
   )

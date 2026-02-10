@@ -378,6 +378,26 @@ export async function deleteTask(id: string, deletedBy: string, deletedByType: '
   if (error) throw error
 }
 
+export async function bulkDeleteTasks(
+  ids: string[],
+  deletedBy: string,
+  deletedByType: 'user' | 'agent'
+): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  if (ids.length === 0) return
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: deletedBy,
+      deleted_by_type: deletedByType,
+    })
+    .in('id', ids)
+
+  if (error) throw error
+}
+
 // =============================================================================
 // AGENT ACTIONS
 // =============================================================================

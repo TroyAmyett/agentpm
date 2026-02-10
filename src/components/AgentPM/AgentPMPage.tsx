@@ -1,6 +1,6 @@
 // AgentPM Page - Main page combining all AgentPM features
 
-import { useState, useEffect, useCallback, useTransition, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useTransition, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -16,6 +16,8 @@ import {
   ExternalLink,
   Workflow,
   MessageSquare,
+  User,
+  Users,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useAgentStore } from '@/stores/agentStore'
@@ -104,7 +106,7 @@ export function AgentPMPage() {
   const { accounts, currentAccountId, fetchAccounts, initializeUserAccounts } = useAccountStore()
   const { agents, fetchAgents, subscribeToAgents, pauseAgent, resumeAgent, resetAgentHealth, setAutonomyOverride, clearAutonomyOverride, getAgent: getAgentFromStore } = useAgentStore()
   const { projects, fetchProjects } = useProjectStore()
-  const { taskViewMode, setTaskViewMode } = useUIStore()
+  const { taskViewMode, setTaskViewMode, taskOwnerFilter, setTaskOwnerFilter } = useUIStore()
   const { skills, fetchSkills } = useSkillStore()
   const { runTask, isTaskExecuting, getActiveCount, activeExecutions } = useExecutionStore()
   const {
@@ -116,6 +118,7 @@ export function AgentPMPage() {
     updateTaskStatus,
     assignTask,
     deleteTask,
+    bulkDeleteTasks,
     subscribeToTasks,
     getTask,
     getPendingReviewTasks,
@@ -828,6 +831,18 @@ export function AgentPMPage() {
     [deleteTask, userId]
   )
 
+  const handleBulkDeleteTasks = useCallback(
+    async (taskIds: string[]) => {
+      try {
+        await bulkDeleteTasks(taskIds, userId)
+      } catch (err) {
+        console.error('Failed to bulk delete tasks:', err)
+        alert('Failed to delete tasks. Please try again.')
+      }
+    },
+    [bulkDeleteTasks, userId]
+  )
+
   // Handle task edit
   const handleEditTask = useCallback(
     async (taskId: string, updates: {
@@ -894,10 +909,30 @@ export function AgentPMPage() {
   // Create a Set of executing task IDs for AgentQueueView
   const executingTaskIds = new Set(activeExecutions.keys())
 
-  // Filter tasks by project if a filter is set
-  const filteredTasks = taskProjectFilter === 'all'
-    ? tasks
-    : tasks.filter(t => t.projectId === taskProjectFilter)
+  // Filter tasks by project and owner
+  const filteredTasks = useMemo(() => {
+    let result = tasks
+
+    // Project filter
+    if (taskProjectFilter !== 'all') {
+      result = result.filter(t => t.projectId === taskProjectFilter)
+    }
+
+    // Owner filter (My Tasks / Agent / All)
+    if (taskOwnerFilter === 'mine' && userId) {
+      result = result.filter(t =>
+        (t.createdBy === userId && t.createdByType === 'user') ||
+        (t.assignedTo === userId && t.assignedToType === 'user')
+      )
+    } else if (taskOwnerFilter === 'agent') {
+      result = result.filter(t =>
+        t.createdByType === 'agent' ||
+        t.assignedToType === 'agent'
+      )
+    }
+
+    return result
+  }, [tasks, taskProjectFilter, taskOwnerFilter, userId])
 
   // Handle voice commands
   const handleVoiceCommand = useCallback(
@@ -999,7 +1034,9 @@ export function AgentPMPage() {
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
               <div className="flex items-center gap-4">
                 <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
-                  {filteredTasks.length} tasks
+                  {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+                  {taskOwnerFilter === 'mine' && ' (mine)'}
+                  {taskOwnerFilter === 'agent' && ' (agent)'}
                   {taskProjectFilter !== 'all' && ` in ${projects.find(p => p.id === taskProjectFilter)?.name || 'project'}`}
                 </span>
                 {/* Project Filter */}
@@ -1015,6 +1052,28 @@ export function AgentPMPage() {
                     </option>
                   ))}
                 </select>
+
+                {/* Owner Filter: All / My Tasks / Agent */}
+                <div className="flex items-center rounded-lg border border-surface-300 dark:border-surface-600 overflow-hidden">
+                  {([
+                    { value: 'all' as const, label: 'All', icon: <Users size={14} /> },
+                    { value: 'mine' as const, label: 'My Tasks', icon: <User size={14} /> },
+                    { value: 'agent' as const, label: 'Agent', icon: <Bot size={14} /> },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setTaskOwnerFilter(opt.value)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${
+                        taskOwnerFilter === opt.value
+                          ? 'bg-cyan-500/10 text-cyan-400 border-r border-surface-300 dark:border-surface-600'
+                          : 'bg-white dark:bg-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-600 border-r border-surface-300 dark:border-surface-600 last:border-r-0'
+                      }`}
+                    >
+                      {opt.icon}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <ViewSwitcher
                 currentView={taskViewMode}
@@ -1056,6 +1115,7 @@ export function AgentPMPage() {
                     executingTaskIds={executingTaskIds}
                     onTaskClick={setSelectedTaskId}
                     onAddTask={() => setIsCreateTaskOpen(true)}
+                    onBulkDelete={handleBulkDeleteTasks}
                     onRunTask={(taskId) => {
                       const task = getTask(taskId)
                       if (!task?.assignedTo) return
@@ -1080,6 +1140,7 @@ export function AgentPMPage() {
                       selectedTaskId={selectedTaskId}
                       onSelectTask={setSelectedTaskId}
                       onCreateTask={() => setIsCreateTaskOpen(true)}
+                      onBulkDelete={handleBulkDeleteTasks}
                       initialStatusFilter={taskStatusFilter}
                     />
                   </div>

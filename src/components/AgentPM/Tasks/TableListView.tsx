@@ -17,9 +17,12 @@ import {
   Calendar,
   Link2,
   Plus,
+  Trash2,
+  X,
 } from 'lucide-react'
 import type { Task, TaskStatus, TaskPriority, AgentPersona, Project } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
+import { ConfirmDialog } from '../Modals'
 
 interface TableListViewProps {
   tasks: Task[]
@@ -30,6 +33,7 @@ interface TableListViewProps {
   onTaskClick: (taskId: string) => void
   onRunTask?: (taskId: string) => void
   onAddTask?: () => void
+  onBulkDelete?: (taskIds: string[]) => Promise<void>
 }
 
 type SortField = 'title' | 'status' | 'priority' | 'assignee' | 'dueAt' | 'createdAt' | 'updatedAt'
@@ -79,12 +83,15 @@ export function TableListView({
   executingTaskIds,
   onTaskClick,
   onAddTask,
+  onBulkDelete,
 }: TableListViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all')
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const { formatDate } = useTimezoneFunctions()
 
   // Create agent lookup map
@@ -164,6 +171,31 @@ export function TableListView({
 
     return result
   }, [tasks, searchQuery, statusFilter, priorityFilter, sortField, sortDirection, agentMap])
+
+  // Selection helpers
+  const visibleSelectedIds = useMemo(() => {
+    const visibleIds = new Set(filteredTasks.map((t) => t.id))
+    return new Set([...selectedIds].filter((id) => visibleIds.has(id)))
+  }, [selectedIds, filteredTasks])
+
+  const allVisibleSelected = filteredTasks.length > 0 && visibleSelectedIds.size === filteredTasks.length
+
+  const toggleSelection = (taskId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(filteredTasks.map((t) => t.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+  }
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -258,6 +290,38 @@ export function TableListView({
         )}
       </div>
 
+      {/* Bulk Action Bar */}
+      {visibleSelectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border-b border-primary-200 dark:border-primary-800">
+          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+            {visibleSelectedIds.size} selected
+          </span>
+          <button
+            onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+            className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+          >
+            {allVisibleSelected ? 'Clear selection' : `Select all ${filteredTasks.length}`}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={clearSelection}
+            className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 transition-colors"
+            title="Clear selection"
+          >
+            <X size={16} />
+          </button>
+          {onBulkDelete && (
+            <button
+              onClick={() => setShowConfirmDelete(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         {filteredTasks.length === 0 ? (
@@ -272,6 +336,15 @@ export function TableListView({
           <table className="w-full">
             <thead className="sticky top-0 bg-surface-50 dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700">
               <tr>
+                {/* Select All Checkbox */}
+                <th className="px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={allVisibleSelected ? clearSelection : selectAllVisible}
+                    className="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                  />
+                </th>
                 <SortHeader field="title" label="Task" className="min-w-[280px]" />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider">
                   Project
@@ -295,19 +368,33 @@ export function TableListView({
                 const assignee = task.assignedTo ? agentMap.get(task.assignedTo) : null
                 const status = statusConfig[task.status]
                 const priority = priorityConfig[task.priority]
+                const isSelected = selectedIds.has(task.id)
 
                 return (
                   <tr
                     key={task.id}
                     onClick={() => onTaskClick(task.id)}
-                    className={`cursor-pointer transition-colors bg-surface-50 dark:bg-surface-800 ${
-                      isExecuting
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
                         ? 'bg-primary-50 dark:bg-primary-900/20'
-                        : isBlocked
-                          ? 'bg-red-50/50 dark:bg-red-900/10'
-                          : 'hover:bg-surface-100 dark:hover:bg-surface-750'
+                        : isExecuting
+                          ? 'bg-primary-50 dark:bg-primary-900/20'
+                          : isBlocked
+                            ? 'bg-red-50/50 dark:bg-red-900/10'
+                            : 'bg-surface-50 dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-750'
                     }`}
                   >
+                    {/* Row Checkbox */}
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelection(task.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Task Name */}
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
@@ -431,6 +518,20 @@ export function TableListView({
           </table>
         )}
       </div>
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        title="Delete Tasks"
+        message={`Are you sure you want to delete ${visibleSelectedIds.size} task${visibleSelectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel={`Delete ${visibleSelectedIds.size} Task${visibleSelectedIds.size !== 1 ? 's' : ''}`}
+        onConfirm={async () => {
+          await onBulkDelete?.(Array.from(visibleSelectedIds))
+          clearSelection()
+          setShowConfirmDelete(false)
+        }}
+        onCancel={() => setShowConfirmDelete(false)}
+      />
     </div>
   )
 }

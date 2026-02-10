@@ -33,6 +33,7 @@ interface TaskState {
   updateTaskStatus: (id: string, status: TaskStatus, userId: string, note?: string) => Promise<void>
   assignTask: (id: string, assignedTo: string, assignedToType: 'user' | 'agent', userId: string) => Promise<void>
   deleteTask: (id: string, userId: string) => Promise<void>
+  bulkDeleteTasks: (ids: string[], userId: string) => Promise<void>
 
   // Dependencies
   createTaskDependency: (taskId: string, dependsOnTaskId: string, accountId: string, createdBy: string) => Promise<TaskDependency>
@@ -228,6 +229,24 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       await db.deleteTask(id, userId, 'user')
+    } catch (err) {
+      // Revert on error
+      set({ tasks })
+      throw err
+    }
+  },
+
+  bulkDeleteTasks: async (ids, userId) => {
+    const { tasks, selectedTaskId } = get()
+
+    // Optimistic update
+    set({
+      tasks: tasks.filter((t) => !ids.includes(t.id)),
+      selectedTaskId: ids.includes(selectedTaskId || '') ? null : selectedTaskId,
+    })
+
+    try {
+      await db.bulkDeleteTasks(ids, userId, 'user')
     } catch (err) {
       // Revert on error
       set({ tasks })
