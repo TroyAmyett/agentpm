@@ -20,7 +20,7 @@ import { FormattingToolbar } from './FormattingToolbar'
 import { SaveAsTemplateModal } from './SaveAsTemplateModal'
 import { AttachmentManagerModal } from '@/components/Attachments'
 import { fetchAttachments } from '@/services/attachments/attachmentService'
-import { BookTemplate, Paperclip } from 'lucide-react'
+import { BookTemplate, Paperclip, Sparkles } from 'lucide-react'
 
 // Debounce helper with flush capability for note updates
 interface DebouncedNoteUpdate {
@@ -72,7 +72,7 @@ function createDebouncedNoteUpdate(
 
 export function BlockEditor() {
   const { currentNoteId, notes, updateNote, isAuthenticated } = useNotesStore()
-  const { showAIToolbar, hideAIToolbar } = useUIStore()
+  const { showAIToolbar } = useUIStore()
   const { createTemplate } = useTemplatesStore()
   const { currentAccountId } = useAccountStore()
   const { user } = useAuthStore()
@@ -82,10 +82,6 @@ export function BlockEditor() {
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false)
   const [attachmentCount, setAttachmentCount] = useState(0)
 
-  // Track right-click to prevent AI toolbar during context menu
-  const isRightClickRef = useRef(false)
-  // Timer for delayed AI toolbar show
-  const aiToolbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Track if we're setting content programmatically (to avoid save loop)
   const isSettingContentRef = useRef(false)
 
@@ -125,24 +121,6 @@ export function BlockEditor() {
       content: currentNote.content,
     })
   }, [currentNote, createTemplate])
-
-  // Handle right-click (context menu)
-  const handleContextMenu = useCallback(() => {
-    isRightClickRef.current = true
-    // Reset after a short delay
-    setTimeout(() => {
-      isRightClickRef.current = false
-    }, 500)
-  }, [])
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (aiToolbarTimerRef.current) {
-        clearTimeout(aiToolbarTimerRef.current)
-      }
-    }
-  }, [])
 
   // Load attachment count for current note
   const loadAttachmentCount = useCallback(async () => {
@@ -214,12 +192,7 @@ export function BlockEditor() {
       attributes: {
         class: 'tiptap prose prose-lg max-w-none focus:outline-none',
       },
-      handleDOMEvents: {
-        contextmenu: () => {
-          handleContextMenu()
-          return false // Allow default context menu
-        },
-      },
+      handleDOMEvents: {},
       // Transform pasted plain text to normalize line endings
       // Convert single newlines to spaces, double newlines to paragraph breaks
       transformPastedText(text) {
@@ -259,42 +232,22 @@ export function BlockEditor() {
         debouncedUpdate(currentNoteId, content)
       }
     },
-    onSelectionUpdate: ({ editor }) => {
-      // Clear any pending AI toolbar timer
-      if (aiToolbarTimerRef.current) {
-        clearTimeout(aiToolbarTimerRef.current)
-        aiToolbarTimerRef.current = null
-      }
-
-      const { from, to } = editor.state.selection
-      const text = editor.state.doc.textBetween(from, to, ' ')
-
-      if (text.length > 0) {
-        // Don't show AI toolbar during right-click (context menu)
-        if (isRightClickRef.current) {
-          return
-        }
-
-        // Delay showing AI toolbar to avoid interfering with quick selections
-        // User can still use context menu or copy/paste without the toolbar appearing
-        aiToolbarTimerRef.current = setTimeout(() => {
-          // Double-check selection is still valid
-          const currentSelection = editor.state.selection
-          const currentText = editor.state.doc.textBetween(
-            currentSelection.from,
-            currentSelection.to,
-            ' '
-          )
-          if (currentText.length > 0 && !isRightClickRef.current) {
-            const coords = editor.view.coordsAtPos(currentSelection.from)
-            showAIToolbar({ x: coords.left, y: coords.top - 50 }, currentText)
-          }
-        }, 400) // 400ms delay - enough time to right-click without toolbar appearing
-      } else {
-        hideAIToolbar()
-      }
+    onSelectionUpdate: () => {
+      // AI toolbar is now triggered manually via the toolbar button,
+      // not on every text selection, so copy/paste works without interruption.
     },
   })
+
+  // Open AI toolbar from the current editor selection
+  const handleOpenAIToolbar = useCallback(() => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const text = editor.state.doc.textBetween(from, to, ' ')
+    if (text.length > 0) {
+      const coords = editor.view.coordsAtPos(from)
+      showAIToolbar({ x: coords.left, y: coords.top - 50 }, text)
+    }
+  }, [editor, showAIToolbar])
 
   // Update editor content when note changes
   useEffect(() => {
@@ -364,6 +317,14 @@ export function BlockEditor() {
                     <BookTemplate size={18} />
                   </button>
                 )}
+                <div className="w-px h-6 bg-surface-200 dark:bg-surface-700 mx-1" />
+                <button
+                  onClick={handleOpenAIToolbar}
+                  title="AI Assistant (select text first)"
+                  className="p-2 rounded-md hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-400 hover:text-primary-500 transition-colors"
+                >
+                  <Sparkles size={18} />
+                </button>
               </div>
             </div>
           </div>
