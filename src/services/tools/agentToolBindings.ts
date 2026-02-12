@@ -18,6 +18,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
     'generate_image',
     'create_landing_page',
     'create_skill',
+    'execute_openclaw',
     ...COLLAB_TOOLS,
   ],
   'image-generator': [
@@ -30,6 +31,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
     'dns_lookup',
     'check_domain_availability',
     'create_skill',
+    'execute_openclaw',
     ...COLLAB_TOOLS,
   ],
   'qa-tester': [
@@ -39,12 +41,14 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
   ],
   'orchestrator': [
     'create_skill',
+    'execute_openclaw',
     ...COLLAB_TOOLS,
   ],
   'forge': [
     'web_search',
     'fetch_url',
     'create_skill',
+    'execute_openclaw',
     ...COLLAB_TOOLS,
   ],
 }

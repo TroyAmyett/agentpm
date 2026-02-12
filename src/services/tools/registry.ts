@@ -611,6 +611,44 @@ export const BUILT_IN_TOOLS: Tool[] = [
       },
     },
   },
+  // ============================================
+  // OPENCLAW INTEGRATION
+  // ============================================
+  {
+    id: 'execute-openclaw',
+    name: 'execute_openclaw',
+    displayName: 'Execute OpenClaw Agent',
+    description: 'Delegate a task to an external OpenClaw agent runtime for autonomous execution',
+    category: 'integration',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'execute_openclaw',
+      description: 'Send a task to an always-on OpenClaw agent runtime running on a VPS. Use this for marketing automation, lead generation, social media engagement, web research with browser automation, and other long-running tasks that benefit from persistent execution. The OpenClaw agent processes the task autonomously and can report results back via webhook.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          agent_name: {
+            type: 'string',
+            description: 'The OpenClaw agent to route the task to (e.g., "LeadGen", "SocialMedia", "Research")',
+          },
+          task: {
+            type: 'string',
+            description: 'Detailed task description for the OpenClaw agent to execute',
+          },
+          context: {
+            type: 'object',
+            description: 'Optional context data to pass along (e.g., lead criteria, search parameters)',
+          },
+          callback_task_id: {
+            type: 'string',
+            description: 'Optional AgentPM task ID to update when OpenClaw completes the work',
+          },
+        },
+        required: ['task'],
+      },
+    },
+  },
   {
     id: 'record-screen-flow',
     name: 'record_screen_flow',

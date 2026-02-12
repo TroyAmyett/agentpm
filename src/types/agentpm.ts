@@ -1502,7 +1502,7 @@ export type UpdateEntity<T extends BaseEntity> = Partial<
 // INTAKE CHANNELS (Inbound Task Creation)
 // =============================================================================
 
-export type IntakeChannelType = 'email' | 'slack' | 'telegram' | 'webhook' | 'api'
+export type IntakeChannelType = 'email' | 'slack' | 'telegram' | 'webhook' | 'api' | 'openclaw'
 
 export interface IntakeEmailConfig {
   address: string           // e.g., 'tasks+a1b2c3@inbound.agentpm.app'

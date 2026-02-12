@@ -19,6 +19,7 @@ import {
 import { generateImage } from './implementations/imageGenerator'
 import { publishBlogPost } from './implementations/blogPublisher'
 import { createSkillTool, sendMessageTool, readMessagesTool } from './implementations/agentCollaboration'
+import { executeOpenClawTool } from './implementations/openclawTools'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -213,6 +214,20 @@ export async function executeTool(
           accountId: _accountId,
           recipientId: parameters._agentId as string || 'unknown',
           recipientType: 'agent',
+        })
+      }
+
+      // ============================================
+      // OPENCLAW INTEGRATION
+      // ============================================
+
+      case 'execute_openclaw': {
+        return await executeOpenClawTool({
+          agent_name: parameters.agent_name as string | undefined,
+          task: parameters.task as string,
+          context: parameters.context as Record<string, unknown> | undefined,
+          callback_task_id: parameters.callback_task_id as string | undefined,
+          accountId: _accountId,
         })
       }
 

@@ -22,6 +22,10 @@ import {
   Bell,
   Activity,
   ExternalLink,
+  Network,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { useIntakeStore } from '@/stores/intakeStore'
 import { useAccountStore } from '@/stores/accountStore'
@@ -76,6 +80,13 @@ const INTAKE_CHANNEL_TYPES: Array<{
     description: 'Create tasks programmatically with an API key',
     icon: Key,
     color: '#f59e0b',
+  },
+  {
+    type: 'openclaw',
+    label: 'OpenClaw Runtime',
+    description: 'Connect to an always-on OpenClaw agent for marketing, sales & automation',
+    icon: Network,
+    color: '#6366f1',
   },
 ]
 
@@ -175,6 +186,12 @@ export function ChannelsSettings() {
     } else if (type === 'webhook') {
       webhookSlug = generateWebhookSlug()
       config.secret_hash = generateWebhookSlug() // Generate a secret too
+    } else if (type === 'openclaw') {
+      // Generate a callback secret for OpenClaw to authenticate back to AgentPM
+      config.callback_secret = generateWebhookSlug()
+      config.runtime_url = ''
+      config.auth_token = ''
+      config.default_agent = 'main'
     }
 
     await createIntakeChannel({
@@ -484,6 +501,9 @@ function IntakeChannelCard({
     endpointUrl = `${supabaseUrl}/functions/v1/intake-slack`
   } else if (channel.channelType === 'telegram') {
     endpointUrl = `${supabaseUrl}/functions/v1/intake-telegram`
+  } else if (channel.channelType === 'openclaw') {
+    const config = channel.config as Record<string, unknown>
+    endpointUrl = (config.runtime_url as string) || 'Not configured'
   }
 
   return (
@@ -644,6 +664,16 @@ function IntakeChannelCard({
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* OpenClaw Runtime Config */}
+                {channel.channelType === 'openclaw' && (
+                  <OpenClawConfigPanel
+                    channel={channel}
+                    onConfigSave={handleConfigSave}
+                    savedField={savedField}
+                    supabaseUrl={supabaseUrl}
+                  />
                 )}
 
                 {/* AI Parsing Options */}
@@ -1186,6 +1216,221 @@ function ActivityPanel({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── OpenClaw Config Panel ───────────────────────────────────────────────────
+
+function OpenClawConfigPanel({
+  channel,
+  onConfigSave,
+  savedField,
+  supabaseUrl,
+}: {
+  channel: IntakeChannel
+  onConfigSave: (field: string, value: string) => void
+  savedField: string | null
+  supabaseUrl: string
+}) {
+  const [showToken, setShowToken] = useState(false)
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+
+  const config = channel.config as Record<string, unknown>
+  const callbackUrl = `${supabaseUrl}/functions/v1/openclaw-callback?channel=${channel.id}`
+
+  const handleTestConnection = async () => {
+    const runtimeUrl = (config.runtime_url as string || '').replace(/\/+$/, '')
+    const authToken = config.auth_token as string
+
+    if (!runtimeUrl || !authToken) {
+      setTestStatus('fail')
+      setTimeout(() => setTestStatus('idle'), 3000)
+      return
+    }
+
+    setTestStatus('testing')
+    try {
+      const res = await fetch(`${runtimeUrl}/health`, {
+        method: 'GET',
+        headers: { 'x-openclaw-token': authToken },
+        signal: AbortSignal.timeout(10_000),
+      })
+      setTestStatus(res.ok ? 'ok' : 'fail')
+    } catch {
+      setTestStatus('fail')
+    }
+    setTimeout(() => setTestStatus('idle'), 5000)
+  }
+
+  return (
+    <div className="space-y-3 p-3 rounded-lg" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)' }}>
+      <div className="text-xs font-semibold" style={{ color: '#818cf8' }}>
+        OpenClaw Runtime Setup
+      </div>
+
+      {/* Runtime URL */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Runtime URL (Tailscale hostname):
+          </label>
+          {savedField === 'runtime_url' && (
+            <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
+          )}
+        </div>
+        <input
+          type="url"
+          placeholder="https://openclaw.your-tailnet.ts.net"
+          defaultValue={(config.runtime_url as string) || ''}
+          onBlur={(e) => {
+            if (e.target.value !== (config.runtime_url || '')) {
+              onConfigSave('runtime_url', e.target.value)
+            }
+          }}
+          className="w-full px-3 py-2 rounded-lg text-sm"
+          style={{
+            background: '#1e293b',
+            border: '1px solid var(--fl-color-border)',
+            color: 'var(--fl-color-text-primary)',
+          }}
+        />
+      </div>
+
+      {/* Auth Token */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Gateway Auth Token:
+          </label>
+          {savedField === 'auth_token' && (
+            <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
+          )}
+        </div>
+        <div className="relative">
+          <input
+            type={showToken ? 'text' : 'password'}
+            placeholder="Your OpenClaw gateway token"
+            defaultValue={(config.auth_token as string) || ''}
+            onBlur={(e) => {
+              if (e.target.value !== (config.auth_token || '')) {
+                onConfigSave('auth_token', e.target.value)
+              }
+            }}
+            className="w-full px-3 py-2 pr-16 rounded-lg text-sm"
+            style={{
+              background: '#1e293b',
+              border: '1px solid var(--fl-color-border)',
+              color: 'var(--fl-color-text-primary)',
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowToken(!showToken)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded"
+            style={{ color: 'var(--fl-color-text-muted)' }}
+          >
+            {showToken ? 'Hide' : 'Show'}
+          </button>
+        </div>
+      </div>
+
+      {/* Default Agent */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Default Agent Name:
+          </label>
+          {savedField === 'default_agent' && (
+            <span className="text-xs font-medium" style={{ color: '#22c55e' }}>Saved</span>
+          )}
+        </div>
+        <input
+          type="text"
+          placeholder="main"
+          defaultValue={(config.default_agent as string) || 'main'}
+          onBlur={(e) => {
+            if (e.target.value !== (config.default_agent || 'main')) {
+              onConfigSave('default_agent', e.target.value)
+            }
+          }}
+          className="w-full px-3 py-2 rounded-lg text-sm"
+          style={{
+            background: '#1e293b',
+            border: '1px solid var(--fl-color-border)',
+            color: 'var(--fl-color-text-primary)',
+          }}
+        />
+        <div className="text-xs mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+          The OpenClaw agent name to route tasks to by default
+        </div>
+      </div>
+
+      {/* Callback URL (read-only) */}
+      <div>
+        <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
+          Callback URL (for OpenClaw skills to report back):
+        </label>
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono"
+          style={{ background: '#1e293b', border: '1px solid var(--fl-color-border)', color: 'var(--fl-color-text-muted)' }}
+        >
+          <span className="truncate flex-1">{callbackUrl}</span>
+          <button
+            onClick={() => navigator.clipboard.writeText(callbackUrl)}
+            className="p-1 rounded hover:bg-[var(--fl-color-bg-elevated)] flex-shrink-0"
+            title="Copy callback URL"
+          >
+            <Copy size={12} />
+          </button>
+        </div>
+        <div className="text-xs mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+          Add this URL to your OpenClaw bridge skill so it can push results back to AgentPM
+        </div>
+      </div>
+
+      {/* Callback Secret (read-only) */}
+      {!!config.callback_secret && (
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Callback Secret:
+          </label>
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono"
+            style={{ background: '#1e293b', border: '1px solid var(--fl-color-border)', color: 'var(--fl-color-text-muted)' }}
+          >
+            <span className="truncate flex-1">{String(config.callback_secret)}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(config.callback_secret as string)}
+              className="p-1 rounded hover:bg-[var(--fl-color-bg-elevated)] flex-shrink-0"
+              title="Copy callback secret"
+            >
+              <Copy size={12} />
+            </button>
+          </div>
+          <div className="text-xs mt-1" style={{ color: 'var(--fl-color-text-muted)' }}>
+            Include as <code className="text-xs">x-agentpm-token</code> header when calling back
+          </div>
+        </div>
+      )}
+
+      {/* Test Connection Button */}
+      <button
+        onClick={handleTestConnection}
+        disabled={testStatus === 'testing'}
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+        style={{
+          background: testStatus === 'ok' ? 'rgba(34,197,94,0.2)' : testStatus === 'fail' ? 'rgba(239,68,68,0.2)' : '#6366f1',
+          color: testStatus === 'ok' ? '#22c55e' : testStatus === 'fail' ? '#ef4444' : '#fff',
+          opacity: testStatus === 'testing' ? 0.7 : 1,
+        }}
+      >
+        {testStatus === 'testing' && <Loader2 size={14} className="animate-spin" />}
+        {testStatus === 'ok' && <CheckCircle2 size={14} />}
+        {testStatus === 'fail' && <XCircle size={14} />}
+        {testStatus === 'idle' && <Network size={14} />}
+        {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? 'Connected' : testStatus === 'fail' ? 'Connection Failed' : 'Test Connection'}
+      </button>
     </div>
   )
 }
