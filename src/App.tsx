@@ -277,7 +277,9 @@ function App() {
   const currentNote = notes.find(n => n.id === currentNoteId)
 
   const handleSidebarResize = useCallback((delta: number) => {
-    setSidebarWidth(sidebarWidth + delta)
+    // side="right" inverts delta, so we subtract to compensate:
+    // drag right → raw +5 → adjusted -5 → width - (-5) = wider ✓
+    setSidebarWidth(sidebarWidth - delta)
   }, [sidebarWidth, setSidebarWidth])
 
   // Always use dark mode for Funnelists
@@ -572,17 +574,17 @@ function App() {
         {/* Sidebar - only show for notes view */}
         {currentView === 'notes' && (
           <aside
-            className="transition-all duration-300 overflow-hidden flex-shrink-0 relative"
+            className={`transition-all duration-300 flex-shrink-0 relative ${!sidebarOpen ? 'overflow-hidden' : ''}`}
             style={{
               width: sidebarOpen ? sidebarWidth : 0,
               borderRight: sidebarOpen ? '1px solid var(--fl-color-border)' : 'none',
               background: 'var(--fl-color-bg-elevated)'
             }}
           >
-            <div className="h-full" style={{ width: sidebarWidth }}>
+            <div className="h-full overflow-hidden" style={{ width: sidebarWidth }}>
               <NotesList />
             </div>
-            {sidebarOpen && <ResizeHandle side="left" onResize={handleSidebarResize} />}
+            {sidebarOpen && <ResizeHandle side="right" onResize={handleSidebarResize} />}
           </aside>
         )}
 

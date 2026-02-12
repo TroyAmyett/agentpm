@@ -382,10 +382,11 @@ export function ChatPanel() {
           animate={{ width: chatPanelWidth, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="flex-shrink-0 border-l border-surface-200 dark:border-surface-700 flex flex-col overflow-hidden h-full"
+          className="flex-shrink-0 border-l border-surface-200 dark:border-surface-700 flex flex-col h-full relative"
           style={{ background: 'var(--fl-color-bg-elevated)', width: chatPanelWidth }}
         >
           <ResizeHandle side="left" onResize={handleResize} />
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
           {/* Header - Sticky */}
           <div className="flex-shrink-0 sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20">
             <div className="flex items-center gap-3">
@@ -572,6 +573,7 @@ export function ChatPanel() {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         </motion.div>
       )}
