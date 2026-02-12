@@ -83,10 +83,16 @@ export const useNotesStore = create<NotesState>()(
             db.fetchNotes(userId),
             db.fetchFolders(userId),
           ])
+          // Preserve the current note if it still exists in loaded data,
+          // otherwise fall back to the first note
+          const existingId = get().currentNoteId
+          const preservedId = existingId && notes.some((n) => n.id === existingId)
+            ? existingId
+            : notes[0]?.id || null
           set({
             notes,
             folders,
-            currentNoteId: notes[0]?.id || null,
+            currentNoteId: preservedId,
           })
           useSyncStore.getState().setStatus('synced')
           useSyncStore.getState().updateLastSynced()

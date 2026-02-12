@@ -249,27 +249,28 @@ export function BlockEditor() {
     }
   }, [editor, showAIToolbar])
 
-  // Update editor content when note changes
+  // Sync editor content ONLY when switching notes (not on every store update).
+  // Previously this depended on `currentNote` which changes on every save,
+  // causing setContent() to fire mid-typing and reset the cursor.
   useEffect(() => {
-    if (editor && currentNote) {
-      const currentContent = editor.getJSON()
-      if (JSON.stringify(currentContent) !== JSON.stringify(currentNote.content)) {
-        // Mark that we're setting content programmatically to avoid save loop
+    if (editor && currentNoteId) {
+      const note = useNotesStore.getState().notes.find((n) => n.id === currentNoteId)
+      if (note) {
         isSettingContentRef.current = true
-        editor.commands.setContent(currentNote.content || '')
-        // Reset flag after a tick to allow future user edits to save
+        editor.commands.setContent(note.content || '')
         setTimeout(() => {
           isSettingContentRef.current = false
         }, 0)
       }
-    } else if (editor && !currentNote) {
+    } else if (editor && !currentNoteId) {
       isSettingContentRef.current = true
       editor.commands.setContent('')
       setTimeout(() => {
         isSettingContentRef.current = false
       }, 0)
     }
-  }, [editor, currentNote, currentNoteId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, currentNoteId])
 
   if (!currentNote) {
     return (
@@ -287,8 +288,8 @@ export function BlockEditor() {
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* Sticky Formatting Toolbar */}
         {editor && (
-          <div className="flex-shrink-0 px-12 pt-4 pb-2" style={{ background: 'var(--fl-color-bg-base)' }}>
-            <div className="max-w-4xl mx-auto flex justify-center">
+          <div className="flex-shrink-0 px-8 pt-4 pb-2" style={{ background: 'var(--fl-color-bg-base)' }}>
+            <div className="max-w-6xl mx-auto flex justify-center">
               <div className="flex items-center gap-0.5 p-2 bg-surface-50 dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700">
                 <FormattingToolbar editor={editor} />
                 {isAuthenticated && currentAccountId && user?.id && (
@@ -332,7 +333,7 @@ export function BlockEditor() {
 
         {/* Scrollable Editor Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-12 pb-12">
+          <div className="max-w-6xl mx-auto px-8 pb-12">
             {/* Note Title */}
             <input
               type="text"
