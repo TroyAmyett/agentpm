@@ -207,6 +207,10 @@ export interface AgentPersona extends BaseEntity {
   // Stats (computed from task_executions)
   stats?: AgentStats
 
+  // External Runtime
+  executionRuntime?: 'internal' | 'external'  // Where this agent runs (default: internal)
+  externalChannelId?: string                   // FK to intake_channels for external runtime config
+
   // Display
   showOnDashboard: boolean
   showInOrgChart: boolean

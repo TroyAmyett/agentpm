@@ -25,6 +25,8 @@ import {
 } from '@/services/llm'
 import { getToolsForAgent } from '@/services/tools/agentToolBindings'
 import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
+import { createClientFromConfig, type OpenClawResponse } from '@/services/openclaw/client'
+import { createClient } from '@supabase/supabase-js'
 
 // Maximum tool use iterations to prevent infinite loops
 const MAX_TOOL_ITERATIONS = 10
@@ -196,6 +198,12 @@ export async function executeTask(
   const startTime = Date.now()
   const enableTools = input.enableTools !== false
   const accountId = input.accountId || ''
+
+  // ── External runtime routing ──────────────────────────────────────
+  // If agent is configured for external execution, delegate to OpenClaw
+  if (input.agent.executionRuntime === 'external') {
+    return executeExternalTask(input, startTime, onStatusChange)
+  }
 
   // Resolve failover chain (ordered list of provider configs) based on tier
   const resolved = await resolveFailoverChain('task-execution', input.userId)
@@ -530,6 +538,120 @@ export async function executeTask(
     }
 
     return errorResult
+  }
+}
+
+// ── External Runtime Execution ──────────────────────────────────────────────
+// Routes task to an external agent runtime (e.g., OpenClaw) instead of the LLM
+
+async function executeExternalTask(
+  input: ExecutionInput,
+  startTime: number,
+  onStatusChange?: ExecutionStatusCallback,
+): Promise<ExecutionResult> {
+  const accountId = input.accountId || ''
+  const agent = input.agent
+
+  onStatusChange?.('building_prompt', 'Connecting to external runtime')
+
+  // Resolve the channel config for this external agent
+  const channelId = agent.externalChannelId
+  if (!channelId) {
+    return {
+      success: false,
+      content: '',
+      metadata: { model: 'external', inputTokens: 0, outputTokens: 0, durationMs: Date.now() - startTime },
+      error: `Agent "${agent.alias}" is set to external runtime but has no externalChannelId configured.`,
+    }
+  }
+
+  const supabase = createClient(
+    import.meta.env.VITE_SUPABASE_URL || '',
+    import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+  )
+
+  const { data: channel, error: channelErr } = await supabase
+    .from('intake_channels')
+    .select('id, config, is_active')
+    .eq('id', channelId)
+    .eq('channel_type', 'openclaw')
+    .is('deleted_at', null)
+    .single()
+
+  if (channelErr || !channel) {
+    return {
+      success: false,
+      content: '',
+      metadata: { model: 'external', inputTokens: 0, outputTokens: 0, durationMs: Date.now() - startTime },
+      error: `External channel ${channelId} not found or not an OpenClaw channel.`,
+    }
+  }
+
+  if (!channel.is_active) {
+    return {
+      success: false,
+      content: '',
+      metadata: { model: 'external', inputTokens: 0, outputTokens: 0, durationMs: Date.now() - startTime },
+      error: `External channel is inactive. Enable it in Settings > Channels.`,
+    }
+  }
+
+  const config = channel.config as Record<string, unknown>
+  const client = createClientFromConfig(config)
+
+  if (!client) {
+    return {
+      success: false,
+      content: '',
+      metadata: { model: 'external', inputTokens: 0, outputTokens: 0, durationMs: Date.now() - startTime },
+      error: `OpenClaw channel is missing runtime_url or auth_token.`,
+    }
+  }
+
+  onStatusChange?.('calling_api', 'Sending task to OpenClaw')
+
+  // Build the task message for OpenClaw
+  const taskMessage = buildTaskPrompt(input.task, input.additionalContext)
+  const agentName = (config.default_agent as string) || agent.alias || 'main'
+
+  const result: OpenClawResponse = await client.sendTask(agentName, taskMessage, {
+    agentpm_task_id: input.task.id,
+    agentpm_agent_id: agent.id,
+    skill: input.skill?.name,
+  })
+
+  const durationMs = Date.now() - startTime
+
+  if (!result.success) {
+    if (accountId) {
+      logExecutionError({
+        executionId: input.executionId,
+        accountId,
+        agentId: agent.id,
+        taskId: input.task.id,
+        errorMessage: result.error || 'External execution failed',
+      })
+    }
+
+    return {
+      success: false,
+      content: '',
+      metadata: { model: 'external:openclaw', inputTokens: 0, outputTokens: 0, durationMs },
+      error: result.error || 'OpenClaw execution failed',
+    }
+  }
+
+  console.log(`[Executor] External task sent to OpenClaw agent "${agentName}" (session: ${result.sessionId})`)
+
+  return {
+    success: true,
+    content: result.response || `Task delegated to OpenClaw agent "${agentName}". Session: ${result.sessionId || 'N/A'}. Results will be reported back via callback.`,
+    metadata: {
+      model: 'external:openclaw',
+      inputTokens: 0,
+      outputTokens: 0,
+      durationMs,
+    },
   }
 }
 
