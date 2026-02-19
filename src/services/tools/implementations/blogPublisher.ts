@@ -156,7 +156,7 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
  * @deprecated Publishing is now admin-only via the CMS admin UI.
  * This function is kept for backwards compatibility but returns an error.
  */
-export async function publishDraftPost(slug: string): Promise<{ success: boolean; error?: string; siteUrl?: string }> {
+export async function publishDraftPost(_slug: string): Promise<{ success: boolean; error?: string; siteUrl?: string }> {
   return {
     success: false,
     error: 'Direct publishing is no longer supported. An admin must publish pages via the CMS admin UI at /admin/pages.',
