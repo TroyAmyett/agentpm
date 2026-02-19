@@ -276,6 +276,16 @@ export async function executeTask(
       }
     }
 
+    // Resolve Google Drive document references in skill content (if any)
+    if (input.skill?.content) {
+      try {
+        const { resolveSkillDocs } = await import('@/services/skills/docResolver')
+        input.skill = { ...input.skill, content: await resolveSkillDocs(input.skill.content) }
+      } catch (err) {
+        console.warn('[Executor] Skill doc resolver failed (non-fatal):', err)
+      }
+    }
+
     const llmToolDefs = toLLMToolDefs(tools)
     const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs, availableSkills)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)

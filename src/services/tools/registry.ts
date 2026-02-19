@@ -693,7 +693,44 @@ export const BUILT_IN_TOOLS: Tool[] = [
         }
       }
     }
-  }
+  },
+  // ============================================
+  // Google Drive SSOT Access
+  // ============================================
+  {
+    id: 'fetch-google-doc',
+    name: 'fetch_google_doc',
+    displayName: 'Fetch Google Doc',
+    description: 'Read files from the shared Google Drive SSOT folder',
+    category: 'integration',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'fetch_google_doc',
+      description: 'Read a document from the shared Google Drive SSOT folder. Can fetch by file ID, navigate by folder path, search by keyword, or list folder contents. Use this to access reference documents, skill definitions, brand guidelines, and other shared resources.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          file_id: {
+            type: 'string',
+            description: 'Google Drive file ID to fetch directly',
+          },
+          path: {
+            type: 'string',
+            description: 'Path relative to the SSOT root folder, e.g. "skills/marketing/lead-gen.md"',
+          },
+          query: {
+            type: 'string',
+            description: 'Search query to find files by name or content',
+          },
+          list_folder: {
+            type: 'string',
+            description: 'Folder ID to list contents of (omit for root folder)',
+          },
+        },
+      },
+    },
+  },
 ]
 
 /**

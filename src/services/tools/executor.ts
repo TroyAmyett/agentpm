@@ -20,6 +20,7 @@ import { generateImage } from './implementations/imageGenerator'
 import { publishBlogPost } from './implementations/blogPublisher'
 import { createSkillTool, sendMessageTool, readMessagesTool } from './implementations/agentCollaboration'
 import { executeOpenClawTool } from './implementations/openclawTools'
+import { fetchGoogleDocTool } from './implementations/googleDriveTools'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -228,6 +229,19 @@ export async function executeTool(
           context: parameters.context as Record<string, unknown> | undefined,
           callback_task_id: parameters.callback_task_id as string | undefined,
           accountId: _accountId,
+        })
+      }
+
+      // ============================================
+      // GOOGLE DRIVE SSOT
+      // ============================================
+
+      case 'fetch_google_doc': {
+        return await fetchGoogleDocTool({
+          file_id: parameters.file_id as string | undefined,
+          path: parameters.path as string | undefined,
+          query: parameters.query as string | undefined,
+          list_folder: parameters.list_folder as string | undefined,
         })
       }
 

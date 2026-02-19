@@ -14,6 +14,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
   'content-writer': [
     'web_search',
     'fetch_url',
+    'fetch_google_doc',
     'publish_blog_post',
     'generate_image',
     'create_landing_page',
@@ -28,6 +29,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
   'researcher': [
     'web_search',
     'fetch_url',
+    'fetch_google_doc',
     'dns_lookup',
     'check_domain_availability',
     'create_skill',
@@ -37,9 +39,11 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
   'qa-tester': [
     'web_search',
     'fetch_url',
+    'fetch_google_doc',
     ...COLLAB_TOOLS,
   ],
   'orchestrator': [
+    'fetch_google_doc',
     'create_skill',
     'execute_openclaw',
     ...COLLAB_TOOLS,
@@ -47,6 +51,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
   'forge': [
     'web_search',
     'fetch_url',
+    'fetch_google_doc',
     'create_skill',
     'execute_openclaw',
     ...COLLAB_TOOLS,
