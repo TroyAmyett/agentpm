@@ -4,6 +4,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { verifyApiKey as verifyApiKeyShared, type ApiKeyContext } from '../_shared/auth.ts'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -64,46 +65,13 @@ interface ChannelConfig {
   config: Record<string, unknown>
 }
 
-// ─── API Key Verification (shared pattern with queue) ───────────────────────
+// ─── API Key Verification (delegates to shared auth module) ─────────────────
 
 async function verifyApiKey(
   supabase: ReturnType<typeof createClient>,
   authHeader: string | null
 ): Promise<{ accountId: string; agentType?: string; agentId?: string; scopes?: string[] } | null> {
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null
-  }
-
-  const apiKey = authHeader.replace('Bearer ', '')
-  const keyPrefix = apiKey.slice(0, 8)
-
-  const { data, error } = await supabase
-    .from('agent_api_keys')
-    .select('account_id, agent_type, agent_id, is_active, expires_at, scopes')
-    .eq('key_prefix', keyPrefix)
-    .eq('is_active', true)
-    .single()
-
-  if (error || !data) {
-    return null
-  }
-
-  if (data.expires_at && new Date(data.expires_at) < new Date()) {
-    return null
-  }
-
-  // Update usage stats
-  await supabase
-    .from('agent_api_keys')
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('key_prefix', keyPrefix)
-
-  return {
-    accountId: data.account_id,
-    agentType: data.agent_type,
-    agentId: data.agent_id,
-    scopes: data.scopes,
-  }
+  return verifyApiKeyShared(supabase, authHeader)
 }
 
 // ─── Webhook Secret Verification ────────────────────────────────────────────

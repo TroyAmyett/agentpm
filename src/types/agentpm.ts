@@ -706,6 +706,8 @@ export type ApiKeyScope =
   | 'intake:create'
   | 'intake:read'
   | 'notify:send'
+  | 'skill:read'
+  | 'skill:create'
 
 export interface AgentApiKey {
   id: string
