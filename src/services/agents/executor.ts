@@ -134,9 +134,10 @@ function buildAgentSystemPrompt(
       parts.push(`- ${tool.name}: ${tool.description}`)
     }
     parts.push(`\nCRITICAL INSTRUCTIONS:`)
-    parts.push(`- "Publishing" means using a tool to deploy content to funnelists.com. Choose the right tool:`)
-    parts.push(`  - Blog posts, articles, thought leadership → use publish_blog_post (commits to CMS, auto-deploys via Vercel)`)
-    parts.push(`  - Landing pages, lead capture, waitlist, product pages → use create_landing_page`)
+    parts.push(`- "Publishing" means using a tool to create content on funnelists.com. All content is created as DRAFT — only admins can publish. Choose the right tool:`)
+    parts.push(`  - Blog posts, articles, thought leadership → use publish_blog_post with pageType="blog" (appears at /insights/{slug} after admin publishes)`)
+    parts.push(`  - Generic website pages → use publish_blog_post with pageType="page" (appears at /{slug} after admin publishes)`)
+    parts.push(`  - Landing pages with structured layout (hero, sections, pricing) → use create_landing_page`)
     parts.push(`  - Do NOT just write content as text output. Actually publish it with the tool.`)
     parts.push(`- When a task involves creating images, use the generate_image tool.`)
     parts.push(`- When a task requires research or web content, use fetch_url or web_search.`)

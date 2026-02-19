@@ -169,38 +169,50 @@ export const BUILT_IN_TOOLS: Tool[] = [
   {
     id: 'publish-blog-post',
     name: 'publish_blog_post',
-    displayName: 'Publish Blog Post',
-    description: 'Publish a blog post to the funnelists.com website via GitHub/Vercel',
+    displayName: 'Create CMS Page',
+    description: 'Create a page on funnelists.com via the CMS Content API (blog posts, pages, etc.)',
     category: 'integration',
     isBuiltIn: true,
     isEnabled: true,
     requiresApiKey: true,
-    apiKeyName: 'GITHUB_TOKEN',
+    apiKeyName: 'CMS_AGENT_API_KEY',
     definition: {
       name: 'publish_blog_post',
-      description: 'Publish a blog post to funnelists.com. Creates a markdown file with frontmatter and commits it to the CMS repository. If a hero image URL is provided, the image is downloaded and committed alongside the post. Vercel automatically rebuilds the site after the commit.',
+      description: 'Create a page on funnelists.com via the CMS Content API. All pages are created as drafts — an admin must publish them. Supports blog posts (appear at /insights/{slug}), generic pages (at /{slug}), and product pages (stored only). Content can be Markdown or HTML.',
       input_schema: {
         type: 'object',
         properties: {
           title: {
             type: 'string',
-            description: 'Blog post title',
+            description: 'Page title',
           },
           slug: {
             type: 'string',
-            description: 'URL slug in kebab-case (e.g., "how-to-use-agentforce")',
+            description: 'URL slug in kebab-case (e.g., "how-to-use-agentforce"). Must be unique and not a reserved slug.',
           },
           content: {
             type: 'string',
-            description: 'Blog post body in Markdown format. Use ## for headings, bullet points for lists, **bold** for emphasis. Do NOT include the title as an H1 heading - the title is rendered separately from frontmatter.',
+            description: 'Page body in Markdown (default) or HTML. Use ## for headings, bullet points for lists, **bold** for emphasis. Do NOT include the title as an H1 heading.',
           },
           excerpt: {
             type: 'string',
-            description: 'Brief summary for preview cards, 150-160 characters',
+            description: 'Brief summary/description for preview cards, 150-160 characters',
           },
           category: {
             type: 'string',
-            description: 'Blog category (e.g., "AI", "Salesforce", "Product Updates", "Guides")',
+            description: 'Content category (e.g., "ai-insights", "salesforce-ai", "product-updates", "case-studies")',
+          },
+          pageType: {
+            type: 'string',
+            description: 'Type of page: "blog" (shows at /insights/{slug}), "page" (shows at /{slug}), "product" (stored only). Defaults to "blog".',
+            enum: ['blog', 'page', 'product'],
+            default: 'blog',
+          },
+          contentFormat: {
+            type: 'string',
+            description: 'Content format: "markdown" or "html". Defaults to "markdown".',
+            enum: ['markdown', 'html'],
+            default: 'markdown',
           },
           seoTitle: {
             type: 'string',
@@ -212,21 +224,12 @@ export const BUILT_IN_TOOLS: Tool[] = [
           },
           heroImageUrl: {
             type: 'string',
-            description: 'URL of the hero image to include with the post. Use generate_image tool first to create one.',
-          },
-          heroImagePrompt: {
-            type: 'string',
-            description: 'The prompt used to generate the hero image (for metadata)',
+            description: 'URL of the hero/featured image. Use generate_image tool first to create one.',
           },
           tags: {
             type: 'array',
-            description: 'Tags for the post',
+            description: 'Tags for the page',
             items: { type: 'string' },
-          },
-          publish: {
-            type: 'boolean',
-            description: 'If true, publish immediately. If false, save as draft for review. Defaults to false (draft).',
-            default: false,
           },
         },
         required: ['title', 'slug', 'content', 'excerpt', 'category'],

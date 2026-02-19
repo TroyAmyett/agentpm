@@ -330,7 +330,7 @@ async function publishToCMS(
   }
 
   try {
-    const response = await fetch(`${cmsEndpoint}/api/posts`, {
+    const response = await fetch(`${cmsEndpoint}/api/pages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

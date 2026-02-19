@@ -96,12 +96,12 @@ export async function executeTool(
           content: parameters.content as string,
           excerpt: parameters.excerpt as string,
           category: parameters.category as string,
+          pageType: parameters.pageType as string | undefined,
+          contentFormat: parameters.contentFormat as string | undefined,
           seoTitle: parameters.seoTitle as string | undefined,
           metaDescription: parameters.metaDescription as string | undefined,
           heroImageUrl: parameters.heroImageUrl as string | undefined,
-          heroImagePrompt: parameters.heroImagePrompt as string | undefined,
           tags: parameters.tags as string[] | undefined,
-          publish: parameters.publish as boolean | undefined,
         })
       }
 
