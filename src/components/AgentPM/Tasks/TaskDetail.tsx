@@ -38,6 +38,7 @@ interface TaskDetailProps {
   onEdit?: (taskId: string) => void
   onDependencyChange?: () => void
   onApprovePlan?: (taskId: string, plan: ExecutionPlan) => void
+  onRerunWithFeedback?: (taskId: string, feedback: string) => void
 }
 
 type TabType = 'activity' | 'details'
@@ -56,6 +57,7 @@ export function TaskDetail({
   onEdit,
   onDependencyChange,
   onApprovePlan,
+  onRerunWithFeedback,
 }: TaskDetailProps) {
   const [activeTab, setActiveTab] = useState<TabType>('activity')
   const [showStatusMenu, setShowStatusMenu] = useState(false)
@@ -321,6 +323,7 @@ export function TaskDetail({
         onApprovePlan={onApprovePlan}
         onEdit={onEdit}
         onDelete={onDelete}
+        onRerunWithFeedback={onRerunWithFeedback}
       />
     </motion.div>
   )

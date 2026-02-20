@@ -2,7 +2,7 @@
 // Supports: multi-select drag, swimlanes, WIP limits
 
 import { useState, useMemo, useCallback } from 'react'
-import { Link2, AlertTriangle, ArrowUp, Minus, ArrowDown, Bot, User, ChevronDown, Layers, ArrowUpDown, Calendar, CheckCircle2 } from 'lucide-react'
+import { Link2, AlertTriangle, ArrowUp, Minus, ArrowDown, Bot, User, ChevronDown, Layers, ArrowUpDown, Calendar, CheckCircle2, Trash2, X } from 'lucide-react'
 import type { Task, TaskStatus, TaskPriority } from '@/types/agentpm'
 import { useTimezoneFunctions } from '@/lib/timezone'
 
@@ -58,6 +58,7 @@ interface KanbanViewProps {
   onTaskClick: (taskId: string) => void
   onAddTask: (columnId: string) => void
   onStatusChange: (taskId: string, status: TaskStatus) => void
+  onBulkDelete?: (taskIds: string[]) => Promise<void>
   milestones?: Array<{ id: string; name: string }>
 }
 
@@ -67,6 +68,7 @@ export function KanbanView({
   onTaskClick,
   onAddTask,
   onStatusChange,
+  onBulkDelete,
   milestones = [],
 }: KanbanViewProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
@@ -396,6 +398,22 @@ export function KanbanView({
           </div>
         )}
 
+        {/* Delete button on hover */}
+        {onBulkDelete && !isSelected && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (window.confirm(`Delete "${task.title}"?`)) {
+                onBulkDelete([task.id])
+              }
+            }}
+            className="absolute top-2 right-2 p-1 rounded-md bg-surface-800/80 text-surface-500 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-all"
+            title="Delete task"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
+
         {task.parentTaskId && (
           <div
             className="flex items-center gap-1 text-xs text-purple-400/80 mb-1.5"
@@ -628,19 +646,33 @@ export function KanbanView({
         </div>
       </div>
 
-      {/* Multi-select indicator */}
+      {/* Multi-select action bar */}
       {selectedTaskIds.size > 0 && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-full shadow-glow-md flex items-center gap-2">
-          <span>{selectedTaskIds.size} tasks selected</span>
-          <span className="text-primary-200">Drag to move all</span>
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-full shadow-glow-md flex items-center gap-3">
+          <span>{selectedTaskIds.size} selected</span>
+          <span className="text-primary-200 text-xs">Drag to move</span>
+          {onBulkDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) {
+                  onBulkDelete(Array.from(selectedTaskIds)).then(() => setSelectedTaskIds(new Set()))
+                }
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 bg-red-600 hover:bg-red-700 rounded-full text-xs transition-colors"
+            >
+              <Trash2 size={12} />
+              Delete
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation()
               setSelectedTaskIds(new Set())
             }}
-            className="ml-2 hover:bg-primary-500 rounded px-2"
+            className="hover:bg-primary-500 rounded-full p-0.5"
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
       )}

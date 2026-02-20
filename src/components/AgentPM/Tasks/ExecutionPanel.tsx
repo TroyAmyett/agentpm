@@ -52,11 +52,11 @@ export function ExecutionPanel({
   const {
     executions,
     currentExecution,
-    isExecuting,
     executionStatus,
     error,
     fetchExecutions,
     runTask,
+    isTaskExecuting,
   } = useExecutionStore()
 
   const [showHistory, setShowHistory] = useState(false)
@@ -95,7 +95,8 @@ export function ExecutionPanel({
     }
   }, [displayExecution?.id, displayExecution?.attachments])
 
-  const canRun = agent && !isExecuting && isExecutionConfigured()
+  const thisTaskExecuting = isTaskExecuting(task.id)
+  const canRun = agent && !thisTaskExecuting && isExecutionConfigured()
 
   const handleRun = async () => {
     if (!agent) return
@@ -189,7 +190,7 @@ export function ExecutionPanel({
               : 'bg-surface-200 dark:bg-surface-700 text-surface-400 cursor-not-allowed'
           }`}
         >
-          {isExecuting ? (
+          {thisTaskExecuting ? (
             <>
               <Loader2 size={18} className="animate-spin" />
               <span>

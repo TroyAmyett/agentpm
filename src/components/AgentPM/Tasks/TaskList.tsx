@@ -205,6 +205,14 @@ export function TaskList({
 
           <div className="flex items-center gap-2 text-sm text-surface-500">
             <span>{sortedTasks.length} tasks</span>
+            {sortedTasks.length > 0 && onBulkDelete && (
+              <button
+                onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+                className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                {allVisibleSelected ? 'Deselect all' : 'Select all'}
+              </button>
+            )}
           </div>
         </div>
 

@@ -39,12 +39,10 @@ export const BUILT_IN_TOOLS: Tool[] = [
     id: 'web-search',
     name: 'web_search',
     displayName: 'Web Search',
-    description: 'Search the web for current information',
+    description: 'Search the web for current information using DuckDuckGo',
     category: 'research',
     isBuiltIn: true,
     isEnabled: true,
-    requiresApiKey: true,
-    apiKeyName: 'TAVILY_API_KEY',
     definition: {
       name: 'web_search',
       description: 'Search the web for current, up-to-date information. Use this when you need recent data, news, or information that may have changed since your training.',
@@ -243,13 +241,13 @@ export const BUILT_IN_TOOLS: Tool[] = [
     id: 'generate-image',
     name: 'generate_image',
     displayName: 'Generate Image',
-    description: 'Generate images from text prompts using AI (DALL-E 3 or Pollinations)',
+    description: 'Generate brand-themed images via Canvas (canvas.funnelists.com) with DALL-E 3 fallback',
     category: 'integration',
     isBuiltIn: true,
     isEnabled: true,
     definition: {
       name: 'generate_image',
-      description: 'Generate an image from a text description. Creates logos, illustrations, banners, product images, social media graphics, and more. The image is stored permanently and a download URL is returned.',
+      description: 'Generate a brand-themed image using Canvas (canvas.funnelists.com). Images automatically use Funnelists brand colors, style, and theme. Creates blog heroes, banners, product images, social graphics, and more. The image is stored permanently and a download URL is returned.',
       input_schema: {
         type: 'object',
         properties: {

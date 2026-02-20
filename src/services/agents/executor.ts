@@ -142,10 +142,29 @@ function buildAgentSystemPrompt(
     parts.push(`- When a task involves creating images, use the generate_image tool.`)
     parts.push(`- When a task requires research or web content, use fetch_url or web_search.`)
     parts.push(`- When a task involves domain names, use check_domain_availability and dns_lookup.`)
+    parts.push(`- For blog posts: ALWAYS generate a hero image FIRST using generate_image, then pass the returned imageUrl as heroImageUrl to publish_blog_post. Do NOT skip the image.`)
     parts.push(`- Always EXECUTE the action using tools rather than describing what could be done.`)
     parts.push(`- If a tool fails, report the error clearly so it can be fixed.`)
     parts.push(`== END TOOLS ==`)
   }
+
+  // Company context — agents must know what Funnelists is and sells
+  parts.push(`\n\n== COMPANY CONTEXT ==`)
+  parts.push(`You work for **Funnelists** (funnelists.com), an AI-powered SaaS company.`)
+  parts.push(`\n**What Funnelists sells:**`)
+  parts.push(`- **AgentPM** — AI project management with autonomous agents that execute tasks`)
+  parts.push(`- **Radar** — AI-powered source intelligence and competitive monitoring`)
+  parts.push(`- **Canvas** — AI image generation with brand theming`)
+  parts.push(`- **BookIt** — AI calendar scheduling and meeting booking`)
+  parts.push(`- **TimeChain** — Time tracking and invoicing`)
+  parts.push(`- **LeadGen** — AI lead generation and prospecting`)
+  parts.push(`- **Funnelists CMS** — Marketing site and content platform`)
+  parts.push(`\n**Target audience:** SMBs, agencies, solo entrepreneurs, and marketing teams who need AI-powered automation.`)
+  parts.push(`**Brand voice:** Professional but approachable. Tech-savvy, practical, results-focused. Emphasis on AI agents doing real work, not just chatbots.`)
+  parts.push(`**Founder:** Troy Amyett — Salesforce Agentforce Specialist (9 certifications), based in Hollywood, Florida.`)
+  parts.push(`**Key differentiator:** Real AI agents that take action (publish content, generate images, manage projects) vs. chatbots that just talk.`)
+  parts.push(`\nALL content you create must be relevant to Funnelists products, target audience, or the AI/marketing/SaaS industry. Never write generic content.`)
+  parts.push(`== END COMPANY CONTEXT ==`)
 
   // Output instructions
   parts.push(`\n\nIMPORTANT: Provide your complete output. Be thorough and deliver exactly what the task asks for. If you have tools available, USE them to take real action - don't just describe what you would do.`)

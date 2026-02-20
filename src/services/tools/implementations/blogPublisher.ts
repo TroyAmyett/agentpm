@@ -102,12 +102,16 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
       }),
     })
 
-    const data = await response.json()
+    const data = await response.json().catch(() => ({ error: `HTTP ${response.status} (no JSON body)` }))
 
     if (!response.ok) {
+      const errorDetail = typeof data === 'object'
+        ? JSON.stringify(data, null, 2)
+        : String(data)
+      console.error(`[BlogPublisher] CMS API error (${response.status}):`, errorDetail)
       return {
         success: false,
-        error: `CMS API error: ${data.error || `HTTP ${response.status}`}`,
+        error: `CMS API returned ${response.status}: ${data.error || data.message || errorDetail}.\n\nCheck that VITE_CMS_AGENT_API_KEY is valid and the CMS API at ${CMS_BASE_URL}/api/pages is accepting requests. The blog content was NOT published.`,
         metadata: { executionTimeMs: Date.now() - startTime },
       }
     }

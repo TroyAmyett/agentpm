@@ -300,9 +300,9 @@ export function AgentPMPage() {
     return () => clearInterval(interval)
   }, [updateTaskStatus, userId, isTaskBlocked])
 
-  // Stale task detector - reset stuck in_progress tasks back to queued for retry
+  // Stale task detector - reset stuck in_progress tasks back to failed for cleanup
   useEffect(() => {
-    const ONE_HOUR = 60 * 60 * 1000
+    const TEN_MINUTES = 10 * 60 * 1000
 
     const interval = setInterval(() => {
       const currentTasks = tasksRef.current
@@ -316,7 +316,7 @@ export function AgentPMPage() {
         if (!lastUpdate) return false
 
         const timeSinceUpdate = Date.now() - new Date(lastUpdate.changedAt).getTime()
-        return timeSinceUpdate > ONE_HOUR
+        return timeSinceUpdate > TEN_MINUTES
       })
 
       if (staleInProgressTasks.length === 0) return
@@ -325,18 +325,18 @@ export function AgentPMPage() {
 
       staleInProgressTasks.forEach((task) => {
         staleResetRef.current.add(task.id)
-        console.log(`[Stale Detector] Resetting stale task "${task.title}" back to queued for retry`)
+        console.log(`[Stale Detector] Marking stale task "${task.title}" as failed (stuck >10min)`)
         updateTaskStatus(
           task.id,
-          'queued',
+          'failed',
           userId,
-          'Auto-reset: task was stuck in_progress for over 1 hour'
+          'Auto-failed: task was stuck in_progress for over 10 minutes'
         ).catch((err) => {
           staleResetRef.current.delete(task.id)
           console.error(`[Stale Detector] Failed to reset "${task.title}":`, err)
         })
       })
-    }, 60000) // Check every 60 seconds (stale = 1 hour, no rush)
+    }, 30000) // Check every 30 seconds
 
     return () => clearInterval(interval)
   }, [updateTaskStatus, userId, isTaskExecuting])
@@ -843,6 +843,24 @@ export function AgentPMPage() {
     [bulkDeleteTasks, userId]
   )
 
+  // Handle rerun with feedback — appends user feedback to task description and requeues
+  const handleRerunWithFeedback = useCallback(
+    async (taskId: string, feedback: string) => {
+      try {
+        const task = tasks.find(t => t.id === taskId)
+        if (!task) return
+        const feedbackNote = `\n\n---\n**Feedback (rerun):** ${feedback}`
+        const updatedDescription = (task.description || '') + feedbackNote
+        await updateTask(taskId, { description: updatedDescription })
+        await updateTaskStatus(taskId, 'queued', userId, `Rerun with feedback: ${feedback.slice(0, 100)}`)
+      } catch (err) {
+        console.error('Failed to rerun with feedback:', err)
+        alert('Failed to rerun task. Please try again.')
+      }
+    },
+    [tasks, updateTask, updateTaskStatus, userId]
+  )
+
   // Handle task edit
   const handleEditTask = useCallback(
     async (taskId: string, updates: {
@@ -1102,6 +1120,7 @@ export function AgentPMPage() {
                     setIsCreateTaskOpen(true)
                   }}
                   onStatusChange={(taskId, status) => handleUpdateStatus(taskId, status)}
+                  onBulkDelete={handleBulkDeleteTasks}
                 />
               )}
 
@@ -1164,6 +1183,7 @@ export function AgentPMPage() {
                           onEdit={() => setEditingTask(selectedTask)}
                           onDependencyChange={() => fetchTasks(accountId)}
                           onApprovePlan={handleApprovePlan}
+                          onRerunWithFeedback={handleRerunWithFeedback}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full text-surface-500">
@@ -1233,7 +1253,7 @@ export function AgentPMPage() {
 
             {/* Task Detail Sidebar for List/Table View */}
             {taskViewMode === 'list' && selectedTask && (
-              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+              <div className="fixed top-14 bottom-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
                 <TaskDetail
                   task={selectedTask}
                   agent={selectedTaskAgent}
@@ -1248,13 +1268,14 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>
             )}
 
             {/* Task Detail Sidebar for Kanban View */}
             {taskViewMode === 'kanban' && selectedTask && (
-              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+              <div className="fixed top-14 bottom-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
                 <TaskDetail
                   task={selectedTask}
                   agent={selectedTaskAgent}
@@ -1269,13 +1290,14 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>
             )}
 
             {/* Task Detail Sidebar for Gantt View */}
             {taskViewMode === 'gantt' && selectedTask && (
-              <div className="fixed inset-y-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+              <div className="fixed top-14 bottom-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
                 <TaskDetail
                   task={selectedTask}
                   agent={selectedTaskAgent}
@@ -1290,6 +1312,7 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>
             )}

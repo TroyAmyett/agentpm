@@ -20,6 +20,7 @@ import { generateImage } from './implementations/imageGenerator'
 import { publishBlogPost } from './implementations/blogPublisher'
 import { createSkillTool, sendMessageTool, readMessagesTool } from './implementations/agentCollaboration'
 import { executeOpenClawTool } from './implementations/openclawTools'
+import { webSearch } from './implementations/webSearch'
 import { fetchGoogleDocTool } from './implementations/googleDriveTools'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
@@ -70,11 +71,9 @@ export async function executeTool(
       }
 
       case 'web_search': {
-        // TODO: Implement web search with Tavily or similar
-        return {
-          success: false,
-          error: 'Web search requires API key configuration',
-        }
+        const query = parameters.query as string
+        const maxResults = (parameters.max_results as number) || 5
+        return await webSearch(query, maxResults)
       }
 
       case 'create_landing_page': {

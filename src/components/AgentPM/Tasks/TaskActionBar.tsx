@@ -11,6 +11,7 @@ import {
   Edit2,
   Trash2,
   Loader2,
+  MessageSquare,
 } from 'lucide-react'
 import type { Task, TaskStatus } from '@/types/agentpm'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
@@ -22,6 +23,7 @@ interface TaskActionBarProps {
   onApprovePlan?: (taskId: string, plan: ExecutionPlan) => void
   onEdit?: (taskId: string) => void
   onDelete?: (taskId: string) => void
+  onRerunWithFeedback?: (taskId: string, feedback: string) => void
 }
 
 export function TaskActionBar({
@@ -31,8 +33,11 @@ export function TaskActionBar({
   onApprovePlan,
   onEdit,
   onDelete,
+  onRerunWithFeedback,
 }: TaskActionBarProps) {
   const [showMenu, setShowMenu] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedback, setFeedback] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -142,15 +147,24 @@ export function TaskActionBar({
       })
     } else if (task.status === 'review' && hasOutput) {
       actions.push({
-        label: 'Request Changes',
-        icon: <RotateCcw size={14} />,
-        onClick: () => onUpdateStatus?.(task.id, 'in_progress', 'Changes requested'),
+        label: 'Rerun with Feedback',
+        icon: <MessageSquare size={14} />,
+        onClick: () => setShowFeedback(true),
       })
     } else if (task.status === 'queued') {
       actions.push({
         label: 'Unqueue',
         icon: <XCircle size={14} />,
         onClick: () => onUpdateStatus?.(task.id, 'pending'),
+      })
+    }
+
+    // Rerun with feedback for completed/failed tasks
+    if ((task.status === 'completed' || task.status === 'failed') && onRerunWithFeedback) {
+      actions.push({
+        label: 'Rerun with Feedback',
+        icon: <MessageSquare size={14} />,
+        onClick: () => setShowFeedback(true),
       })
     }
 
@@ -173,7 +187,44 @@ export function TaskActionBar({
   if (!primary && secondaries.length === 0) return null
 
   return (
-    <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900/50">
+    <div className="flex-shrink-0 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900/50">
+      {/* Feedback input */}
+      {showFeedback && (
+        <div className="px-4 pt-3 pb-2 space-y-2">
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Provide direction for the agent (e.g., 'Focus on our actual products: funnel builders and marketing automation tools')"
+            className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+            rows={3}
+            autoFocus
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (feedback.trim()) {
+                  onRerunWithFeedback?.(task.id, feedback.trim())
+                  setFeedback('')
+                  setShowFeedback(false)
+                }
+              }}
+              disabled={!feedback.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Play size={14} />
+              Rerun
+            </button>
+            <button
+              onClick={() => { setShowFeedback(false); setFeedback('') }}
+              className="px-3 py-1.5 text-sm rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-400 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 px-4 py-3">
       {/* Primary action */}
       {primary && (
         <button
@@ -236,6 +287,7 @@ export function TaskActionBar({
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }

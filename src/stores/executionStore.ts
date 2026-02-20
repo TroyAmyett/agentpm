@@ -212,7 +212,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     // Per-agent queue isolation: check concurrency limit
     const queueConfig = configFromPersona(agent)
     if (!reserveSlot(agent.id, task.id, queueConfig)) {
-      console.log(`[Execution] Agent ${agent.alias} at capacity, task ${task.id} stays queued`)
+      const msg = `Agent "${agent.alias}" is at capacity (max ${queueConfig.maxConcurrent} concurrent tasks). Task stays queued and will auto-retry.`
+      console.log(`[Execution] ${msg}`)
+      set({ error: msg })
       return null
     }
 
@@ -355,29 +357,18 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         const isQaTask = agent.agentType === 'qa-tester' ||
           /\b(qa|quality\s*assurance|review|final\s*review)\b/i.test(task.title)
 
-        // Check if this task has subtasks (is a parent/orchestrator task)
-        const { count: subtaskCount } = await supabase
-          .from('tasks')
-          .select('id', { count: 'exact', head: true })
-          .eq('parent_task_id', task.id)
-
-        const isParentWithSubtasks = (subtaskCount ?? 0) > 0
-
-        if (isQaTask) {
-          // QA tasks always go to review
-          newStatus = 'review'
-          console.log(`[Execution] QA task "${task.title}" → review for human approval`)
-        } else if (isParentWithSubtasks) {
-          // Parent tasks with subtasks go to review for aggregated output check
-          newStatus = 'review'
-          console.log(`[Execution] Parent task "${task.title}" → review (has ${subtaskCount} subtasks)`)
-        } else {
-          // Single-step standalone tasks and intermediate subtasks auto-complete
+        if (isSubtask && !isQaTask) {
+          // Intermediate subtasks auto-complete so parent orchestration continues
           newStatus = 'completed'
-          console.log(`[Execution] Task "${task.title}" auto-completed (${isSubtask ? 'intermediate subtask' : 'single-step task'})`)
+          console.log(`[Execution] Subtask "${task.title}" auto-completed`)
+        } else {
+          // All top-level tasks go to review for human approval before completing
+          newStatus = 'review'
+          console.log(`[Execution] Task "${task.title}" → review for human approval`)
         }
       } else {
-        console.log(`[Execution] Task failed, moving back to queued. Error: ${result.error}`)
+        newStatus = 'failed'
+        console.log(`[Execution] Task failed, marking as failed. Error: ${result.error}`)
       }
 
       // Build task output object from execution result
