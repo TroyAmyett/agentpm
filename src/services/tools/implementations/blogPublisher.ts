@@ -4,7 +4,6 @@
 import type { ToolResult } from '../types'
 
 const CMS_BASE_URL = (import.meta.env.VITE_CMS_BASE_URL as string) || 'https://funnelists.com'
-const CMS_API_KEY = (import.meta.env.VITE_CMS_AGENT_API_KEY as string) || ''
 
 interface BlogPostParams {
   title: string
@@ -46,13 +45,6 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     }
   }
 
-  if (!CMS_API_KEY) {
-    return {
-      success: false,
-      error: 'VITE_CMS_AGENT_API_KEY not configured. Add the CMS agent API key to your environment.',
-    }
-  }
-
   try {
     // Strip duplicate H1 title from content if present
     let cleanContent = params.content.trim()
@@ -78,13 +70,12 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
     const pagePath = urlMap[pageType] || `/${params.slug}`
     const siteUrl = `${CMS_BASE_URL}${pagePath}`
 
-    // Call the CMS Content API
-    console.log(`[BlogPublisher] Creating ${pageType} via CMS API: ${params.slug}`)
-    const response = await fetch(`${CMS_BASE_URL}/api/pages`, {
+    // Call the CMS Content API via server-side proxy (avoids CORS)
+    console.log(`[BlogPublisher] Creating ${pageType} via CMS proxy: ${params.slug}`)
+    const response = await fetch('/api/cms-proxy', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CMS-API-Key': CMS_API_KEY,
       },
       body: JSON.stringify({
         title: params.title,
@@ -111,7 +102,7 @@ export async function publishBlogPost(params: BlogPostParams): Promise<ToolResul
       console.error(`[BlogPublisher] CMS API error (${response.status}):`, errorDetail)
       return {
         success: false,
-        error: `CMS API returned ${response.status}: ${data.error || data.message || errorDetail}.\n\nCheck that VITE_CMS_AGENT_API_KEY is valid and the CMS API at ${CMS_BASE_URL}/api/pages is accepting requests. The blog content was NOT published.`,
+        error: `CMS API returned ${response.status}: ${data.error || data.message || errorDetail}.\n\nCheck that the CMS API key is configured in Vercel env vars and the CMS API is accepting requests. The blog content was NOT published.`,
         metadata: { executionTimeMs: Date.now() - startTime },
       }
     }
