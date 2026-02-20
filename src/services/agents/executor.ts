@@ -27,11 +27,18 @@ import { getToolsForAgent } from '@/services/tools/agentToolBindings'
 import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
 import { createClientFromConfig, type OpenClawResponse } from '@/services/openclaw/client'
 import { filterToolRequests } from '@/services/agents/guardrails'
+import { createTaskTool } from '@/services/tools/implementations/orchestratorTools'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/services/supabase/client'
 
-// Maximum tool use iterations to prevent infinite loops
-const MAX_TOOL_ITERATIONS = 10
+// Maximum tool use iterations to prevent infinite loops (per agent type)
+const DEFAULT_MAX_ITERATIONS = 15
+const MAX_ITERATIONS_BY_AGENT_TYPE: Record<string, number> = {
+  'orchestrator': 25,  // needs many rounds: plan + create multiple subtasks + monitor
+  'researcher': 20,    // search → fetch → refine → fetch → synthesize
+  'content-writer': 15,
+  'forge': 20,         // dev agent: multi-step code generation
+}
 
 export interface ExecutionInput {
   task: Task
@@ -66,7 +73,7 @@ export interface ExecutionResult {
 }
 
 export type ExecutionStatusCallback = (
-  status: 'building_prompt' | 'calling_api' | 'processing' | 'using_tools',
+  status: 'building_prompt' | 'calling_api' | 'processing' | 'using_tools' | 'creating_subtasks',
   detail?: string
 ) => void
 
@@ -213,11 +220,12 @@ function buildAgentSystemPrompt(
 
     // Dry run vs execution mode
     if (planApproved && approvedPlan) {
+      // Subtasks are auto-created by the executor with correct dependency wiring.
+      // This prompt branch is only reached if auto-materialization is somehow skipped.
       parts.push(`\n## MODE: EXECUTE APPROVED PLAN`)
-      parts.push(`The human has APPROVED your plan. Proceed to create subtasks now.`)
-      parts.push(`Do NOT call preview_plan again. Create the subtasks using create_task.`)
-      parts.push(`\nApproved plan:`)
-      parts.push(`Summary: ${approvedPlan.summary}`)
+      parts.push(`Subtasks have been automatically created from the approved plan with correct dependency wiring.`)
+      parts.push(`Use list_tasks to check their status. Monitor progress and compile the final result when all complete.`)
+      parts.push(`\nApproved plan summary: ${approvedPlan.summary}`)
       for (let i = 0; i < approvedPlan.subtasks.length; i++) {
         const s = approvedPlan.subtasks[i]
         const deps = s.dependsOnSteps?.length
@@ -225,12 +233,6 @@ function buildAgentSystemPrompt(
           : ''
         parts.push(`  ${i + 1}. [${s.assignToAgentType}] ${s.title}${deps}`)
       }
-      parts.push(`\n## Creating Subtasks — CRITICAL DEPENDENCY RULES`)
-      parts.push(`Create subtasks IN ORDER using create_task. Each call returns a task ID.`)
-      parts.push(`You MUST track the returned task IDs and pass them as depends_on_task_ids to dependent subtasks.`)
-      parts.push(`Example: If step 2 depends on step 1, create step 1 first, get its ID, then create step 2 with depends_on_task_ids=[step1_id].`)
-      parts.push(`If you skip depends_on_task_ids, tasks will run in PARALLEL — a writing task could start before research finishes!`)
-      parts.push(`After creating all subtasks, update this root task status to "in_progress" to indicate orchestration is running.`)
     } else if (planApproved && !approvedPlan) {
       // Plan was approved but the plan data is missing — error state
       parts.push(`\n## ERROR: Plan approved but plan data is missing`)
@@ -535,13 +537,77 @@ export async function executeTask(
     let iterations = 0
     let activeConfig: LLMConfig = config // Track which config actually served
 
+    // ── Auto-materialize subtasks from approved plan ──────────────────
+    // When Atlas has an approved plan, create all subtasks programmatically
+    // with correct dependency wiring instead of relying on the LLM to do it.
+    if (orchestratorCtx?.planApproved && orchestratorCtx?.approvedPlan && accountId) {
+      const plan = orchestratorCtx.approvedPlan
+      const createdTaskIds: string[] = [] // index → task ID mapping
+      const createdSummary: string[] = []
+
+      onStatusChange?.('creating_subtasks', `Creating ${plan.subtasks.length} subtasks from approved plan`)
+
+      for (let i = 0; i < plan.subtasks.length; i++) {
+        const step = plan.subtasks[i]
+        // Map dependsOnSteps (0-indexed step indices) to actual task IDs
+        const depTaskIds = (step.dependsOnSteps || [])
+          .filter(idx => idx >= 0 && idx < createdTaskIds.length && createdTaskIds[idx])
+          .map(idx => createdTaskIds[idx])
+
+        const result = await createTaskTool({
+          title: step.title,
+          description: step.description || `Subtask ${i + 1} from orchestrator plan: ${step.title}`,
+          priority: step.priority || 'medium',
+          assign_to_agent_type: step.assignToAgentType,
+          depends_on_task_ids: depTaskIds,
+          accountId,
+          _contextTaskId: input.task.id,
+          _agentId: input.agent.id,
+        })
+
+        const resultData = result.data as Record<string, unknown> | undefined
+        if (result.success && resultData?.taskId) {
+          createdTaskIds.push(resultData.taskId as string)
+          const deps = depTaskIds.length > 0 ? ` (depends on: ${depTaskIds.map(id => id.slice(0, 8)).join(', ')})` : ''
+          createdSummary.push(`  ${i + 1}. "${step.title}" → ${step.assignToAgentType} (ID: ${resultData.taskId})${deps}`)
+        } else {
+          createdTaskIds.push('') // placeholder to keep index alignment
+          createdSummary.push(`  ${i + 1}. "${step.title}" — FAILED: ${result.error}`)
+        }
+      }
+
+      // Update root task to in_progress
+      if (supabase) {
+        await supabase.from('tasks').update({
+          status: 'in_progress',
+          updated_at: new Date().toISOString(),
+        }).eq('id', input.task.id)
+      }
+
+      // Return immediately — no need for LLM to create subtasks
+      const successCount = createdTaskIds.filter(id => id !== '').length
+      return {
+        success: true,
+        content: `Plan executed: ${successCount}/${plan.subtasks.length} subtasks created.\n\n${createdSummary.join('\n')}`,
+        metadata: {
+          model: config.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          durationMs: Date.now() - startTime,
+          toolsUsed: [{ name: 'create_task', input: { subtaskCount: plan.subtasks.length }, success: true }],
+          toolIterations: 0,
+        },
+      }
+    }
+
     // Build initial messages in universal format
     const messages: LLMMessage[] = [
       { role: 'user', content: userPrompt }
     ]
 
-    // Tool use loop
-    while (iterations < MAX_TOOL_ITERATIONS) {
+    // Tool use loop — limit varies by agent type
+    const maxIterations = MAX_ITERATIONS_BY_AGENT_TYPE[input.agent.agentType] || DEFAULT_MAX_ITERATIONS
+    while (iterations < maxIterations) {
       iterations++
       onStatusChange?.('calling_api', iterations > 1 ? `iteration ${iterations}` : undefined)
 
@@ -751,7 +817,7 @@ export async function executeTask(
         toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined,
         toolIterations: iterations,
       },
-      error: `Max tool iterations (${MAX_TOOL_ITERATIONS}) exceeded`,
+      error: `Max tool iterations (${maxIterations}) exceeded`,
     }
 
     // Track skill usage for max iterations exceeded

@@ -127,7 +127,7 @@ interface ExecutionState {
   activeExecutions: Map<string, TaskExecution> // taskId -> execution for parallel
   isLoading: boolean
   isExecuting: boolean // true if ANY task is executing
-  executionStatus: 'idle' | 'building_prompt' | 'calling_api' | 'processing'
+  executionStatus: 'idle' | 'building_prompt' | 'calling_api' | 'processing' | 'creating_subtasks'
   error: string | null
 
   // Actions
