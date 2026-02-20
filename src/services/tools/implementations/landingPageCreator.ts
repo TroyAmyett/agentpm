@@ -3,9 +3,8 @@
 
 import type { ToolResult } from '../types'
 
-// GitHub configuration - loaded from environment
-const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || ''
-const GITHUB_OWNER = 'funnelists' // Adjust to your GitHub org/user
+// GitHub configuration
+const GITHUB_OWNER = 'funnelists'
 const GITHUB_REPO = 'funnelists-cms'
 const GITHUB_BRANCH = 'main'
 
@@ -140,8 +139,8 @@ export async function createLandingPage(params: CreateLandingPageParams): Promis
     const jsonContent = JSON.stringify(landingPage, null, 2)
     const filePath = `content/landing-pages/${params.slug}.json`
 
-    // If publish is true, commit to GitHub
-    if (params.publish && GITHUB_TOKEN) {
+    // If publish is true, commit to GitHub (via server-side proxy)
+    if (params.publish) {
       const commitResult = await commitToGitHub(
         filePath,
         jsonContent,
@@ -234,21 +233,16 @@ async function commitToGitHub(
   content: string,
   message: string
 ): Promise<{ success: boolean; sha?: string; error?: string }> {
-  if (!GITHUB_TOKEN) {
-    return { success: false, error: 'GitHub token not configured' }
-  }
-
   const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`
 
   try {
-    // Check if file already exists (to get SHA for update)
+    // Check if file already exists (to get SHA for update) via server-side proxy
     let existingSha: string | undefined
     try {
-      const getResponse = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${GITHUB_TOKEN}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
+      const getResponse = await fetch('/api/github-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: apiUrl, method: 'GET' }),
       })
       if (getResponse.ok) {
         const existing = await getResponse.json()
@@ -258,30 +252,26 @@ async function commitToGitHub(
       // File doesn't exist, that's fine
     }
 
-    // Create or update file
-    const body: {
+    // Create or update file via server-side proxy
+    const ghBody: {
       message: string
       content: string
       branch: string
       sha?: string
     } = {
       message,
-      content: btoa(content), // Base64 encode
+      content: btoa(content),
       branch: GITHUB_BRANCH,
     }
 
     if (existingSha) {
-      body.sha = existingSha
+      ghBody.sha = existingSha
     }
 
-    const response = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
-        Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
+    const response = await fetch('/api/github-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: apiUrl, method: 'PUT', body: ghBody }),
     })
 
     if (!response.ok) {

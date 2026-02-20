@@ -72,6 +72,12 @@ export class OpenAIAdapter implements LLMAdapter {
       body.tools = this.formatTools(options.tools)
     }
 
+    // Route through server-side proxy for platform keys (keeps keys out of browser)
+    if (this.config.apiKey.startsWith('platform:')) {
+      return this.chatViaProxy(body)
+    }
+
+    // Direct API call (BYOK keys — user already has the decrypted key)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.config.apiKey}`,
@@ -86,6 +92,32 @@ export class OpenAIAdapter implements LLMAdapter {
         body: JSON.stringify(body),
       }
     )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error(
+        (error as { error?: { message?: string } }).error?.message ||
+        `OpenAI API error: ${response.status}`
+      )
+    }
+
+    const raw = await response.json() as OpenAIRawResponse
+    return this.parseResponse(raw)
+  }
+
+  /**
+   * Route LLM call through server-side proxy to keep API keys off the client
+   */
+  private async chatViaProxy(body: Record<string, unknown>): Promise<LLMResponse> {
+    const response = await fetchWithRetry('/api/llm-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'openai',
+        keyRef: 'platform',
+        body,
+      }),
+    })
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))
@@ -187,9 +219,6 @@ export class OpenAIAdapter implements LLMAdapter {
       // Check if these are tool_result blocks
       const toolResults = msg.content.filter(b => b.type === 'tool_result')
       if (toolResults.length > 0) {
-        // OpenAI needs individual messages per tool result
-        // For simplicity, return an array-wrapped single response
-        // The caller handles this by flattening
         return toolResults.map(tr => ({
           role: 'tool',
           tool_call_id: tr.toolCallId,

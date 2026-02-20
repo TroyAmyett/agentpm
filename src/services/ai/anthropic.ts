@@ -199,9 +199,9 @@ async function performWebSearch(query: string): Promise<WebSearchResult[]> {
 }
 
 export const isAnthropicConfigured = () => {
-  // With LLM abstraction, check if any provider is configured
-  const envKey = import.meta.env.VITE_ANTHROPIC_API_KEY || import.meta.env.VITE_OPENAI_API_KEY
-  return !!envKey
+  // Platform keys are now server-side only (resolved via api/llm-proxy.ts)
+  // Always return true — actual availability is checked at execution time
+  return true
 }
 
 export async function callClaude(

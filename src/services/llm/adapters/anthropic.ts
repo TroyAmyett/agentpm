@@ -63,6 +63,12 @@ export class AnthropicAdapter implements LLMAdapter {
       body.tools = this.formatTools(options.tools)
     }
 
+    // Route through server-side proxy for platform keys (keeps keys out of browser)
+    if (this.config.apiKey.startsWith('platform:')) {
+      return this.chatViaProxy(body)
+    }
+
+    // Direct API call (BYOK keys — user already has the decrypted key)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-api-key': this.config.apiKey,
@@ -70,7 +76,6 @@ export class AnthropicAdapter implements LLMAdapter {
       ...this.config.headers,
     }
 
-    // Browser-only header for direct Anthropic access
     if (typeof window !== 'undefined') {
       headers['anthropic-dangerous-direct-browser-access'] = 'true'
     }
@@ -83,6 +88,32 @@ export class AnthropicAdapter implements LLMAdapter {
         body: JSON.stringify(body),
       }
     )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error(
+        (error as { error?: { message?: string } }).error?.message ||
+        `Anthropic API error: ${response.status}`
+      )
+    }
+
+    const raw = await response.json() as AnthropicRawResponse
+    return this.parseResponse(raw)
+  }
+
+  /**
+   * Route LLM call through server-side proxy to keep API keys off the client
+   */
+  private async chatViaProxy(body: Record<string, unknown>): Promise<LLMResponse> {
+    const response = await fetchWithRetry('/api/llm-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'anthropic',
+        keyRef: 'platform',
+        body,
+      }),
+    })
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))

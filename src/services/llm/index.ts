@@ -45,22 +45,16 @@ export function getDefaultProvider(): LLMProvider {
 }
 
 /**
- * Get the platform API key for the default provider
+ * Get the platform API key reference for the default provider.
+ * Returns a 'platform:<provider>' marker — actual key resolution happens
+ * server-side in api/llm-proxy.ts to keep secrets out of the browser bundle.
  */
 function getPlatformApiKey(provider: LLMProvider): string | null {
-  // Check provider-specific env var first, then generic
-  const providerKey = import.meta.env[`VITE_${provider.toUpperCase()}_API_KEY`] as string
-  if (providerKey) return providerKey
-
-  // Fallback: check the legacy VITE_ANTHROPIC_API_KEY for backward compat
-  if (provider === 'anthropic') {
-    return (import.meta.env.VITE_ANTHROPIC_API_KEY as string) || null
+  // Platform keys are resolved server-side via the LLM proxy
+  // Return a marker that the adapter recognizes to route through the proxy
+  if (provider === 'anthropic' || provider === 'openai') {
+    return `platform:${provider}`
   }
-  // Fallback: check VITE_OPENAI_API_KEY for OpenAI
-  if (provider === 'openai') {
-    return (import.meta.env.VITE_OPENAI_API_KEY as string) || null
-  }
-
   return null
 }
 

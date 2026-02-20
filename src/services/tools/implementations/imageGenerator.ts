@@ -8,7 +8,6 @@ import { supabase } from '@/services/supabase/client'
 
 const CANVAS_BASE_URL = (import.meta.env.VITE_CANVAS_BASE_URL as string) || 'https://canvas.funnelists.com'
 const CANVAS_API_KEY = (import.meta.env.VITE_CANVAS_API_KEY as string) || ''
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string
 
 type ImageSize = '1024x1024' | '1792x1024' | '1024x1792'
 
@@ -155,20 +154,11 @@ async function generateWithDallE(
   style: 'natural' | 'vivid',
   accountId: string
 ): Promise<ToolResult> {
-  const response = await fetch('https://api.openai.com/v1/images/generations', {
+  // Route through server-side proxy to keep OpenAI key off the client
+  const response = await fetch('/api/image-proxy', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size,
-      style,
-      response_format: 'b64_json',
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, n: 1, size, style, response_format: 'b64_json' }),
   })
 
   if (!response.ok) {
@@ -280,9 +270,9 @@ export async function generateImage(
       }
     }
 
-    // Fallback: DALL-E 3 direct
-    if (OPENAI_API_KEY) {
-      console.log(`[ImageGen] Falling back to DALL-E 3 direct`)
+    // Fallback: DALL-E 3 via server-side proxy (key is server-side only)
+    {
+      console.log(`[ImageGen] Falling back to DALL-E 3 via proxy`)
       const dallEStyle = (validStyle === 'natural' ? 'natural' : 'vivid') as 'natural' | 'vivid'
       const result = await generateWithDallE(prompt, validSize, dallEStyle, accountId)
       if (result.metadata) {
@@ -292,12 +282,6 @@ export async function generateImage(
       }
       console.log(`[ImageGen] DALL-E 3 succeeded (${Date.now() - startTime}ms)`)
       return result
-    }
-
-    return {
-      success: false,
-      error: 'No image generation provider available. Configure VITE_CANVAS_BASE_URL or VITE_OPENAI_API_KEY.',
-      metadata: { executionTimeMs: Date.now() - startTime },
     }
   } catch (error) {
     console.error('[ImageGen] All providers failed:', error)

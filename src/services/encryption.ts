@@ -1,67 +1,6 @@
 // API Key Encryption Service
-// Uses AES-256-GCM for encrypting user API keys at rest
-// Encryption happens client-side before sending to database
-
-// Generate a random encryption key (should be stored securely, e.g., in environment)
-// In production, this should be a per-user derived key or use a KMS
-const ENCRYPTION_KEY = import.meta.env.VITE_ENCRYPTION_KEY || ''
-
-// Convert string to ArrayBuffer
-function stringToArrayBuffer(str: string): ArrayBuffer {
-  const encoder = new TextEncoder()
-  const encoded = encoder.encode(str)
-  return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength)
-}
-
-// Convert ArrayBuffer to string
-function arrayBufferToString(buffer: ArrayBuffer): string {
-  const decoder = new TextDecoder()
-  return decoder.decode(buffer)
-}
-
-// Convert ArrayBuffer to base64
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-// Convert base64 to ArrayBuffer
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes.buffer
-}
-
-// Derive encryption key from password/secret
-async function deriveKey(secret: string): Promise<CryptoKey> {
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    stringToArrayBuffer(secret),
-    'PBKDF2',
-    false,
-    ['deriveKey']
-  )
-
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: stringToArrayBuffer('funnelists-api-key-salt'), // In production, use unique salt per key
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
-}
+// Encryption/decryption happens server-side via api/encrypt-proxy.ts
+// Encryption key never leaves the server
 
 // Generate a key hint (first 4 and last 4 characters)
 export function generateKeyHint(apiKey: string): string {
@@ -87,57 +26,46 @@ export interface EncryptedKey {
   hint: string // key hint for display
 }
 
-// Encrypt an API key
-export async function encryptApiKey(apiKey: string, userSecret?: string): Promise<EncryptedKey> {
-  const secret = userSecret || ENCRYPTION_KEY
+// Encrypt an API key via server-side proxy
+export async function encryptApiKey(apiKey: string, _userSecret?: string): Promise<EncryptedKey> {
+  const response = await fetch('/api/encrypt-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'encrypt', apiKey }),
+  })
 
-  if (!secret) {
-    throw new Error('Encryption key not configured. Set VITE_ENCRYPTION_KEY environment variable.')
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'Encryption failed')
   }
 
-  // Generate random IV
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-
-  // Derive key from secret
-  const key = await deriveKey(secret)
-
-  // Encrypt the API key
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    stringToArrayBuffer(apiKey)
-  )
-
+  const data = await response.json()
   return {
-    encrypted: arrayBufferToBase64(encrypted),
-    iv: arrayBufferToBase64(iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength)),
-    hint: generateKeyHint(apiKey),
+    encrypted: data.encrypted,
+    iv: data.iv,
+    hint: data.hint,
   }
 }
 
-// Decrypt an API key
+// Decrypt an API key via server-side proxy
 export async function decryptApiKey(
   encryptedData: string,
   iv: string,
-  userSecret?: string
+  _userSecret?: string
 ): Promise<string> {
-  const secret = userSecret || ENCRYPTION_KEY
+  const response = await fetch('/api/encrypt-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'decrypt', encrypted: encryptedData, iv }),
+  })
 
-  if (!secret) {
-    throw new Error('Encryption key not configured. Set VITE_ENCRYPTION_KEY environment variable.')
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'Decryption failed')
   }
 
-  // Derive key from secret
-  const key = await deriveKey(secret)
-
-  // Decrypt
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToArrayBuffer(iv) },
-    key,
-    base64ToArrayBuffer(encryptedData)
-  )
-
-  return arrayBufferToString(decrypted)
+  const data = await response.json()
+  return data.apiKey
 }
 
 // Validate API key format (basic validation)
