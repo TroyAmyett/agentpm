@@ -1,13 +1,18 @@
 // Google Drive Service — Read files, list folders, search docs
 // Uses service account auth from ./auth.ts
 // All queries scoped to root folder ID when configured (security boundary)
+// Supports Shared Drives (Team Drives) via includeItemsFromAllDrives
 
 import { getAccessToken } from './auth'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 
 // Root folder ID — if set, all queries are scoped to this folder and its children
+// Can be a regular folder ID or a Shared Drive ID
 const ROOT_FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_ROOT_FOLDER_ID || ''
+
+// Shared Drive params — required for accessing files in Shared Drives
+const SHARED_DRIVE_PARAMS = 'includeItemsFromAllDrives=true&supportsAllDrives=true'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -59,7 +64,7 @@ export async function fetchDriveFile(fileId: string): Promise<DriveFileResult> {
   try {
     // Get file metadata first
     const metaRes = await fetch(
-      `${DRIVE_API}/files/${fileId}?fields=id,name,mimeType,size,parents`,
+      `${DRIVE_API}/files/${fileId}?fields=id,name,mimeType,size,parents&${SHARED_DRIVE_PARAMS}`,
       { headers }
     )
 
@@ -90,7 +95,7 @@ export async function fetchDriveFile(fileId: string): Promise<DriveFileResult> {
 
     // Regular files — download content
     const dlRes = await fetch(
-      `${DRIVE_API}/files/${fileId}?alt=media`,
+      `${DRIVE_API}/files/${fileId}?alt=media&${SHARED_DRIVE_PARAMS}`,
       { headers }
     )
     if (!dlRes.ok) {
@@ -140,7 +145,7 @@ export async function fetchDriveFileByPath(path: string): Promise<DriveFileResul
       const query = `name='${escapeDriveQuery(folderName)}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
 
       const res = await fetch(
-        `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=1`,
+        `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=1&${SHARED_DRIVE_PARAMS}`,
         { headers }
       )
 
@@ -161,7 +166,7 @@ export async function fetchDriveFileByPath(path: string): Promise<DriveFileResul
     const query = `name='${escapeDriveQuery(fileName)}' and '${parentId}' in parents and trashed=false`
 
     const res = await fetch(
-      `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType)&pageSize=1`,
+      `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType)&pageSize=1&${SHARED_DRIVE_PARAMS}`,
       { headers }
     )
 
@@ -191,8 +196,14 @@ export async function listDriveFolder(folderId?: string): Promise<DriveFileEntry
   const query = `'${targetFolder}' in parents and trashed=false`
 
   try {
+    // For Shared Drives, also include corpora=drive&driveId when listing the root
+    let driveParams = SHARED_DRIVE_PARAMS
+    if (ROOT_FOLDER_ID && targetFolder === ROOT_FOLDER_ID) {
+      driveParams += `&corpora=drive&driveId=${ROOT_FOLDER_ID}`
+    }
+
     const res = await fetch(
-      `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)&orderBy=folder,name&pageSize=100`,
+      `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)&orderBy=folder,name&pageSize=100&${driveParams}`,
       { headers }
     )
 
@@ -208,21 +219,22 @@ export async function listDriveFolder(folderId?: string): Promise<DriveFileEntry
 /**
  * Search for files by name or content within the root folder scope
  */
-export async function searchDriveFiles(query: string, folderId?: string): Promise<DriveFileEntry[]> {
+export async function searchDriveFiles(query: string, _folderId?: string): Promise<DriveFileEntry[]> {
   const headers = await authHeaders()
   if (!headers) return []
 
-  // Build search query — search in name and fullText
-  const parentFilter = folderId || ROOT_FOLDER_ID
-    ? ` and '${folderId || ROOT_FOLDER_ID}' in parents`
-    : ''
-
   // Use fullText search which searches file content + names
-  const driveQuery = `fullText contains '${escapeDriveQuery(query)}'${parentFilter} and trashed=false`
+  // For Shared Drives, search within the drive scope
+  const driveQuery = `fullText contains '${escapeDriveQuery(query)}' and trashed=false`
 
   try {
+    let driveParams = SHARED_DRIVE_PARAMS
+    if (ROOT_FOLDER_ID) {
+      driveParams += `&corpora=drive&driveId=${ROOT_FOLDER_ID}`
+    }
+
     const res = await fetch(
-      `${DRIVE_API}/files?q=${encodeURIComponent(driveQuery)}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)&pageSize=20`,
+      `${DRIVE_API}/files?q=${encodeURIComponent(driveQuery)}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)&pageSize=20&${driveParams}`,
       { headers }
     )
 
@@ -260,7 +272,7 @@ async function isWithinRootFolder(
     if (currentId === ROOT_FOLDER_ID) return true
 
     const res = await fetch(
-      `${DRIVE_API}/files/${currentId}?fields=parents`,
+      `${DRIVE_API}/files/${currentId}?fields=parents&${SHARED_DRIVE_PARAMS}`,
       { headers }
     )
 
