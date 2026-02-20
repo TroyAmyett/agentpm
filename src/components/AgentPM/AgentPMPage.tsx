@@ -30,6 +30,7 @@ import { useExecutionStore } from '@/stores/executionStore'
 import { AgentDashboard } from './Dashboard'
 import { TaskList, TaskDetail, DependencyGraph, GanttView, CalendarView, TableListView } from './Tasks'
 import { AgentQueueView } from './Queue'
+import { OrchestratorDashboard } from './Tasks/OrchestratorDashboard'
 import { CreateTaskModal, AssignAgentModal, EditTaskModal, AgentDetailModal } from './Modals'
 import { ReviewCard } from './Reviews'
 import { KanbanView } from './Kanban'
@@ -1240,6 +1241,14 @@ export function AgentPMPage() {
               {taskViewMode === 'calendar' && (
                 <CalendarView
                   tasks={filteredTasks}
+                  onTaskClick={setSelectedTaskId}
+                />
+              )}
+
+              {taskViewMode === 'orchestrator' && (
+                <OrchestratorDashboard
+                  tasks={filteredTasks}
+                  agents={agents}
                   onTaskClick={setSelectedTaskId}
                 />
               )}

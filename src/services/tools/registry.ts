@@ -968,6 +968,49 @@ export const BUILT_IN_TOOLS: Tool[] = [
       },
     },
   },
+
+  // ─── COST ESTIMATION ──────────────────────────────────────────────────────────
+  {
+    id: 'orchestrator-estimate-cost',
+    name: 'estimate_cost',
+    displayName: 'Estimate Cost',
+    description: 'Estimate the API cost of a planned orchestration before execution.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'estimate_cost',
+      description: 'Estimate the total API/LLM cost for a set of planned subtasks. Call this before preview_plan to include cost estimates in the dry-run plan. Returns per-step and total cost estimates in cents.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          steps: {
+            type: 'array',
+            description: 'Array of planned steps to estimate cost for',
+            items: {
+              type: 'object',
+              properties: {
+                agent_type: {
+                  type: 'string',
+                  description: 'The type of agent that will execute this step',
+                },
+                estimated_tokens: {
+                  type: 'number',
+                  description: 'Estimated total tokens (input + output) for this step. If unknown, a default will be used.',
+                },
+                model: {
+                  type: 'string',
+                  description: 'LLM model to use (haiku, sonnet, opus). Defaults to sonnet.',
+                },
+              },
+              required: ['agent_type'],
+            },
+          },
+        },
+        required: ['steps'],
+      },
+    },
+  },
 ]
 
 /**

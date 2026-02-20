@@ -1,5 +1,5 @@
 // Orchestrator Tool Implementations
-// create_task, list_tasks, get_task_result, assign_task, update_task_status, preview_plan, cancel_tree
+// create_task, list_tasks, get_task_result, assign_task, update_task_status, preview_plan, cancel_tree, estimate_cost
 
 import type { ToolResult } from '../types'
 import type { OrchestratorPlan, OrchestratorPlanStep, TaskPriority } from '@/types/agentpm'
@@ -604,6 +604,88 @@ export async function cancelTreeTool(params: CancelTreeParams): Promise<ToolResu
     return {
       success: false,
       error: `Failed to cancel tree: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    }
+  }
+}
+
+// ============================================================================
+// ESTIMATE COST
+// ============================================================================
+
+interface EstimateCostStep {
+  agent_type: string
+  estimated_tokens?: number
+  model?: string
+}
+
+interface EstimateCostParams {
+  steps: EstimateCostStep[]
+  accountId: string
+}
+
+// Approximate cost per 1K tokens (input + output blended) in cents
+const MODEL_COST_PER_1K_TOKENS: Record<string, number> = {
+  haiku:  0.1,    // $0.001/1K tokens
+  sonnet: 1.5,    // $0.015/1K tokens
+  opus:   7.5,    // $0.075/1K tokens
+}
+
+// Default token estimates by agent type when not specified
+const DEFAULT_TOKENS_BY_AGENT_TYPE: Record<string, number> = {
+  'content-writer': 4000,
+  'researcher': 3000,
+  'image-generator': 1000,
+  'qa-tester': 2000,
+  'orchestrator': 2000,
+  'forge': 5000,
+}
+
+const DEFAULT_MODEL = 'sonnet'
+const DEFAULT_TOKENS = 2500
+
+export async function estimateCostTool(params: EstimateCostParams): Promise<ToolResult> {
+  try {
+    const stepEstimates = params.steps.map((step, i) => {
+      const model = step.model || DEFAULT_MODEL
+      const tokens = step.estimated_tokens
+        || DEFAULT_TOKENS_BY_AGENT_TYPE[step.agent_type]
+        || DEFAULT_TOKENS
+      const costPer1K = MODEL_COST_PER_1K_TOKENS[model] || MODEL_COST_PER_1K_TOKENS[DEFAULT_MODEL]
+      const costCents = Math.round((tokens / 1000) * costPer1K * 100) / 100
+
+      return {
+        step: i + 1,
+        agentType: step.agent_type,
+        model,
+        estimatedTokens: tokens,
+        estimatedCostCents: costCents,
+      }
+    })
+
+    const totalCostCents = stepEstimates.reduce((sum, s) => sum + s.estimatedCostCents, 0)
+    const totalTokens = stepEstimates.reduce((sum, s) => sum + s.estimatedTokens, 0)
+
+    const formatted = [
+      `Estimated cost: $${(totalCostCents / 100).toFixed(2)} (${totalTokens.toLocaleString()} tokens)`,
+      '',
+      ...stepEstimates.map(s =>
+        `  Step ${s.step}: ${s.agentType} (${s.model}) — ~${s.estimatedTokens.toLocaleString()} tokens — $${(s.estimatedCostCents / 100).toFixed(4)}`
+      ),
+    ].join('\n')
+
+    return {
+      success: true,
+      data: {
+        formatted,
+        totalCostCents: Math.round(totalCostCents * 100) / 100,
+        totalTokens,
+        steps: stepEstimates,
+      },
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to estimate cost: ${err instanceof Error ? err.message : 'Unknown error'}`,
     }
   }
 }

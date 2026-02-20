@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type TaskViewMode = 'kanban' | 'list' | 'agent-tasks' | 'graph' | 'gantt' | 'calendar' | 'queue'
+export type TaskViewMode = 'kanban' | 'list' | 'agent-tasks' | 'graph' | 'gantt' | 'calendar' | 'queue' | 'orchestrator'
 export type TaskOwnerFilter = 'all' | 'mine' | 'agent'
 
 interface UIState {

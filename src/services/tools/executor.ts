@@ -30,6 +30,7 @@ import {
   updateTaskStatusTool,
   previewPlanTool,
   cancelTreeTool,
+  estimateCostTool,
 } from './implementations/orchestratorTools'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
@@ -347,6 +348,13 @@ export async function executeTool(
           task_id: parameters.task_id as string,
           accountId: _accountId,
           _agentId: parameters._agentId as string | undefined,
+        })
+      }
+
+      case 'estimate_cost': {
+        return await estimateCostTool({
+          steps: parameters.steps as Array<{ agent_type: string; estimated_tokens?: number; model?: string }>,
+          accountId: _accountId,
         })
       }
 

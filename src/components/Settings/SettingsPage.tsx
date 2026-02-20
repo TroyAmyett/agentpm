@@ -3,17 +3,18 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench, Globe, DollarSign, Clock, Check, Cpu, Palette, Inbox } from 'lucide-react'
+import { Key, User, Bell, Shield, ArrowLeft, Building2, Wrench, Globe, DollarSign, Clock, Check, Cpu, Palette, Inbox, Workflow } from 'lucide-react'
 import { ApiKeysManager } from './ApiKeysManager'
 import { AccountSettings } from './AccountSettings'
 import { AgentToolsSettings } from './AgentToolsSettings'
 import { BrandTemplatesSettings } from './BrandTemplatesSettings'
 import { ChannelsSettings } from './Channels/ChannelsSettings'
+import { OrchestratorSettings } from './OrchestratorSettings'
 import { ToolsManager } from '@/components/Admin/ToolsManager'
 import { useAuthStore } from '@/stores/authStore'
 import { useProfileStore } from '@/stores/profileStore'
 
-type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'agent-tools' | 'brand-templates' | 'channels' | 'notifications' | 'security' | 'admin-tools'
+type SettingsTab = 'api-keys' | 'accounts' | 'profile' | 'agent-tools' | 'brand-templates' | 'channels' | 'orchestrator' | 'notifications' | 'security' | 'admin-tools'
 
 interface SettingsPageProps {
   onBack?: () => void
@@ -48,6 +49,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     { id: 'agent-tools' as const, label: 'Agent Tools', icon: Cpu },
     { id: 'brand-templates' as const, label: 'Brand & Templates', icon: Palette },
     { id: 'channels' as const, label: 'Channels', icon: Inbox },
+    { id: 'orchestrator' as const, label: 'Orchestrator', icon: Workflow },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'security' as const, label: 'Security', icon: Shield },
     { id: 'admin-tools' as const, label: 'Tools (Admin)', icon: Wrench, admin: true },
@@ -142,6 +144,10 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
             {activeTab === 'channels' && (
               <ChannelsSettings />
+            )}
+
+            {activeTab === 'orchestrator' && (
+              <OrchestratorSettings />
             )}
 
             {activeTab === 'notifications' && (

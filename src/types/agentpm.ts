@@ -1817,6 +1817,39 @@ export interface OrchestratorPlanStep {
 }
 
 // =============================================================================
+// GUARDRAIL AUDIT LOG
+// =============================================================================
+
+export type GuardrailCategory =
+  | 'task_execution'
+  | 'decomposition'
+  | 'skill_creation'
+  | 'tool_usage'
+  | 'content_publishing'
+  | 'external_actions'
+  | 'spending'
+  | 'agent_creation'
+
+export type GuardrailDecision = 'approved' | 'denied' | 'escalated' | 'exception'
+
+export interface GuardrailAuditEntry {
+  id: string
+  accountId: string
+  taskId?: string
+  agentId?: string
+  skillId?: string
+  category: GuardrailCategory
+  action: string
+  decision: GuardrailDecision
+  decidedBy: string
+  trustLevelRequired: number
+  trustLevelCurrent: number
+  rationale?: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
+// =============================================================================
 // INTAKE REQUEST (for edge function API)
 // =============================================================================
 

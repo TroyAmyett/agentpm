@@ -51,6 +51,7 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
     'update_task_status',
     'preview_plan',
     'cancel_tree',
+    'estimate_cost',
     // Integration tools
     'fetch_google_doc',
     'create_skill',

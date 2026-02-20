@@ -26,6 +26,7 @@ import {
 import { getToolsForAgent } from '@/services/tools/agentToolBindings'
 import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
 import { createClientFromConfig, type OpenClawResponse } from '@/services/openclaw/client'
+import { filterToolRequests } from '@/services/agents/guardrails'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/services/supabase/client'
 
@@ -569,9 +570,42 @@ export async function executeTask(
           } as Record<string, unknown>,
         }))
 
-        // Execute the tools
+        // ── Guardrail check (orchestrator agents only) ──
+        let finalToolRequests = toolUseRequests
+        let blockedToolResults: ToolResultMessage[] = []
+        if (orchestratorCtx && accountId) {
+          const guardrailResult = await filterToolRequests(
+            toolUseRequests,
+            orchestratorCtx.config,
+            accountId,
+            input.task.id,
+            input.agent.id,
+          )
+          finalToolRequests = guardrailResult.allowed
+          // Create error results for blocked tools
+          blockedToolResults = guardrailResult.blocked.map(b => ({
+            type: 'tool_result' as const,
+            tool_use_id: b.request.id,
+            content: `GUARDRAIL BLOCKED: ${b.result.rationale}`,
+            is_error: true,
+          }))
+          if (guardrailResult.blocked.length > 0) {
+            console.log(`[Guardrails] Blocked ${guardrailResult.blocked.length} tool(s): ${guardrailResult.blocked.map(b => b.request.name).join(', ')}`)
+          }
+        }
+
+        // Execute the allowed tools
         const toolExecStart = Date.now()
-        const toolResults = await processToolUses(toolUseRequests, accountId)
+        const allowedResults = finalToolRequests.length > 0
+          ? await processToolUses(finalToolRequests, accountId)
+          : []
+        // Merge allowed results with blocked results in original order
+        const toolResults: ToolResultMessage[] = toolUseRequests.map(req => {
+          const blocked = blockedToolResults.find(b => b.tool_use_id === req.id)
+          if (blocked) return blocked
+          const idx = finalToolRequests.indexOf(req)
+          return idx >= 0 ? allowedResults[idx] : { type: 'tool_result' as const, tool_use_id: req.id, content: 'Unknown error', is_error: true }
+        })
         const toolExecDuration = Date.now() - toolExecStart
 
         // Track tool usage and audit log each tool call
