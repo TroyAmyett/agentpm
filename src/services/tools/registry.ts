@@ -729,6 +729,245 @@ export const BUILT_IN_TOOLS: Tool[] = [
       },
     },
   },
+
+  // ─── ORCHESTRATOR TOOLS ────────────────────────────────────────────────────
+
+  {
+    id: 'orchestrator-create-task',
+    name: 'create_task',
+    displayName: 'Create Task',
+    description: 'Create a subtask under the current orchestration tree. Assigns to a worker agent for execution.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'create_task',
+      description: 'Create a new subtask and assign it to a worker agent. The subtask will be linked to the current parent task. Use this after a plan has been approved to spawn individual work items.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Clear, actionable task title',
+          },
+          description: {
+            type: 'string',
+            description: 'Detailed instructions for the worker agent',
+          },
+          priority: {
+            type: 'string',
+            enum: ['critical', 'high', 'medium', 'low'],
+            description: 'Task priority (default: medium)',
+          },
+          assign_to_agent_type: {
+            type: 'string',
+            description: 'Agent type to assign to (e.g., "content-writer", "researcher", "qa-tester")',
+          },
+          assign_to_agent_id: {
+            type: 'string',
+            description: 'Specific agent ID to assign to (optional — if omitted, picks first active agent of the specified type)',
+          },
+          depends_on_task_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of task IDs that must complete before this task can start',
+          },
+          skill_slug: {
+            type: 'string',
+            description: 'Skill slug to attach to this task (optional)',
+          },
+        },
+        required: ['title', 'assign_to_agent_type'],
+      },
+    },
+  },
+  {
+    id: 'orchestrator-list-tasks',
+    name: 'list_tasks',
+    displayName: 'List Tasks',
+    description: 'List tasks in the current orchestration tree or by filter criteria.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'list_tasks',
+      description: 'Query tasks to see their current status. Use to monitor progress of subtasks you created.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          parent_task_id: {
+            type: 'string',
+            description: 'Filter by parent task ID (defaults to current orchestration root)',
+          },
+          status: {
+            type: 'string',
+            enum: ['pending', 'queued', 'in_progress', 'review', 'completed', 'failed', 'cancelled'],
+            description: 'Filter by status',
+          },
+          assigned_to: {
+            type: 'string',
+            description: 'Filter by assigned agent ID',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max results to return (default: 20)',
+          },
+        },
+      },
+    },
+  },
+  {
+    id: 'orchestrator-get-task-result',
+    name: 'get_task_result',
+    displayName: 'Get Task Result',
+    description: 'Retrieve the output and result of a completed task.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'get_task_result',
+      description: 'Get the output of a completed or failed task. Use this to read subtask results when assembling the final deliverable.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The ID of the task to get results for',
+          },
+        },
+        required: ['task_id'],
+      },
+    },
+  },
+  {
+    id: 'orchestrator-assign-task',
+    name: 'assign_task',
+    displayName: 'Assign Task',
+    description: 'Assign or reassign a task to a specific agent.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'assign_task',
+      description: 'Assign an existing task to a specific agent for execution. Sets the task to queued status.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The task to assign',
+          },
+          agent_id: {
+            type: 'string',
+            description: 'The agent to assign the task to',
+          },
+        },
+        required: ['task_id', 'agent_id'],
+      },
+    },
+  },
+  {
+    id: 'orchestrator-update-task-status',
+    name: 'update_task_status',
+    displayName: 'Update Task Status',
+    description: 'Update the status of a task (e.g., mark completed, failed).',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'update_task_status',
+      description: 'Update the status of a task. Use to mark tasks as completed with a summary, or failed with an error. Can also attach output data.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The task to update',
+          },
+          status: {
+            type: 'string',
+            enum: ['queued', 'in_progress', 'review', 'completed', 'failed', 'cancelled'],
+            description: 'New status',
+          },
+          output: {
+            type: 'object',
+            description: 'Output data to attach to the task (e.g., summary, deliverables)',
+          },
+        },
+        required: ['task_id', 'status'],
+      },
+    },
+  },
+  {
+    id: 'orchestrator-preview-plan',
+    name: 'preview_plan',
+    displayName: 'Preview Plan',
+    description: 'Create a dry-run execution plan for human review before executing.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'preview_plan',
+      description: 'Submit your decomposition plan for human approval. The plan shows which agents will handle which subtasks, their dependencies, and estimated scope. At trust level 0-1, you MUST call this before creating any subtasks. The task will be set to "review" status and the human will approve or reject.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          summary: {
+            type: 'string',
+            description: 'Brief summary of the execution strategy',
+          },
+          subtasks: {
+            type: 'array',
+            description: 'Planned subtasks',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'Subtask title' },
+                description: { type: 'string', description: 'What this subtask will do' },
+                assign_to_agent_type: { type: 'string', description: 'Agent type' },
+                priority: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+                depends_on_steps: {
+                  type: 'array',
+                  items: { type: 'number' },
+                  description: 'Indexes of subtasks this depends on (0-based)',
+                },
+                skill_slug: { type: 'string', description: 'Skill to use (optional)' },
+              },
+              required: ['title', 'assign_to_agent_type'],
+            },
+          },
+          reasoning: {
+            type: 'string',
+            description: 'Explain why you chose this decomposition strategy',
+          },
+        },
+        required: ['summary', 'subtasks', 'reasoning'],
+      },
+    },
+  },
+  {
+    id: 'orchestrator-cancel-tree',
+    name: 'cancel_tree',
+    displayName: 'Cancel Task Tree',
+    description: 'Cancel a task and all its descendant subtasks.',
+    category: 'utility',
+    isBuiltIn: true,
+    isEnabled: true,
+    definition: {
+      name: 'cancel_tree',
+      description: 'Cancel a task and ALL of its subtasks recursively. Use this when the overall approach is wrong and you need to start over, or when the human requests cancellation.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'Root task ID to cancel (all descendants will also be cancelled)',
+          },
+        },
+        required: ['task_id'],
+      },
+    },
+  },
 ]
 
 /**

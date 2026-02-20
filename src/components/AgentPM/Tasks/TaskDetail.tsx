@@ -38,6 +38,7 @@ interface TaskDetailProps {
   onEdit?: (taskId: string) => void
   onDependencyChange?: () => void
   onApprovePlan?: (taskId: string, plan: ExecutionPlan) => void
+  onApproveOrchestratorPlan?: (taskId: string) => void
   onRerunWithFeedback?: (taskId: string, feedback: string) => void
 }
 
@@ -57,6 +58,7 @@ export function TaskDetail({
   onEdit,
   onDependencyChange,
   onApprovePlan,
+  onApproveOrchestratorPlan,
   onRerunWithFeedback,
 }: TaskDetailProps) {
   const [activeTab, setActiveTab] = useState<TabType>('activity')
@@ -197,6 +199,7 @@ export function TaskDetail({
             accountId={accountId}
             userId={userId}
             onApprovePlan={onApprovePlan}
+            onApproveOrchestratorPlan={onApproveOrchestratorPlan}
             onUpdateStatus={onUpdateStatus}
           />
         )}

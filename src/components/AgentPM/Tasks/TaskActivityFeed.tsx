@@ -9,7 +9,7 @@ import {
   AlertCircle,
   Play,
 } from 'lucide-react'
-import type { Task, TaskStatus, AgentPersona, Skill, StatusHistoryEntry, WorkflowGateConfig } from '@/types/agentpm'
+import type { Task, TaskStatus, AgentPersona, Skill, StatusHistoryEntry, WorkflowGateConfig, OrchestratorPlan } from '@/types/agentpm'
 import type { ExecutionPlan } from '@/services/planner/dynamicPlanner'
 import { TaskStatusBadge } from './TaskStatusBadge'
 import { ResultsCard } from './ResultsCard'
@@ -25,14 +25,31 @@ interface TaskActivityFeedProps {
   accountId?: string
   userId?: string
   onApprovePlan?: (taskId: string, plan: ExecutionPlan) => void
+  onApproveOrchestratorPlan?: (taskId: string) => void
   onUpdateStatus?: (taskId: string, status: TaskStatus, note?: string) => void
+}
+
+// Unified display plan step (works for both ExecutionPlan and OrchestratorPlan)
+interface DisplayPlanStep {
+  title: string
+  description?: string
+  agentAlias: string
+  agentId?: string
+}
+
+interface DisplayPlan {
+  steps: DisplayPlanStep[]
+  executionMode: string
+  reasoning?: string
+  /** Original ExecutionPlan if available (for approval callback) */
+  _original?: ExecutionPlan
 }
 
 // Timeline event types
 type ActivityEvent =
   | { type: 'created'; timestamp: string; description?: string }
   | { type: 'status_change'; timestamp: string; entry: StatusHistoryEntry }
-  | { type: 'plan'; timestamp: string; plan: ExecutionPlan }
+  | { type: 'plan'; timestamp: string; plan: DisplayPlan }
   | { type: 'execution'; timestamp: string }
   | { type: 'result'; timestamp: string; output: Record<string, unknown> }
   | { type: 'error'; timestamp: string; error: { message: string; code?: string } }
@@ -46,14 +63,22 @@ export function TaskActivityFeed({
   accountId,
   userId,
   onApprovePlan,
+  onApproveOrchestratorPlan,
   onUpdateStatus,
 }: TaskActivityFeedProps) {
   const { formatDateTime } = useTimezoneFunctions()
 
   const taskInput = task.input as Record<string, unknown> | undefined
-  const plan = taskInput?.plan as ExecutionPlan | undefined
-  const hasOutput = task.output && Object.keys(task.output).length > 0
-  const hasPlan = plan && plan.steps && plan.steps.length > 0
+  const taskOutput = task.output as Record<string, unknown> | undefined
+
+  // Support both ExecutionPlan (from dynamic planner) and OrchestratorPlan (from Atlas)
+  const executionPlan = taskInput?.plan as ExecutionPlan | undefined
+  const orchestratorPlan = taskOutput?.plan as OrchestratorPlan | undefined
+
+  const plan = executionPlan
+  const hasOutput = taskOutput && Object.keys(taskOutput).some(k => k !== 'plan')
+  const hasPlan = (plan && plan.steps && plan.steps.length > 0) || (orchestratorPlan && orchestratorPlan.subtasks.length > 0)
+  const isOrchestratorPlan = !!orchestratorPlan
   const isPlanReview = task.status === 'review' && hasPlan && !hasOutput
 
   // Build chronological event list
@@ -81,13 +106,36 @@ export function TaskActivityFeed({
     }
 
     // 3. Plan generated (if exists, insert it near when task went to review)
-    if (hasPlan && plan) {
-      // Find the review status change to get the plan timestamp
+    if (hasPlan) {
       const reviewEntry = task.statusHistory?.find(e => e.status === 'review')
+      const displayPlan: DisplayPlan = orchestratorPlan
+        ? {
+            steps: orchestratorPlan.subtasks.map(s => ({
+              title: s.title,
+              description: s.description,
+              agentAlias: s.assignToAgentType,
+              agentId: s.assignToAgentId,
+            })),
+            executionMode: 'plan-then-execute',
+            reasoning: orchestratorPlan.reasoning,
+          }
+        : plan
+          ? {
+              steps: plan.steps.map(s => ({
+                title: s.title,
+                description: s.description,
+                agentAlias: s.agentAlias,
+                agentId: s.agentId,
+              })),
+              executionMode: plan.executionMode,
+              reasoning: plan.reasoning,
+              _original: plan,
+            }
+          : { steps: [], executionMode: 'plan-then-execute' }
       items.push({
         type: 'plan',
         timestamp: reviewEntry?.changedAt || task.updatedAt,
-        plan,
+        plan: displayPlan,
       })
     }
 
@@ -155,7 +203,7 @@ export function TaskActivityFeed({
     }
 
     return deduped
-  }, [task, plan, hasPlan, hasOutput, accountId, userId])
+  }, [task, plan, orchestratorPlan, hasPlan, hasOutput, accountId, userId])
 
   return (
     <div className="relative space-y-1">
@@ -200,12 +248,20 @@ export function TaskActivityFeed({
                 timestamp={formatDateTime(event.timestamp)}
                 highlighted={isPlanReview}
               >
-                <p className="text-sm font-medium text-surface-800 dark:text-surface-200 mb-2">
+                <p className="text-sm font-medium text-surface-800 dark:text-surface-200 mb-1">
                   {isPlanReview
-                    ? `Prepared ${event.plan.steps.length} step${event.plan.steps.length > 1 ? 's' : ''} — review and run`
+                    ? isOrchestratorPlan
+                      ? `Atlas prepared ${event.plan.steps.length} step${event.plan.steps.length > 1 ? 's' : ''} — review and approve`
+                      : `Prepared ${event.plan.steps.length} step${event.plan.steps.length > 1 ? 's' : ''} — review and run`
                     : `Plan (${event.plan.steps.length} step${event.plan.steps.length > 1 ? 's' : ''})`
                   }
                 </p>
+                {/* Orchestrator plan summary */}
+                {isOrchestratorPlan && orchestratorPlan?.summary && (
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mb-2">
+                    {orchestratorPlan.summary}
+                  </p>
+                )}
                 {/* Steps */}
                 <div className="space-y-1.5 mb-3">
                   {event.plan.steps.map((step, i) => {
@@ -220,24 +276,45 @@ export function TaskActivityFeed({
                           <span className="text-[10px] text-surface-500 dark:text-surface-400">
                             {stepAgent?.alias || step.agentAlias}
                           </span>
+                          {step.description && (
+                            <p className="text-[10px] text-surface-400 dark:text-surface-500 mt-0.5 line-clamp-2">
+                              {step.description}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
+                {/* Orchestrator reasoning */}
+                {isOrchestratorPlan && orchestratorPlan?.reasoning && isPlanReview && (
+                  <p className="text-[11px] text-surface-400 dark:text-surface-500 italic mb-3">
+                    {orchestratorPlan.reasoning}
+                  </p>
+                )}
                 {/* Inline approval */}
-                {isPlanReview && onApprovePlan && (
+                {isPlanReview && (
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const allAtOncePlan = { ...event.plan, executionMode: 'plan-then-execute' as const }
-                        onApprovePlan(task.id, allAtOncePlan)
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
-                    >
-                      <Play size={12} />
-                      Run All Steps
-                    </button>
+                    {isOrchestratorPlan && onApproveOrchestratorPlan ? (
+                      <button
+                        onClick={() => onApproveOrchestratorPlan(task.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
+                      >
+                        <Play size={12} />
+                        Approve Plan
+                      </button>
+                    ) : onApprovePlan && event.plan._original ? (
+                      <button
+                        onClick={() => {
+                          const allAtOncePlan = { ...event.plan._original!, executionMode: 'plan-then-execute' as const }
+                          onApprovePlan(task.id, allAtOncePlan)
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
+                      >
+                        <Play size={12} />
+                        Run All Steps
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => onUpdateStatus?.(task.id, 'cancelled', 'Plan cancelled')}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-600 dark:text-surface-400 text-xs font-medium transition-colors"

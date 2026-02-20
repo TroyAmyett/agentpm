@@ -3,7 +3,7 @@
 // Supports tool use for real-time capabilities
 // LLM-agnostic: uses provider abstraction layer
 
-import type { Task, AgentPersona, Skill } from '@/types/agentpm'
+import type { Task, AgentPersona, Skill, OrchestratorConfig, OrchestratorPlan } from '@/types/agentpm'
 import {
   getAvailableTools,
   processToolUses,
@@ -27,6 +27,7 @@ import { getToolsForAgent } from '@/services/tools/agentToolBindings'
 import { logLLMCall, logToolCall, logExecutionError } from '@/services/audit'
 import { createClientFromConfig, type OpenClawResponse } from '@/services/openclaw/client'
 import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/services/supabase/client'
 
 // Maximum tool use iterations to prevent infinite loops
 const MAX_TOOL_ITERATIONS = 10
@@ -68,12 +69,21 @@ export type ExecutionStatusCallback = (
   detail?: string
 ) => void
 
+interface OrchestratorPromptContext {
+  config: OrchestratorConfig
+  workerAgents: Array<{ id: string; alias: string; agentType: string; capabilities: string[] }>
+  task: Task
+  planApproved: boolean
+  approvedPlan?: OrchestratorPlan
+}
+
 // Build system prompt from agent persona
 function buildAgentSystemPrompt(
   agent: AgentPersona,
   skill?: Skill,
   tools: LLMToolDefinition[] = [],
   availableSkills: Skill[] = [],
+  orchestratorCtx?: OrchestratorPromptContext,
 ): string {
   const parts: string[] = []
 
@@ -165,6 +175,74 @@ function buildAgentSystemPrompt(
   parts.push(`**Key differentiator:** Real AI agents that take action (publish content, generate images, manage projects) vs. chatbots that just talk.`)
   parts.push(`\nALL content you create must be relevant to Funnelists products, target audience, or the AI/marketing/SaaS industry. Never write generic content.`)
   parts.push(`== END COMPANY CONTEXT ==`)
+
+  // ── Orchestrator Protocol ─────────────────────────────────────────
+  if (agent.agentType === 'orchestrator' && orchestratorCtx) {
+    const { config, workerAgents, planApproved, approvedPlan } = orchestratorCtx
+
+    parts.push(`\n\n== ORCHESTRATOR PROTOCOL ==`)
+    parts.push(`You are Atlas, the task orchestrator. Your job is to ensure every task gets done well.`)
+    parts.push(`You are the single front door — every task comes to you first.`)
+
+    parts.push(`\n## Your Process`)
+    parts.push(`1. READ the task carefully. Understand what the human wants.`)
+    parts.push(`2. CHECK capabilities — do we have the right agents, skills, and tools?`)
+    parts.push(`3. DECIDE — is this a simple task (1 agent) or complex (decompose)?`)
+    parts.push(`4. PLAN — use \`preview_plan\` to build your execution plan.`)
+    parts.push(`5. EXECUTE (after approval) — create subtasks, assign agents, set dependencies.`)
+    parts.push(`6. MONITOR — check task progress with \`list_tasks\`.`)
+    parts.push(`7. DELIVER — when all subtasks complete, compile results and mark the root task completed.`)
+
+    parts.push(`\n## Hard Limits (NEVER exceed)`)
+    parts.push(`- Max subtasks per parent: ${config.maxSubtasksPerParent}`)
+    parts.push(`- Max total active tasks: ${config.maxTotalActiveTasks}`)
+    parts.push(`- Max concurrent agents: ${config.maxConcurrentAgents}`)
+    parts.push(`- Max retries per subtask: ${config.maxRetriesPerSubtask}`)
+    parts.push(`If a plan would exceed any hard limit, STOP and alert the human.`)
+
+    // Agent roster
+    parts.push(`\n## Available Worker Agents`)
+    if (workerAgents.length > 0) {
+      for (const wa of workerAgents) {
+        parts.push(`- **${wa.alias}** (${wa.agentType}, ID: ${wa.id}) — ${wa.capabilities.join(', ')}`)
+      }
+    } else {
+      parts.push(`No worker agents configured. Alert the human.`)
+    }
+
+    // Dry run vs execution mode
+    if (planApproved && approvedPlan) {
+      parts.push(`\n## MODE: EXECUTE APPROVED PLAN`)
+      parts.push(`The human has APPROVED your plan. Proceed to create subtasks now.`)
+      parts.push(`Do NOT call preview_plan again. Create the subtasks using create_task.`)
+      parts.push(`\nApproved plan:`)
+      parts.push(`Summary: ${approvedPlan.summary}`)
+      for (let i = 0; i < approvedPlan.subtasks.length; i++) {
+        const s = approvedPlan.subtasks[i]
+        const deps = s.dependsOnSteps?.length
+          ? ` (after step ${s.dependsOnSteps.map(d => d + 1).join(', ')})`
+          : ''
+        parts.push(`  ${i + 1}. [${s.assignToAgentType}] ${s.title}${deps}`)
+      }
+      parts.push(`\nCreate each subtask using create_task. Use depends_on_task_ids to chain dependencies (you'll get task IDs back from each create_task call).`)
+      parts.push(`After creating all subtasks, update this root task status to "in_progress" to indicate orchestration is running.`)
+    } else {
+      parts.push(`\n## MODE: DRY RUN (Plan First)`)
+      parts.push(`You MUST call \`preview_plan\` FIRST before creating any subtasks.`)
+      parts.push(`Analyze the task, determine the best decomposition, and submit the plan.`)
+      parts.push(`The human will review and approve before execution proceeds.`)
+      parts.push(`\nFor simple tasks (1 agent, 1 skill), you can still create a plan with a single subtask.`)
+      parts.push(`For direct delegation (no decomposition needed), create a 1-step plan assigning to the right agent.`)
+    }
+
+    parts.push(`\n## Rules`)
+    parts.push(`- Never skip the capability check`)
+    parts.push(`- Never exceed hard limits`)
+    parts.push(`- When creating subtasks, include clear instructions and full context`)
+    parts.push(`- If the human uses cancel_tree, stop all work immediately`)
+    parts.push(`- Always use the right agent for the job based on their capabilities`)
+    parts.push(`== END ORCHESTRATOR PROTOCOL ==`)
+  }
 
   // Output instructions
   parts.push(`\n\nIMPORTANT: Provide your complete output. Be thorough and deliver exactly what the task asks for. If you have tools available, USE them to take real action - don't just describe what you would do.`)
@@ -306,7 +384,110 @@ export async function executeTask(
     }
 
     const llmToolDefs = toLLMToolDefs(tools)
-    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs, availableSkills)
+
+    // ── Orchestrator context ────────────────────────────────────────
+    let orchestratorCtx: OrchestratorPromptContext | undefined
+    if (input.agent.agentType === 'orchestrator' && supabase && accountId) {
+      try {
+        // Fetch orchestrator config
+        const { data: orchConfigRow } = await supabase
+          .from('orchestrator_config')
+          .select('*')
+          .eq('account_id', accountId)
+          .single()
+
+        const orchConfig: OrchestratorConfig = orchConfigRow ? {
+          id: orchConfigRow.id,
+          accountId: orchConfigRow.account_id,
+          orchestratorAgentId: orchConfigRow.orchestrator_agent_id,
+          maxDecompositionDepth: orchConfigRow.max_decomposition_depth ?? 1,
+          autoDecompose: orchConfigRow.auto_decompose ?? false,
+          trustTaskExecution: orchConfigRow.trust_task_execution ?? 0,
+          trustDecomposition: orchConfigRow.trust_decomposition ?? 0,
+          trustSkillCreation: orchConfigRow.trust_skill_creation ?? 0,
+          trustToolUsage: orchConfigRow.trust_tool_usage ?? 0,
+          trustContentPublishing: orchConfigRow.trust_content_publishing ?? 0,
+          trustExternalActions: orchConfigRow.trust_external_actions ?? 0,
+          trustSpending: orchConfigRow.trust_spending ?? 0,
+          trustAgentCreation: orchConfigRow.trust_agent_creation ?? 0,
+          maxSubtasksPerParent: orchConfigRow.max_subtasks_per_parent ?? 10,
+          maxTotalActiveTasks: orchConfigRow.max_total_active_tasks ?? 25,
+          maxCostPerTaskCents: orchConfigRow.max_cost_per_task_cents ?? 500,
+          maxConcurrentAgents: orchConfigRow.max_concurrent_agents ?? 4,
+          maxRetriesPerSubtask: orchConfigRow.max_retries_per_subtask ?? 3,
+          monthlySpendBudgetCents: orchConfigRow.monthly_spend_budget_cents ?? 0,
+          postMortemEnabled: orchConfigRow.post_mortem_enabled ?? true,
+          postMortemParentOnly: orchConfigRow.post_mortem_parent_only ?? true,
+          postMortemCostThresholdCents: orchConfigRow.post_mortem_cost_threshold_cents ?? 10,
+          dryRunDefault: orchConfigRow.dry_run_default ?? true,
+          autoRouteRootTasks: orchConfigRow.auto_route_root_tasks ?? false,
+          autoRetryOnFailure: orchConfigRow.auto_retry_on_failure ?? false,
+          notifyOnCompletion: orchConfigRow.notify_on_completion ?? true,
+          modelTriage: orchConfigRow.model_triage ?? 'haiku',
+          modelDecomposition: orchConfigRow.model_decomposition ?? 'sonnet',
+          modelReview: orchConfigRow.model_review ?? 'sonnet',
+          modelPostMortem: orchConfigRow.model_post_mortem ?? 'opus',
+          modelSkillGeneration: orchConfigRow.model_skill_generation ?? 'opus',
+          preferences: orchConfigRow.preferences ?? {},
+          createdAt: orchConfigRow.created_at,
+          updatedAt: orchConfigRow.updated_at,
+        } : {
+          // Defaults if no config exists
+          id: '', accountId, orchestratorAgentId: input.agent.id,
+          maxDecompositionDepth: 1, autoDecompose: false,
+          trustTaskExecution: 0, trustDecomposition: 0, trustSkillCreation: 0,
+          trustToolUsage: 0, trustContentPublishing: 0, trustExternalActions: 0,
+          trustSpending: 0, trustAgentCreation: 0,
+          maxSubtasksPerParent: 10, maxTotalActiveTasks: 25, maxCostPerTaskCents: 500,
+          maxConcurrentAgents: 4, maxRetriesPerSubtask: 3, monthlySpendBudgetCents: 0,
+          postMortemEnabled: true, postMortemParentOnly: true, postMortemCostThresholdCents: 10,
+          dryRunDefault: true, autoRouteRootTasks: false, autoRetryOnFailure: false,
+          notifyOnCompletion: true,
+          modelTriage: 'haiku', modelDecomposition: 'sonnet', modelReview: 'sonnet',
+          modelPostMortem: 'opus', modelSkillGeneration: 'opus',
+          preferences: {}, createdAt: '', updatedAt: '',
+        }
+
+        // Fetch active worker agents for the roster
+        const { data: workers } = await supabase
+          .from('agent_personas')
+          .select('id, alias, agent_type, capabilities')
+          .eq('account_id', accountId)
+          .eq('is_active', true)
+          .neq('agent_type', 'orchestrator')
+          .is('deleted_at', null)
+          .is('paused_at', null)
+
+        const workerAgents = (workers || []).map(w => ({
+          id: w.id,
+          alias: w.alias || w.agent_type,
+          agentType: w.agent_type,
+          capabilities: w.capabilities || [],
+        }))
+
+        // Check if this is a re-entry with an approved plan
+        const taskInput = input.task.input as Record<string, unknown> | undefined
+        const taskOutput = input.task.output as Record<string, unknown> | undefined
+        const planApproved = taskInput?.plan_approved === true
+        const approvedPlan = planApproved && taskOutput?.plan
+          ? taskOutput.plan as OrchestratorPlan
+          : undefined
+
+        orchestratorCtx = {
+          config: orchConfig,
+          workerAgents,
+          task: input.task,
+          planApproved,
+          approvedPlan,
+        }
+
+        console.log(`[Executor] Orchestrator mode: planApproved=${planApproved}, ${workerAgents.length} worker agents, maxSubtasks=${orchConfig.maxSubtasksPerParent}`)
+      } catch (err) {
+        console.warn('[Executor] Failed to fetch orchestrator context (using defaults):', err)
+      }
+    }
+
+    const systemPrompt = buildAgentSystemPrompt(input.agent, input.skill, llmToolDefs, availableSkills, orchestratorCtx)
     const userPrompt = buildTaskPrompt(input.task, input.additionalContext)
 
     // Track tool usage across iterations
@@ -376,11 +557,16 @@ export async function executeTask(
         console.log(`[Executor] LLM requesting tools: ${toolNames}`)
 
         // Convert LLM tool blocks to ToolUseRequest format
+        // Inject context fields that tools need but the LLM doesn't provide
         const toolUseRequests: ToolUseRequest[] = toolUseBlocks.map((block: LLMContentBlock) => ({
           type: 'tool_use' as const,
           id: block.toolCallId || `tool_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           name: block.toolName || '',
-          input: (block.toolInput || {}) as Record<string, unknown>,
+          input: {
+            ...(block.toolInput || {}),
+            _agentId: input.agent.id,
+            _contextTaskId: input.task.id,
+          } as Record<string, unknown>,
         }))
 
         // Execute the tools

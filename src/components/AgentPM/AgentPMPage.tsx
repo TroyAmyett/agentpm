@@ -817,6 +817,29 @@ export function AgentPMPage() {
     [getTask, createTask, accountId, userId, updateTaskStatus, updateTask, createTaskDependency]
   )
 
+  // Handle orchestrator plan approval (Atlas dry-run)
+  const handleApproveOrchestratorPlan = useCallback(
+    async (taskId: string) => {
+      const task = getTask(taskId)
+      if (!task) return
+
+      try {
+        // Set plan_approved flag and re-queue for orchestrator execution
+        const existingInput = (task.input as Record<string, unknown>) || {}
+        await updateTask(taskId, {
+          input: { ...existingInput, plan_approved: true },
+          status: 'queued',
+          updatedBy: userId,
+          updatedByType: 'user',
+        })
+        await updateTaskStatus(taskId, 'queued', userId, 'Orchestrator plan approved — executing')
+      } catch (err) {
+        console.error(`[Orchestrator Plan Approval] Failed for "${task.title}":`, err)
+      }
+    },
+    [getTask, updateTask, updateTaskStatus, userId]
+  )
+
   // Handle task deletion
   const handleDeleteTask = useCallback(
     async (taskId: string) => {
@@ -1183,6 +1206,7 @@ export function AgentPMPage() {
                           onEdit={() => setEditingTask(selectedTask)}
                           onDependencyChange={() => fetchTasks(accountId)}
                           onApprovePlan={handleApprovePlan}
+                          onApproveOrchestratorPlan={handleApproveOrchestratorPlan}
                           onRerunWithFeedback={handleRerunWithFeedback}
                         />
                       ) : (
@@ -1268,6 +1292,7 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onApproveOrchestratorPlan={handleApproveOrchestratorPlan}
                   onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>
@@ -1290,6 +1315,7 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onApproveOrchestratorPlan={handleApproveOrchestratorPlan}
                   onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>
@@ -1312,6 +1338,7 @@ export function AgentPMPage() {
                   onEdit={() => setEditingTask(selectedTask)}
                   onDependencyChange={() => fetchTasks(accountId)}
                   onApprovePlan={handleApprovePlan}
+                  onApproveOrchestratorPlan={handleApproveOrchestratorPlan}
                   onRerunWithFeedback={handleRerunWithFeedback}
                 />
               </div>

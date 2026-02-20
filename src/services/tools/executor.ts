@@ -22,6 +22,15 @@ import { createSkillTool, sendMessageTool, readMessagesTool } from './implementa
 import { executeOpenClawTool } from './implementations/openclawTools'
 import { webSearch } from './implementations/webSearch'
 import { fetchGoogleDocTool } from './implementations/googleDriveTools'
+import {
+  createTaskTool,
+  listTasksTool,
+  getTaskResultTool,
+  assignTaskTool,
+  updateTaskStatusTool,
+  previewPlanTool,
+  cancelTreeTool,
+} from './implementations/orchestratorTools'
 import type { VideoType, VideoJobStatus, VideoScript, ProductInfo } from '@/services/video/videoService'
 
 /**
@@ -256,6 +265,88 @@ export async function executeTool(
           }> | undefined,
           baseUrl: parameters.baseUrl as string | undefined,
           accountId: _accountId,
+        })
+      }
+
+      // ============================================
+      // ORCHESTRATOR TOOLS
+      // ============================================
+
+      case 'create_task': {
+        return await createTaskTool({
+          title: parameters.title as string,
+          description: parameters.description as string | undefined,
+          priority: parameters.priority as 'critical' | 'high' | 'medium' | 'low' | undefined,
+          assign_to_agent_type: parameters.assign_to_agent_type as string,
+          assign_to_agent_id: parameters.assign_to_agent_id as string | undefined,
+          depends_on_task_ids: parameters.depends_on_task_ids as string[] | undefined,
+          skill_slug: parameters.skill_slug as string | undefined,
+          accountId: _accountId,
+          _contextTaskId: parameters._contextTaskId as string,
+          _agentId: parameters._agentId as string | undefined,
+        })
+      }
+
+      case 'list_tasks': {
+        return await listTasksTool({
+          parent_task_id: parameters.parent_task_id as string | undefined,
+          status: parameters.status as string | undefined,
+          assigned_to: parameters.assigned_to as string | undefined,
+          limit: parameters.limit as number | undefined,
+          accountId: _accountId,
+          _contextTaskId: parameters._contextTaskId as string,
+        })
+      }
+
+      case 'get_task_result': {
+        return await getTaskResultTool({
+          task_id: parameters.task_id as string,
+          accountId: _accountId,
+        })
+      }
+
+      case 'assign_task': {
+        return await assignTaskTool({
+          task_id: parameters.task_id as string,
+          agent_id: parameters.agent_id as string,
+          accountId: _accountId,
+          _agentId: parameters._agentId as string | undefined,
+        })
+      }
+
+      case 'update_task_status': {
+        return await updateTaskStatusTool({
+          task_id: parameters.task_id as string,
+          status: parameters.status as string,
+          output: parameters.output as Record<string, unknown> | undefined,
+          accountId: _accountId,
+          _agentId: parameters._agentId as string | undefined,
+        })
+      }
+
+      case 'preview_plan': {
+        return await previewPlanTool({
+          summary: parameters.summary as string,
+          subtasks: parameters.subtasks as Array<{
+            title: string
+            description?: string
+            assign_to_agent_type: string
+            priority?: string
+            depends_on_steps?: number[]
+            skill_slug?: string
+          }>,
+          reasoning: parameters.reasoning as string,
+          accountId: _accountId,
+          _contextTaskId: parameters._contextTaskId as string,
+          _agentId: parameters._agentId as string | undefined,
+        })
+      }
+
+      case 'cancel_tree': {
+        return await cancelTreeTool({
+          task_id: parameters.task_id as string,
+          accountId: _accountId,
+          _agentId: parameters._agentId as string | undefined,
         })
       }
 

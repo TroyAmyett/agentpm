@@ -43,6 +43,15 @@ export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
     ...COLLAB_TOOLS,
   ],
   'orchestrator': [
+    // Orchestration tools
+    'create_task',
+    'list_tasks',
+    'get_task_result',
+    'assign_task',
+    'update_task_status',
+    'preview_plan',
+    'cancel_tree',
+    // Integration tools
     'fetch_google_doc',
     'create_skill',
     'execute_openclaw',

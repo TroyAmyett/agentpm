@@ -19,6 +19,8 @@ interface Task {
   assigned_to: string
   assigned_to_type: string
   priority: string
+  parent_task_id: string | null
+  depends_on: string[] | null
 }
 
 interface Agent {
@@ -62,11 +64,50 @@ serve(async (req) => {
       // No body or invalid JSON, use default limit
     }
 
-    // Fetch queued tasks assigned to agents
+    // ── Step 1: Auto-route unassigned root tasks to orchestrator ────
+    // Find root tasks (no parent, no agent assigned) for accounts with auto-routing enabled
+    const { data: orchConfigs } = await supabase
+      .from('orchestrator_config')
+      .select('account_id, orchestrator_agent_id, auto_route_root_tasks')
+      .eq('auto_route_root_tasks', true)
+
+    if (orchConfigs && orchConfigs.length > 0) {
+      // Find unassigned root tasks for these accounts
+      const accountIds = orchConfigs.map(c => c.account_id)
+      const { data: unassignedTasks } = await supabase
+        .from('tasks')
+        .select('id, account_id')
+        .eq('status', 'queued')
+        .is('assigned_to', null)
+        .is('parent_task_id', null)
+        .is('deleted_at', null)
+        .in('account_id', accountIds)
+        .limit(20)
+
+      if (unassignedTasks && unassignedTasks.length > 0) {
+        const configMap = new Map(orchConfigs.map(c => [c.account_id, c.orchestrator_agent_id]))
+        for (const task of unassignedTasks) {
+          const orchAgentId = configMap.get(task.account_id)
+          if (orchAgentId) {
+            await supabase
+              .from('tasks')
+              .update({
+                assigned_to: orchAgentId,
+                assigned_to_type: 'agent',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', task.id)
+            console.log(`Auto-routed task ${task.id} to orchestrator ${orchAgentId}`)
+          }
+        }
+      }
+    }
+
+    // ── Step 2: Fetch queued tasks assigned to agents ─────────────────
     // Order by priority (critical first) then by creation time
-    const { data: tasks, error: fetchError } = await supabase
+    const { data: allTasks, error: fetchError } = await supabase
       .from('tasks')
-      .select('id, account_id, title, assigned_to, assigned_to_type, priority')
+      .select('id, account_id, title, assigned_to, assigned_to_type, priority, parent_task_id, depends_on')
       .eq('status', 'queued')
       .eq('assigned_to_type', 'agent')
       .not('assigned_to', 'is', null)
@@ -83,14 +124,41 @@ serve(async (req) => {
       )
     }
 
-    if (!tasks || tasks.length === 0) {
+    if (!allTasks || allTasks.length === 0) {
       return new Response(
         JSON.stringify({ message: 'No queued tasks', processed: 0 }),
         { headers }
       )
     }
 
-    console.log(`Processing ${tasks.length} queued tasks`)
+    // ── Step 3: Dependency enforcement ────────────────────────────────
+    // Filter out tasks whose depends_on prerequisites aren't all completed
+    const tasksWithDeps = allTasks.filter(t => t.depends_on && t.depends_on.length > 0)
+    let tasks: Task[] = allTasks.filter(t => !t.depends_on || t.depends_on.length === 0)
+
+    if (tasksWithDeps.length > 0) {
+      // Collect all dependency IDs
+      const allDepIds = [...new Set(tasksWithDeps.flatMap(t => t.depends_on || []))]
+      const { data: depStatuses } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .in('id', allDepIds)
+
+      const completedIds = new Set(
+        (depStatuses || []).filter(d => d.status === 'completed').map(d => d.id)
+      )
+
+      for (const task of tasksWithDeps) {
+        const allDepsCompleted = (task.depends_on || []).every(depId => completedIds.has(depId))
+        if (allDepsCompleted) {
+          tasks.push(task)
+        } else {
+          console.log(`Task ${task.id}: blocked by unmet dependencies`)
+        }
+      }
+    }
+
+    console.log(`Processing ${tasks.length} queued tasks (${allTasks.length - tasks.length} blocked by dependencies)`)
 
     // Check agent availability and concurrency limits
     const agentIds = [...new Set(tasks.map((t) => t.assigned_to))]

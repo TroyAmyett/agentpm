@@ -316,6 +316,9 @@ export interface Task extends BaseEntity {
   intakeLogId?: string
   intakeSender?: string
 
+  // Orchestrator dependencies
+  dependsOn?: string[]  // Task IDs that must complete before this task can start
+
   // Computed dependency info (from view)
   blockedBy?: string[]
   blocks?: string[]
@@ -1735,6 +1738,82 @@ export interface NotificationLogEntry {
   nextRetryAt?: string
 
   createdAt: string
+}
+
+// =============================================================================
+// ORCHESTRATOR CONFIG
+// =============================================================================
+
+export interface OrchestratorConfig {
+  id: string
+  accountId: string
+  orchestratorAgentId: string
+
+  // Decomposition
+  maxDecompositionDepth: number
+  autoDecompose: boolean
+
+  // Trust levels per category (0-3)
+  trustTaskExecution: number
+  trustDecomposition: number
+  trustSkillCreation: number
+  trustToolUsage: number
+  trustContentPublishing: number
+  trustExternalActions: number
+  trustSpending: number
+  trustAgentCreation: number
+
+  // Hard limits
+  maxSubtasksPerParent: number
+  maxTotalActiveTasks: number
+  maxCostPerTaskCents: number
+  maxConcurrentAgents: number
+  maxRetriesPerSubtask: number
+
+  // Spending
+  monthlySpendBudgetCents: number
+
+  // Behavior
+  postMortemEnabled: boolean
+  postMortemParentOnly: boolean
+  postMortemCostThresholdCents: number
+  dryRunDefault: boolean
+  autoRouteRootTasks: boolean
+  autoRetryOnFailure: boolean
+  notifyOnCompletion: boolean
+
+  // LLM model strategy
+  modelTriage: string
+  modelDecomposition: string
+  modelReview: string
+  modelPostMortem: string
+  modelSkillGeneration: string
+
+  // Memory
+  preferences: Record<string, unknown>
+
+  // Audit
+  createdAt: string
+  updatedAt: string
+}
+
+// Plan shape stored in task.output.plan
+export interface OrchestratorPlan {
+  summary: string
+  subtasks: OrchestratorPlanStep[]
+  estimatedTotalCost?: number
+  reasoning: string
+}
+
+export interface OrchestratorPlanStep {
+  title: string
+  description: string
+  assignToAgentType: string
+  assignToAgentId?: string
+  skillSlug?: string
+  priority: TaskPriority
+  dependsOnSteps?: number[]  // Indexes into subtasks array (0-based)
+  estimatedTokens?: number
 }
 
 // =============================================================================
