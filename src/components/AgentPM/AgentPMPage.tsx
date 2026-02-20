@@ -825,14 +825,14 @@ export function AgentPMPage() {
       if (!task) return
 
       try {
-        // Set plan_approved flag and re-queue for orchestrator execution
+        // Set plan_approved flag (no status change here — updateTaskStatus handles that)
         const existingInput = (task.input as Record<string, unknown>) || {}
         await updateTask(taskId, {
           input: { ...existingInput, plan_approved: true },
-          status: 'queued',
           updatedBy: userId,
           updatedByType: 'user',
         })
+        // Transition status with proper history entry
         await updateTaskStatus(taskId, 'queued', userId, 'Orchestrator plan approved — executing')
       } catch (err) {
         console.error(`[Orchestrator Plan Approval] Failed for "${task.title}":`, err)
@@ -1309,6 +1309,29 @@ export function AgentPMPage() {
 
             {/* Task Detail Sidebar for Kanban View */}
             {taskViewMode === 'kanban' && selectedTask && (
+              <div className="fixed top-14 bottom-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
+                <TaskDetail
+                  task={selectedTask}
+                  agent={selectedTaskAgent}
+                  skill={selectedTaskSkill}
+                  allTasks={tasks}
+                  accountId={accountId}
+                  userId={userId}
+                  agents={agents}
+                  onClose={() => setSelectedTaskId(null)}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDelete={() => handleDeleteTask(selectedTask.id)}
+                  onEdit={() => setEditingTask(selectedTask)}
+                  onDependencyChange={() => fetchTasks(accountId)}
+                  onApprovePlan={handleApprovePlan}
+                  onApproveOrchestratorPlan={handleApproveOrchestratorPlan}
+                  onRerunWithFeedback={handleRerunWithFeedback}
+                />
+              </div>
+            )}
+
+            {/* Task Detail Sidebar for Orchestrator View */}
+            {taskViewMode === 'orchestrator' && selectedTask && (
               <div className="fixed top-14 bottom-0 right-0 w-[480px] bg-white dark:bg-surface-800 border-l border-surface-200 dark:border-surface-700 shadow-xl z-40">
                 <TaskDetail
                   task={selectedTask}

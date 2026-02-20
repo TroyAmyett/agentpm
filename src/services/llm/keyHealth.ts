@@ -115,6 +115,12 @@ export function classifyError(
 ): KeyHealthEntry['lastErrorType'] {
   if (status === 429) return 'rate_limit'
   if (status === 401 || status === 403) return 'auth_error'
+  // HTTP 400 with billing/credit messages = treat as auth error (key is unusable)
+  if (status === 400 && errorMessage &&
+    (errorMessage.includes('credit balance') || errorMessage.includes('billing') ||
+     errorMessage.includes('purchase credits') || errorMessage.includes('Plans & Billing'))) {
+    return 'auth_error'
+  }
   if (status && status >= 500) return 'server_error'
   if (!status || errorMessage?.includes('fetch') || errorMessage?.includes('network')) {
     return 'network'

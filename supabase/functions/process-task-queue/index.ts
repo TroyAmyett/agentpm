@@ -70,6 +70,7 @@ serve(async (req) => {
       .from('orchestrator_config')
       .select('account_id, orchestrator_agent_id, auto_route_root_tasks')
       .eq('auto_route_root_tasks', true)
+      .is('deleted_at', null)
 
     if (orchConfigs && orchConfigs.length > 0) {
       // Find unassigned root tasks for these accounts
@@ -105,16 +106,24 @@ serve(async (req) => {
 
     // ── Step 2: Fetch queued tasks assigned to agents ─────────────────
     // Order by priority (critical first) then by creation time
-    const { data: allTasks, error: fetchError } = await supabase
+    const { data: allTasksRaw, error: fetchError } = await supabase
       .from('tasks')
       .select('id, account_id, title, assigned_to, assigned_to_type, priority, parent_task_id, depends_on')
       .eq('status', 'queued')
       .eq('assigned_to_type', 'agent')
       .not('assigned_to', 'is', null)
       .is('deleted_at', null)
-      .order('priority', { ascending: true }) // critical < high < medium < low alphabetically
       .order('created_at', { ascending: true })
       .limit(limit)
+
+    // Sort by semantic priority (alphabetical sort puts 'low' before 'medium')
+    const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+    const allTasks = (allTasksRaw || []).sort((a, b) => {
+      const pa = PRIORITY_RANK[a.priority] ?? 3
+      const pb = PRIORITY_RANK[b.priority] ?? 3
+      if (pa !== pb) return pa - pb
+      return 0 // already sorted by created_at from DB
+    })
 
     if (fetchError) {
       console.error('Error fetching tasks:', fetchError)
@@ -144,16 +153,44 @@ serve(async (req) => {
         .select('id, status')
         .in('id', allDepIds)
 
+      const depStatusMap = new Map<string, string>(
+        (depStatuses || []).map(d => [d.id, d.status])
+      )
       const completedIds = new Set(
         (depStatuses || []).filter(d => d.status === 'completed').map(d => d.id)
       )
+      const failedStatuses = new Set(['failed', 'cancelled'])
 
       for (const task of tasksWithDeps) {
-        const allDepsCompleted = (task.depends_on || []).every(depId => completedIds.has(depId))
+        const deps = task.depends_on || []
+        const allDepsCompleted = deps.every(depId => completedIds.has(depId))
+
         if (allDepsCompleted) {
           tasks.push(task)
         } else {
-          console.log(`Task ${task.id}: blocked by unmet dependencies`)
+          // Check if any dependency has permanently failed — if so, auto-fail this task
+          const hasFailedDep = deps.some(depId => {
+            const status = depStatusMap.get(depId)
+            return status && failedStatuses.has(status)
+          })
+
+          if (hasFailedDep) {
+            const failedDepIds = deps.filter(depId => failedStatuses.has(depStatusMap.get(depId) || ''))
+            console.log(`Task ${task.id}: auto-failing — dependency failed: ${failedDepIds.join(', ')}`)
+            await supabase
+              .from('tasks')
+              .update({
+                status: 'failed',
+                output: {
+                  error: `Blocked by failed dependencies: ${failedDepIds.join(', ')}`,
+                  failedDependencies: failedDepIds,
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', task.id)
+          } else {
+            console.log(`Task ${task.id}: blocked by unmet dependencies (waiting)`)
+          }
         }
       }
     }
@@ -246,6 +283,21 @@ serve(async (req) => {
         // Dispatch tasks for this agent concurrently
         const taskPromises = toDispatch.map(async (task) => {
           try {
+            // Atomically claim the task — prevents double-dispatch on concurrent cron runs
+            const { data: claimed } = await supabase
+              .from('tasks')
+              .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+              .eq('id', task.id)
+              .eq('status', 'queued') // Only succeeds if still queued
+              .select('id')
+              .single()
+
+            if (!claimed) {
+              console.log(`Task ${task.id}: already claimed by another run, skipping`)
+              allResults.push({ taskId: task.id, agentId, success: false, error: 'Already claimed' })
+              return
+            }
+
             const response = await fetch(
               `${supabaseUrl}/functions/v1/agent-executor`,
               {

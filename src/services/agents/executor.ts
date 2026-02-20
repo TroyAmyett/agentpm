@@ -225,8 +225,17 @@ function buildAgentSystemPrompt(
           : ''
         parts.push(`  ${i + 1}. [${s.assignToAgentType}] ${s.title}${deps}`)
       }
-      parts.push(`\nCreate each subtask using create_task. Use depends_on_task_ids to chain dependencies (you'll get task IDs back from each create_task call).`)
+      parts.push(`\n## Creating Subtasks — CRITICAL DEPENDENCY RULES`)
+      parts.push(`Create subtasks IN ORDER using create_task. Each call returns a task ID.`)
+      parts.push(`You MUST track the returned task IDs and pass them as depends_on_task_ids to dependent subtasks.`)
+      parts.push(`Example: If step 2 depends on step 1, create step 1 first, get its ID, then create step 2 with depends_on_task_ids=[step1_id].`)
+      parts.push(`If you skip depends_on_task_ids, tasks will run in PARALLEL — a writing task could start before research finishes!`)
       parts.push(`After creating all subtasks, update this root task status to "in_progress" to indicate orchestration is running.`)
+    } else if (planApproved && !approvedPlan) {
+      // Plan was approved but the plan data is missing — error state
+      parts.push(`\n## ERROR: Plan approved but plan data is missing`)
+      parts.push(`The human approved a plan, but the plan could not be found in this task's output.`)
+      parts.push(`Use update_task_status to set this task to "failed" with the error message: "Plan data missing after approval — please recreate the task."`)
     } else {
       parts.push(`\n## MODE: DRY RUN (Plan First)`)
       parts.push(`You MUST call \`preview_plan\` FIRST before creating any subtasks.`)
@@ -484,7 +493,35 @@ export async function executeTask(
 
         console.log(`[Executor] Orchestrator mode: planApproved=${planApproved}, ${workerAgents.length} worker agents, maxSubtasks=${orchConfig.maxSubtasksPerParent}`)
       } catch (err) {
-        console.warn('[Executor] Failed to fetch orchestrator context (using defaults):', err)
+        console.warn('[Executor] Failed to fetch orchestrator context, using degraded defaults:', err)
+        // Build degraded context so Atlas still gets protocol instructions
+        const taskInput = input.task.input as Record<string, unknown> | undefined
+        const taskOutput = input.task.output as Record<string, unknown> | undefined
+        const planApproved = taskInput?.plan_approved === true
+        const approvedPlan = planApproved && taskOutput?.plan
+          ? taskOutput.plan as OrchestratorPlan
+          : undefined
+        orchestratorCtx = {
+          config: {
+            id: '', accountId: accountId || '', orchestratorAgentId: input.agent.id,
+            maxDecompositionDepth: 1, autoDecompose: false,
+            trustTaskExecution: 0, trustDecomposition: 0, trustSkillCreation: 0,
+            trustToolUsage: 0, trustContentPublishing: 0, trustExternalActions: 0,
+            trustSpending: 0, trustAgentCreation: 0,
+            maxSubtasksPerParent: 10, maxTotalActiveTasks: 25, maxCostPerTaskCents: 500,
+            maxConcurrentAgents: 4, maxRetriesPerSubtask: 3, monthlySpendBudgetCents: 0,
+            postMortemEnabled: true, postMortemParentOnly: true, postMortemCostThresholdCents: 10,
+            dryRunDefault: true, autoRouteRootTasks: false, autoRetryOnFailure: false,
+            notifyOnCompletion: true,
+            modelTriage: 'haiku', modelDecomposition: 'sonnet', modelReview: 'sonnet',
+            modelPostMortem: 'opus', modelSkillGeneration: 'opus',
+            preferences: {}, createdAt: '', updatedAt: '',
+          },
+          workerAgents: [],
+          task: input.task,
+          planApproved,
+          approvedPlan,
+        }
       }
     }
 

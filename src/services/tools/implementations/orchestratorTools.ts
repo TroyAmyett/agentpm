@@ -362,7 +362,7 @@ export async function updateTaskStatusTool(params: UpdateTaskStatusParams): Prom
     return { success: false, error: 'Database not configured' }
   }
 
-  const validStatuses = ['queued', 'in_progress', 'review', 'completed', 'failed', 'cancelled']
+  const validStatuses = ['pending', 'queued', 'in_progress', 'review', 'completed', 'failed', 'cancelled']
   if (!validStatuses.includes(params.status)) {
     return { success: false, error: `Invalid status "${params.status}". Valid: ${validStatuses.join(', ')}` }
   }
@@ -624,10 +624,11 @@ interface EstimateCostParams {
 }
 
 // Approximate cost per 1K tokens (input + output blended) in cents
+// e.g. sonnet = 1.5 cents per 1K tokens = $0.015/1K tokens
 const MODEL_COST_PER_1K_TOKENS: Record<string, number> = {
-  haiku:  0.1,    // $0.001/1K tokens
-  sonnet: 1.5,    // $0.015/1K tokens
-  opus:   7.5,    // $0.075/1K tokens
+  haiku:  0.1,    // 0.1¢/1K = $0.001/1K
+  sonnet: 1.5,    // 1.5¢/1K = $0.015/1K
+  opus:   7.5,    // 7.5¢/1K = $0.075/1K
 }
 
 // Default token estimates by agent type when not specified

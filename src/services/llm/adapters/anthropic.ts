@@ -91,9 +91,11 @@ export class AnthropicAdapter implements LLMAdapter {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))
+      const apiMsg = (error as { error?: { message?: string } }).error?.message
       throw new Error(
-        (error as { error?: { message?: string } }).error?.message ||
-        `Anthropic API error: ${response.status}`
+        apiMsg
+          ? `Anthropic API error: ${response.status} — ${apiMsg}`
+          : `Anthropic API error: ${response.status}`
       )
     }
 
@@ -117,9 +119,11 @@ export class AnthropicAdapter implements LLMAdapter {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))
+      const apiMsg = (error as { error?: { message?: string } }).error?.message
       throw new Error(
-        (error as { error?: { message?: string } }).error?.message ||
-        `Anthropic API error: ${response.status}`
+        apiMsg
+          ? `Anthropic API error: ${response.status} — ${apiMsg}`
+          : `Anthropic API error: ${response.status}`
       )
     }
 
