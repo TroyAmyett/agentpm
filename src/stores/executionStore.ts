@@ -8,7 +8,67 @@ import { parseAgentOutput } from '@/services/agents/outputParser'
 import { uploadAgentOutputFiles, type Attachment } from '@/services/attachments/attachmentService'
 import { processExecutionOutcome } from '@/services/trust/annealingLoop'
 import { reserveSlot, releaseSlot, configFromPersona } from '@/services/agents/agentQueue'
+import { fetchSkills } from '@/services/skills'
 import { useTaskStore } from './taskStore'
+
+/**
+ * Auto-match the best skill to a task based on task content and agent type.
+ * Uses keyword matching against skill tags, name, and description.
+ */
+function matchSkillToTask(taskText: string, agentType: string, skills: Skill[]): Skill | undefined {
+  // Keyword groups mapped to skill categories/tags
+  const keywordMap: Record<string, string[]> = {
+    blog: ['blog', 'article', 'post', 'write', 'publish', 'content', 'seo', 'insights'],
+    writing: ['write', 'draft', 'copy', 'copywriting', 'content', 'editorial'],
+    research: ['research', 'analyze', 'investigate', 'report', 'competitive', 'intelligence'],
+    marketing: ['marketing', 'campaign', 'promotion', 'social media', 'email', 'outreach'],
+    development: ['code', 'develop', 'implement', 'build', 'fix', 'debug', 'refactor'],
+    design: ['design', 'ui', 'ux', 'layout', 'wireframe', 'mockup'],
+  }
+
+  let bestSkill: Skill | undefined
+  let bestScore = 0
+
+  for (const s of skills) {
+    let score = 0
+    const skillText = `${s.name} ${s.description || ''} ${(s.tags || []).join(' ')}`.toLowerCase()
+
+    // Match task keywords against skill tags and name
+    for (const [, keywords] of Object.entries(keywordMap)) {
+      for (const kw of keywords) {
+        if (taskText.includes(kw) && skillText.includes(kw)) {
+          score += 2
+        }
+      }
+    }
+
+    // Bonus for matching agent type to skill category
+    if (agentType === 'content-writer' && (s.category === 'writing' || (s.tags || []).some(t => ['blog', 'content', 'seo', 'writing'].includes(t)))) {
+      score += 3
+    }
+    if (agentType === 'researcher' && (s.category === 'analysis' || s.category === 'data')) {
+      score += 3
+    }
+    if (agentType === 'forge' && s.category === 'development') {
+      score += 3
+    }
+
+    // Direct tag match with task words
+    for (const tag of (s.tags || [])) {
+      if (taskText.includes(tag.toLowerCase())) {
+        score += 3
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score
+      bestSkill = s
+    }
+  }
+
+  // Only return if we have a meaningful match (threshold)
+  return bestScore >= 5 ? bestSkill : undefined
+}
 
 export type ExecutionStatus =
   | 'pending'
@@ -316,9 +376,29 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         }
       }
 
+      // Auto-match skill if none explicitly set — find best matching skill for this task
+      let resolvedSkill = skill
+      if (!resolvedSkill && accountId) {
+        try {
+          const allSkills = await fetchSkills(accountId)
+          const enabled = allSkills.filter(s => s.isEnabled)
+          if (enabled.length > 0) {
+            const taskText = `${task.title} ${task.description || ''}`.toLowerCase()
+            resolvedSkill = matchSkillToTask(taskText, agent.agentType, enabled)
+            if (resolvedSkill) {
+              console.log(`[Execution] Auto-matched skill "${resolvedSkill.name}" for task "${task.title}"`)
+              // Update execution record with auto-matched skill
+              await supabase.from('task_executions').update({ skill_id: resolvedSkill.id }).eq('id', executionId)
+            }
+          }
+        } catch (err) {
+          console.warn('[Execution] Auto-skill matching failed (non-fatal):', err)
+        }
+      }
+
       // Execute the task with tools enabled and sibling context
       const result: ExecutionResult = await executeTask(
-        { task, agent, skill, additionalContext, accountId, userId, enableTools: true },
+        { task, agent, skill: resolvedSkill, additionalContext, accountId, userId, enableTools: true },
         onStatusChange
       )
 
